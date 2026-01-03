@@ -99,7 +99,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen" x-data="dashboard()">
+<body class="min-h-screen" x-data="dashboard()" x-init="checkAuth()">
     <!-- Header -->
     <header class="border-b border-gray-800 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -123,8 +123,11 @@
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                     <span class="text-gray-400">System Active</span>
                 </div>
-                <button class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
-                    Settings
+                <a href="/frontend/admin.html" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
+                    Admin
+                </a>
+                <button @click="logout()" class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm transition">
+                    Logout
                 </button>
             </div>
         </div>
@@ -498,6 +501,30 @@
                     if (seconds < 60) return seconds + 's';
                     if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
                     return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+                },
+                
+                checkAuth() {
+                    const token = localStorage.getItem('xdr_token');
+                    if (!token) {
+                        window.location.href = '/frontend/login.html';
+                        return;
+                    }
+                    // Verify token is valid
+                    fetch('/api/auth/verify', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    }).then(res => {
+                        if (!res.ok) {
+                            localStorage.removeItem('xdr_token');
+                            window.location.href = '/frontend/login.html';
+                        }
+                    }).catch(() => {
+                        // If verify endpoint doesn't exist, token is considered valid
+                    });
+                },
+                
+                logout() {
+                    localStorage.removeItem('xdr_token');
+                    window.location.href = '/frontend/login.html';
                 }
             }
         }
