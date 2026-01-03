@@ -477,6 +477,132 @@ bridges:
       - "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf"  # ERC20 Predicate
       - "0x8484Ef722627bf18ca5Ae6BcF031c23E6e922B30"  # Ether Predicate
 
+# =============================================================================
+# NON-EVM CHAINS - Cosmos, Aptos, Sui, Near
+# =============================================================================
+
+  # -------------------------------------------------------------------------
+  # COSMOS HUB (IBC Protocol)
+  # -------------------------------------------------------------------------
+  - chain_id: "cosmos"
+    chain_name: "Cosmos Hub"
+    # Public RPC endpoints (Tendermint RPC)
+    rpc_url: "https://cosmos-rpc.polkachu.com"
+    ws_url: "wss://cosmos-rpc.polkachu.com/websocket"
+    
+    # IBC Bridges & Gravity Bridge
+    bridge_contracts:
+      # Gravity Bridge
+      - "gravity1"
+      - "gravityvaloper1"
+    
+    # IBC Channels to monitor (high-value routes)
+    ibc_channels:
+      - "channel-141"  # Osmosis
+      - "channel-207"  # Axelar
+      - "channel-259"  # Injective
+    
+    tokens:
+      - symbol: "ATOM"
+        decimals: 6
+
+  # -------------------------------------------------------------------------
+  # OSMOSIS (Largest Cosmos DEX)
+  # -------------------------------------------------------------------------
+  - chain_id: "osmosis"
+    chain_name: "Osmosis"
+    rpc_url: "https://osmosis-rpc.polkachu.com"
+    ws_url: "wss://osmosis-rpc.polkachu.com/websocket"
+    
+    bridge_contracts:
+      - "osmo1"  # IBC routing
+    
+    tokens:
+      - symbol: "OSMO"
+        decimals: 6
+
+  # -------------------------------------------------------------------------
+  # INJECTIVE (DeFi Hub)
+  # -------------------------------------------------------------------------
+  - chain_id: "injective"
+    chain_name: "Injective"
+    rpc_url: "https://injective-rpc.polkachu.com"
+    ws_url: "wss://injective-rpc.polkachu.com/websocket"
+    
+    bridge_contracts:
+      - "inj1"  # Peggy Bridge (Ethereum bridge)
+    
+    tokens:
+      - symbol: "INJ"
+        decimals: 18
+
+  # -------------------------------------------------------------------------
+  # APTOS (Move-based)
+  # -------------------------------------------------------------------------
+  - chain_id: "aptos"
+    chain_name: "Aptos Mainnet"
+    rpc_url: "https://fullnode.mainnet.aptoslabs.com/v1"
+    
+    # Known bridge module addresses
+    bridge_contracts:
+      # LayerZero
+      - "0x54ad3d30af77b60d939ae356e6606de9a4da67583f02b962d2d3f2e481484e90"
+      - "0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa"
+      # Wormhole
+      - "0x5bc11445584a763c1fa7ed39081f1b920954da14e04b32440cba863d03e19625"
+      - "0x576410486a2da45eee6c949c995670112ddf2fbeedab20350d506328eefc9d4f"
+      # Celer cBridge
+      - "0x8d87a65ba30e09357fa2edea2c80dbac296e5dec2b18287113500b902942929d"
+    
+    tokens:
+      - symbol: "APT"
+        decimals: 8
+
+  # -------------------------------------------------------------------------
+  # SUI (Move-based)
+  # -------------------------------------------------------------------------
+  - chain_id: "sui"
+    chain_name: "Sui Mainnet"
+    rpc_url: "https://fullnode.mainnet.sui.io:443"
+    
+    # Known bridge package addresses
+    bridge_contracts:
+      # Wormhole on Sui
+      - "0x26efee2b51c911237888e5dc6702868abca3c7ac12c53f76ef8eba0697695e3d"
+      # LayerZero
+      - "0x5306f64e312b581766351c07af79c72fcb1cd25147157fdc2f8ad76de9a3fb6a"
+    
+    tokens:
+      - symbol: "SUI"
+        decimals: 9
+
+  # -------------------------------------------------------------------------
+  # NEAR PROTOCOL (Rainbow Bridge)
+  # -------------------------------------------------------------------------
+  - chain_id: "near"
+    chain_name: "Near Protocol"
+    rpc_url: "https://rpc.mainnet.near.org"
+    
+    # Known bridge accounts
+    bridge_contracts:
+      # Rainbow Bridge (ETH <-> Near)
+      - "factory.bridge.near"
+      - "client.bridge.near"
+      - "prover.bridge.near"
+      # Aurora (EVM on Near)
+      - "aurora"
+      - "relay.aurora"
+      # Wormhole
+      - "contract.wormhole_crypto.near"
+      # Allbridge
+      - "allbridge.near"
+      # Octopus Network
+      - "octopus-registry.near"
+    
+    tokens:
+      - symbol: "NEAR"
+        decimals: 24
+
 # ============================================================================
 # Invariant Configuration
 # ============================================================================

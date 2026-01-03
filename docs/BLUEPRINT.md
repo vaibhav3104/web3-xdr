@@ -96,7 +96,7 @@ Sentinel3:            "Does this violate economic truth?" → Yes → ALERT!
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    ▲                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    LAYER 1: BLOCKCHAIN TELEMETRY                     │   │
+│  │              LAYER 1: BLOCKCHAIN TELEMETRY (13 CHAINS)               │   │
 │  │  [EVM Listener] [Solana Listener] [WebSocket] [RPC Polling]        │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    ▲                                        │

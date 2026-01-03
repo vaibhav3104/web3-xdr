@@ -1,5 +1,12 @@
 """
 Listener Pool - Manages multiple chain listeners.
+
+Supports:
+- EVM chains (Ethereum, Polygon, Arbitrum, etc.)
+- Solana
+- Cosmos/IBC chains
+- Aptos/Sui (Move-based)
+- Near Protocol
 """
 
 from typing import Callable, Dict, List, Optional
@@ -9,6 +16,9 @@ import structlog
 from .base import ChainListener, ListenerConfig
 from .evm_listener import EVMListener
 from .solana_listener import SolanaListener
+from .cosmos_listener import CosmosListener, CosmosConfig
+from .aptos_listener import AptosListener, AptosConfig
+from .near_listener import NearListener, NearConfig
 from ..models.events import SecurityEvent
 
 logger = structlog.get_logger()
@@ -41,6 +51,48 @@ class ListenerPool:
             listener = EVMListener(config)
         elif chain_type == "solana":
             listener = SolanaListener(config)
+        elif chain_type == "cosmos":
+            # Convert to CosmosConfig
+            cosmos_config = CosmosConfig(
+                chain_id=config.chain_id,
+                chain_name=config.chain_name,
+                rpc_url=config.rpc_url,
+                ws_url=config.ws_url,
+                tendermint_rpc=config.rpc_url,
+                bridge_contracts=config.bridge_contracts,
+            )
+            listener = CosmosListener(cosmos_config)
+        elif chain_type == "aptos":
+            # Convert to AptosConfig
+            aptos_config = AptosConfig(
+                chain_id=config.chain_id,
+                chain_name=config.chain_name,
+                rpc_url=config.rpc_url,
+                rest_api=config.rpc_url,
+                chain_type="aptos",
+                bridge_modules=config.bridge_contracts,
+            )
+            listener = AptosListener(aptos_config)
+        elif chain_type == "sui":
+            # Convert to AptosConfig (Sui uses same listener)
+            sui_config = AptosConfig(
+                chain_id=config.chain_id,
+                chain_name=config.chain_name,
+                rpc_url=config.rpc_url,
+                rest_api=config.rpc_url,
+                chain_type="sui",
+                bridge_modules=config.bridge_contracts,
+            )
+            listener = AptosListener(sui_config)
+        elif chain_type == "near":
+            # Convert to NearConfig
+            near_config = NearConfig(
+                chain_id=config.chain_id,
+                chain_name=config.chain_name,
+                rpc_url=config.rpc_url,
+                bridge_accounts=config.bridge_contracts,
+            )
+            listener = NearListener(near_config)
         else:
             raise ValueError(f"Unknown chain type for {config.chain_id}")
         
@@ -72,9 +124,17 @@ class ListenerPool:
         """
         evm_chains = [
             "ethereum", "polygon", "arbitrum", "optimism",
-            "bsc", "avalanche", "fantom", "base", "zksync"
+            "bsc", "avalanche", "fantom", "base", "zksync",
+            "linea", "scroll", "mantle", "blast"
         ]
         solana_chains = ["solana"]
+        cosmos_chains = [
+            "cosmos", "osmosis", "injective", "sei", "celestia",
+            "dydx", "neutron", "kava", "evmos", "axelar"
+        ]
+        aptos_chains = ["aptos", "movement"]
+        sui_chains = ["sui"]
+        near_chains = ["near", "aurora"]
         
         chain_lower = chain_id.lower()
         
@@ -82,6 +142,14 @@ class ListenerPool:
             return "evm"
         elif chain_lower in solana_chains:
             return "solana"
+        elif chain_lower in cosmos_chains or chain_lower.startswith("cosmos_"):
+            return "cosmos"
+        elif chain_lower in aptos_chains:
+            return "aptos"
+        elif chain_lower in sui_chains:
+            return "sui"
+        elif chain_lower in near_chains:
+            return "near"
         
         # Default to EVM for unknown chains with "0x" prefix in addresses
         return "evm"
