@@ -17,6 +17,8 @@ from .admin_routes import router as admin_router
 from .auth_routes import router as auth_router
 from .metrics_routes import router as metrics_router
 from .ai_routes import router as ai_router
+from .tenant_routes import router as tenant_router
+from .simulator_routes import router as simulator_router
 
 logger = structlog.get_logger()
 
@@ -63,6 +65,12 @@ def create_app(
     
     # Include AI analysis routes
     app.include_router(ai_router, prefix="/api")
+    
+    # Include multi-tenancy routes
+    app.include_router(tenant_router, prefix="/api")
+    
+    # Include attack simulator routes
+    app.include_router(simulator_router, prefix="/api")
     
     # Health check
     @app.get("/health")

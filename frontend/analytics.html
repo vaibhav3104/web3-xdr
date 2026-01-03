@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 XDR - Analytics & Risk Scoring</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --accent-purple: #8b5cf6;
+        }
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: #ffffff;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid #2a2a3a;
+            border-radius: 12px;
+        }
+        .risk-score {
+            font-size: 48px;
+            font-weight: bold;
+        }
+        .risk-critical { color: #ff3b3b; }
+        .risk-high { color: #ff8a3b; }
+        .risk-medium { color: #ffd93b; }
+        .risk-low { color: #3bff7e; }
+    </style>
+</head>
+<body class="min-h-screen" x-data="analytics()">
+    <!-- Header -->
+    <header class="border-b border-gray-800 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/frontend/index.html" class="flex items-center space-x-2">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
+                        Web3 XDR
+                    </span>
+                </a>
+                <span class="text-gray-500">|</span>
+                <span class="text-blue-400 font-semibold">📊 Analytics & Risk</span>
+            </div>
+            <div class="flex space-x-2">
+                <button @click="tab = 'historical'" :class="tab === 'historical' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                    📈 Historical
+                </button>
+                <button @click="tab = 'risk'" :class="tab === 'risk' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                    🎯 Risk Scoring
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <main class="p-6">
+        <!-- Historical Analysis Tab -->
+        <div x-show="tab === 'historical'">
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="card p-4">
+                    <div class="text-gray-400 text-sm mb-1">Total Incidents (30d)</div>
+                    <div class="text-3xl font-bold text-red-400" x-text="historical.totalIncidents">47</div>
+                </div>
+                <div class="card p-4">
+                    <div class="text-gray-400 text-sm mb-1">Value at Risk</div>
+                    <div class="text-3xl font-bold text-orange-400">$248M</div>
+                </div>
+                <div class="card p-4">
+                    <div class="text-gray-400 text-sm mb-1">Avg Detection Time</div>
+                    <div class="text-3xl font-bold text-green-400">1.2s</div>
+                </div>
+                <div class="card p-4">
+                    <div class="text-gray-400 text-sm mb-1">Detection Rate</div>
+                    <div class="text-3xl font-bold text-blue-400">99.7%</div>
+                </div>
+            </div>
+            
+            <!-- Charts Row -->
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">📈 Incidents Over Time</h3>
+                    <canvas id="incidentsChart" height="200"></canvas>
+                </div>
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">🔗 Incidents by Chain</h3>
+                    <canvas id="chainsChart" height="200"></canvas>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">⚔️ Attack Types Distribution</h3>
+                    <canvas id="attackTypesChart" height="200"></canvas>
+                </div>
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">💰 Value at Risk Over Time</h3>
+                    <canvas id="valueChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Risk Scoring Tab -->
+        <div x-show="tab === 'risk'">
+            <div class="grid grid-cols-3 gap-6">
+                <!-- Risk Calculator -->
+                <div class="col-span-2">
+                    <div class="card p-6">
+                        <h3 class="text-lg font-semibold mb-4">🎯 Wallet Risk Scoring</h3>
+                        
+                        <div class="flex space-x-4 mb-6">
+                            <input 
+                                type="text" 
+                                x-model="riskInput"
+                                placeholder="Enter wallet address (0x...)"
+                                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 font-mono text-sm"
+                            >
+                            <button 
+                                @click="calculateRisk()"
+                                class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition"
+                            >
+                                Analyze Risk
+                            </button>
+                        </div>
+                        
+                        <!-- Risk Result -->
+                        <div x-show="riskResult" class="space-y-6">
+                            <div class="flex items-center justify-between p-6 rounded-lg bg-gray-800/50">
+                                <div>
+                                    <div class="text-sm text-gray-400 mb-1">Overall Risk Score</div>
+                                    <div 
+                                        class="risk-score"
+                                        :class="{
+                                            'risk-critical': riskResult?.score >= 80,
+                                            'risk-high': riskResult?.score >= 60 && riskResult?.score < 80,
+                                            'risk-medium': riskResult?.score >= 40 && riskResult?.score < 60,
+                                            'risk-low': riskResult?.score < 40
+                                        }"
+                                        x-text="riskResult?.score"
+                                    ></div>
+                                    <div class="text-sm mt-1" x-text="riskResult?.level"></div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm text-gray-400 mb-1">Address</div>
+                                    <div class="font-mono text-sm" x-text="riskResult?.address?.slice(0,10) + '...' + riskResult?.address?.slice(-8)"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Risk Factors -->
+                            <div>
+                                <h4 class="font-semibold mb-3">📋 Risk Factors</h4>
+                                <div class="space-y-2">
+                                    <template x-for="factor in riskResult?.factors" :key="factor.name">
+                                        <div class="flex items-center justify-between p-3 rounded-lg bg-gray-800/30">
+                                            <div class="flex items-center space-x-3">
+                                                <span x-text="factor.icon"></span>
+                                                <span x-text="factor.name"></span>
+                                            </div>
+                                            <div class="flex items-center space-x-4">
+                                                <div class="w-32 bg-gray-700 rounded-full h-2">
+                                                    <div 
+                                                        class="h-2 rounded-full"
+                                                        :class="{
+                                                            'bg-red-500': factor.score >= 80,
+                                                            'bg-orange-500': factor.score >= 60 && factor.score < 80,
+                                                            'bg-yellow-500': factor.score >= 40 && factor.score < 60,
+                                                            'bg-green-500': factor.score < 40
+                                                        }"
+                                                        :style="'width: ' + factor.score + '%'"
+                                                    ></div>
+                                                </div>
+                                                <span class="font-mono text-sm w-8" x-text="factor.score"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <!-- Recommendations -->
+                            <div>
+                                <h4 class="font-semibold mb-3">💡 Recommendations</h4>
+                                <ul class="space-y-2">
+                                    <template x-for="rec in riskResult?.recommendations" :key="rec">
+                                        <li class="flex items-start space-x-2 text-sm text-gray-300">
+                                            <span class="text-purple-400">•</span>
+                                            <span x-text="rec"></span>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- High Risk Wallets -->
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">🚨 High Risk Wallets</h3>
+                    <div class="space-y-3">
+                        <template x-for="wallet in highRiskWallets" :key="wallet.address">
+                            <div 
+                                class="p-3 rounded-lg bg-gray-800/50 cursor-pointer hover:bg-gray-800 transition"
+                                @click="analyzeWallet(wallet.address)"
+                            >
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-mono text-xs" x-text="wallet.address.slice(0,8) + '...' + wallet.address.slice(-6)"></span>
+                                    <span 
+                                        class="text-sm font-bold"
+                                        :class="{
+                                            'text-red-400': wallet.score >= 80,
+                                            'text-orange-400': wallet.score >= 60
+                                        }"
+                                        x-text="wallet.score"
+                                    ></span>
+                                </div>
+                                <div class="text-xs text-gray-400" x-text="wallet.reason"></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        function analytics() {
+            return {
+                tab: 'historical',
+                historical: {
+                    totalIncidents: 47
+                },
+                riskInput: '',
+                riskResult: null,
+                highRiskWallets: [
+                    { address: '0x742d35Cc6634C0532925a3b844Bc9e7595f4E2A1', score: 92, reason: 'Connected to known exploit' },
+                    { address: '0x8F3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', score: 87, reason: 'Unusual transaction patterns' },
+                    { address: '0x1234567890AbCdEf1234567890AbCdEf12345678', score: 78, reason: 'Mixer interaction detected' },
+                    { address: '0xDeadBeef00000000000000000000000000000000', score: 71, reason: 'Flash loan usage' },
+                    { address: '0xCafe000000000000000000000000000000000001', score: 65, reason: 'New wallet with large volume' }
+                ],
+                
+                init() {
+                    this.$nextTick(() => {
+                        this.initCharts();
+                    });
+                },
+                
+                initCharts() {
+                    // Incidents Over Time
+                    new Chart(document.getElementById('incidentsChart'), {
+                        type: 'line',
+                        data: {
+                            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+                            datasets: [{
+                                label: 'Incidents',
+                                data: [12, 8, 15, 12],
+                                borderColor: '#8b5cf6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
+                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                            }
+                        }
+                    });
+                    
+                    // Chains Distribution
+                    new Chart(document.getElementById('chainsChart'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Ethereum', 'Polygon', 'Arbitrum', 'Solana', 'BSC'],
+                            datasets: [{
+                                data: [35, 25, 20, 12, 8],
+                                backgroundColor: ['#627EEA', '#8247E5', '#28A0F0', '#00FFA3', '#F3BA2F']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { position: 'right', labels: { color: '#888' } } }
+                        }
+                    });
+                    
+                    // Attack Types
+                    new Chart(document.getElementById('attackTypesChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: ['Unbacked Mint', 'Flash Loan', 'Liquidity Drain', 'Message Forgery', 'Other'],
+                            datasets: [{
+                                label: 'Count',
+                                data: [15, 12, 8, 7, 5],
+                                backgroundColor: ['#ff3b3b', '#ff8a3b', '#ffd93b', '#3bff7e', '#8b5cf6']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
+                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                            }
+                        }
+                    });
+                    
+                    // Value Over Time
+                    new Chart(document.getElementById('valueChart'), {
+                        type: 'line',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                            datasets: [{
+                                label: 'Value at Risk ($M)',
+                                data: [45, 62, 38, 95, 72, 248],
+                                borderColor: '#ff3b3b',
+                                backgroundColor: 'rgba(255, 59, 59, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
+                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                            }
+                        }
+                    });
+                },
+                
+                calculateRisk() {
+                    const address = this.riskInput || '0x' + Math.random().toString(16).slice(2, 42);
+                    
+                    // Simulate risk calculation
+                    const score = Math.floor(Math.random() * 60) + 20;
+                    const level = score >= 80 ? 'CRITICAL RISK' : score >= 60 ? 'HIGH RISK' : score >= 40 ? 'MEDIUM RISK' : 'LOW RISK';
+                    
+                    this.riskResult = {
+                        address: address,
+                        score: score,
+                        level: level,
+                        factors: [
+                            { name: 'Transaction Velocity', score: Math.floor(Math.random() * 100), icon: '⚡' },
+                            { name: 'Mixer Interaction', score: Math.floor(Math.random() * 100), icon: '🔀' },
+                            { name: 'Bridge Usage Pattern', score: Math.floor(Math.random() * 100), icon: '🌉' },
+                            { name: 'Known Entity Links', score: Math.floor(Math.random() * 100), icon: '🔗' },
+                            { name: 'Flash Loan Activity', score: Math.floor(Math.random() * 100), icon: '💨' },
+                            { name: 'Age & History', score: Math.floor(Math.random() * 100), icon: '📅' }
+                        ],
+                        recommendations: [
+                            'Monitor all transactions from this address',
+                            'Enable real-time alerts for large transfers',
+                            'Review connected addresses for patterns',
+                            'Consider adding to watchlist'
+                        ]
+                    };
+                },
+                
+                analyzeWallet(address) {
+                    this.riskInput = address;
+                    this.calculateRisk();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 XDR - Multi-Tenancy Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: #0a0a0f;
+            color: #ffffff;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .card {
+            background: #12121a;
+            border: 1px solid #2a2a3a;
+            border-radius: 12px;
+        }
+        .plan-free { border-top: 3px solid #6b7280; }
+        .plan-pro { border-top: 3px solid #8b5cf6; }
+        .plan-enterprise { border-top: 3px solid #f59e0b; }
+    </style>
+</head>
+<body class="min-h-screen" x-data="tenantManager()">
+    <!-- Header -->
+    <header class="border-b border-gray-800 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/frontend/index.html" class="flex items-center space-x-2">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
+                        Web3 XDR
+                    </span>
+                </a>
+                <span class="text-gray-500">|</span>
+                <span class="text-orange-400 font-semibold">🏢 Multi-Tenancy</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <!-- Tenant Switcher -->
+                <select 
+                    x-model="currentTenant"
+                    @change="switchTenant()"
+                    class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+                >
+                    <template x-for="tenant in tenants" :key="tenant.slug">
+                        <option :value="tenant.slug" x-text="tenant.name"></option>
+                    </template>
+                </select>
+            </div>
+        </div>
+    </header>
+    
+    <main class="p-6">
+        <!-- Stats -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">Total Organizations</div>
+                <div class="text-3xl font-bold" x-text="tenants.length">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">Enterprise</div>
+                <div class="text-3xl font-bold text-amber-400" x-text="tenants.filter(t => t.plan === 'enterprise').length">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">Pro</div>
+                <div class="text-3xl font-bold text-purple-400" x-text="tenants.filter(t => t.plan === 'pro').length">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">Free</div>
+                <div class="text-3xl font-bold text-gray-400" x-text="tenants.filter(t => t.plan === 'free').length">0</div>
+            </div>
+        </div>
+        
+        <!-- Tenant List -->
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">🏢 Organizations</h3>
+            <button 
+                @click="showCreateModal = true"
+                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition"
+            >
+                + New Organization
+            </button>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-4">
+            <template x-for="tenant in tenants" :key="tenant.slug">
+                <div 
+                    class="card p-4 cursor-pointer hover:bg-gray-800/50 transition"
+                    :class="'plan-' + tenant.plan"
+                    @click="selectTenant(tenant)"
+                >
+                    <div class="flex items-start justify-between mb-3">
+                        <div>
+                            <h4 class="font-semibold" x-text="tenant.name"></h4>
+                            <span class="font-mono text-xs text-gray-500" x-text="tenant.slug"></span>
+                        </div>
+                        <span 
+                            class="text-xs px-2 py-1 rounded-full font-semibold uppercase"
+                            :class="{
+                                'bg-amber-500/20 text-amber-400': tenant.plan === 'enterprise',
+                                'bg-purple-500/20 text-purple-400': tenant.plan === 'pro',
+                                'bg-gray-500/20 text-gray-400': tenant.plan === 'free'
+                            }"
+                            x-text="tenant.plan"
+                        ></span>
+                    </div>
+                    
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Chains</span>
+                            <span x-text="tenant.limits?.max_chains === -1 ? 'Unlimited' : tenant.limits?.max_chains"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Users</span>
+                            <span x-text="tenant.limits?.max_users === -1 ? 'Unlimited' : tenant.limits?.max_users"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Retention</span>
+                            <span x-text="tenant.settings?.retention_days + ' days'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+        
+        <!-- Selected Tenant Details -->
+        <div x-show="selectedTenant" class="mt-6">
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-semibold" x-text="selectedTenant?.name"></h3>
+                    <button @click="selectedTenant = null" class="text-gray-400 hover:text-white">✕</button>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-6">
+                    <!-- Settings -->
+                    <div>
+                        <h4 class="font-semibold mb-3">⚙️ Settings</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Alerts Enabled</span>
+                                <span x-text="selectedTenant?.settings?.alerts_enabled ? '✓' : '✗'"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">API Access</span>
+                                <span x-text="selectedTenant?.settings?.api_access ? '✓' : '✗'"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">SSO</span>
+                                <span x-text="selectedTenant?.settings?.sso_enabled ? '✓' : '✗'"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Custom Rules</span>
+                                <span x-text="selectedTenant?.settings?.custom_rules ? '✓' : '✗'"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Limits -->
+                    <div>
+                        <h4 class="font-semibold mb-3">📊 Limits</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Max Users</span>
+                                <span x-text="selectedTenant?.limits?.max_users === -1 ? '∞' : selectedTenant?.limits?.max_users"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Max Chains</span>
+                                <span x-text="selectedTenant?.limits?.max_chains === -1 ? '∞' : selectedTenant?.limits?.max_chains"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Max Rules</span>
+                                <span x-text="selectedTenant?.limits?.max_rules === -1 ? '∞' : selectedTenant?.limits?.max_rules"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">API Calls/Day</span>
+                                <span x-text="selectedTenant?.limits?.max_api_calls_per_day === -1 ? '∞' : selectedTenant?.limits?.max_api_calls_per_day?.toLocaleString()"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div>
+                        <h4 class="font-semibold mb-3">🔧 Actions</h4>
+                        <div class="space-y-2">
+                            <button class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-left transition">
+                                👥 Manage Members
+                            </button>
+                            <button class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-left transition">
+                                ⚙️ Edit Settings
+                            </button>
+                            <button class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-left transition">
+                                📊 View Usage Stats
+                            </button>
+                            <button 
+                                x-show="selectedTenant?.slug !== 'default'"
+                                class="w-full py-2 px-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-sm text-left transition"
+                            >
+                                🗑️ Delete Organization
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pricing Plans -->
+        <div class="mt-8">
+            <h3 class="text-lg font-semibold mb-4">💳 Available Plans</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <!-- Free -->
+                <div class="card p-6 plan-free">
+                    <h4 class="text-xl font-bold mb-2">Free</h4>
+                    <div class="text-3xl font-bold mb-4">$0<span class="text-sm text-gray-400">/mo</span></div>
+                    <ul class="space-y-2 text-sm text-gray-400">
+                        <li>✓ 2 chains monitored</li>
+                        <li>✓ 5 team members</li>
+                        <li>✓ 7-day data retention</li>
+                        <li>✓ 100 API calls/day</li>
+                        <li>✗ Custom rules</li>
+                        <li>✗ SSO</li>
+                    </ul>
+                </div>
+                
+                <!-- Pro -->
+                <div class="card p-6 plan-pro">
+                    <div class="absolute -top-3 right-4">
+                        <span class="bg-purple-600 text-xs px-2 py-1 rounded-full">POPULAR</span>
+                    </div>
+                    <h4 class="text-xl font-bold mb-2">Pro</h4>
+                    <div class="text-3xl font-bold mb-4">$299<span class="text-sm text-gray-400">/mo</span></div>
+                    <ul class="space-y-2 text-sm text-gray-400">
+                        <li>✓ 5 chains monitored</li>
+                        <li>✓ 25 team members</li>
+                        <li>✓ 90-day data retention</li>
+                        <li>✓ 10,000 API calls/day</li>
+                        <li>✓ Custom rules</li>
+                        <li>✗ SSO</li>
+                    </ul>
+                </div>
+                
+                <!-- Enterprise -->
+                <div class="card p-6 plan-enterprise">
+                    <h4 class="text-xl font-bold mb-2">Enterprise</h4>
+                    <div class="text-3xl font-bold mb-4">Custom</div>
+                    <ul class="space-y-2 text-sm text-gray-400">
+                        <li>✓ Unlimited chains</li>
+                        <li>✓ Unlimited members</li>
+                        <li>✓ 365-day data retention</li>
+                        <li>✓ Unlimited API calls</li>
+                        <li>✓ Custom rules</li>
+                        <li>✓ SSO / SAML</li>
+                        <li>✓ Dedicated support</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Create Modal -->
+    <div 
+        x-show="showCreateModal"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        @click.self="showCreateModal = false"
+    >
+        <div class="card p-6 w-full max-w-md">
+            <h3 class="text-xl font-semibold mb-4">Create Organization</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Organization Name</label>
+                    <input 
+                        type="text" 
+                        x-model="newTenant.name"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2"
+                        placeholder="My DeFi Company"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Slug (URL identifier)</label>
+                    <input 
+                        type="text" 
+                        x-model="newTenant.slug"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 font-mono"
+                        placeholder="my-defi-company"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Plan</label>
+                    <select x-model="newTenant.plan" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+                        <option value="free">Free</option>
+                        <option value="pro">Pro ($299/mo)</option>
+                        <option value="enterprise">Enterprise</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-3 mt-6">
+                <button 
+                    @click="showCreateModal = false"
+                    class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition"
+                >
+                    Cancel
+                </button>
+                <button 
+                    @click="createTenant()"
+                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition"
+                >
+                    Create
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function tenantManager() {
+            return {
+                currentTenant: 'default',
+                selectedTenant: null,
+                showCreateModal: false,
+                newTenant: {
+                    name: '',
+                    slug: '',
+                    plan: 'free'
+                },
+                tenants: [],
+                
+                async init() {
+                    await this.loadTenants();
+                },
+                
+                async loadTenants() {
+                    try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch('/api/tenants', {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (response.ok) {
+                            this.tenants = await response.json();
+                        }
+                    } catch (e) {
+                        // Demo data
+                        this.tenants = [
+                            {
+                                id: 'default',
+                                name: 'Default Organization',
+                                slug: 'default',
+                                plan: 'enterprise',
+                                settings: {
+                                    alerts_enabled: true,
+                                    api_access: true,
+                                    sso_enabled: true,
+                                    custom_rules: true,
+                                    retention_days: 365
+                                },
+                                limits: {
+                                    max_users: -1,
+                                    max_chains: -1,
+                                    max_rules: -1,
+                                    max_api_calls_per_day: -1
+                                }
+                            },
+                            {
+                                id: 'acme',
+                                name: 'ACME DeFi',
+                                slug: 'acme',
+                                plan: 'pro',
+                                settings: {
+                                    alerts_enabled: true,
+                                    api_access: true,
+                                    sso_enabled: false,
+                                    custom_rules: true,
+                                    retention_days: 90
+                                },
+                                limits: {
+                                    max_users: 25,
+                                    max_chains: 5,
+                                    max_rules: 50,
+                                    max_api_calls_per_day: 10000
+                                }
+                            },
+                            {
+                                id: 'demo',
+                                name: 'Demo Company',
+                                slug: 'demo',
+                                plan: 'free',
+                                settings: {
+                                    alerts_enabled: false,
+                                    api_access: false,
+                                    sso_enabled: false,
+                                    custom_rules: false,
+                                    retention_days: 7
+                                },
+                                limits: {
+                                    max_users: 5,
+                                    max_chains: 2,
+                                    max_rules: 5,
+                                    max_api_calls_per_day: 100
+                                }
+                            }
+                        ];
+                    }
+                },
+                
+                selectTenant(tenant) {
+                    this.selectedTenant = tenant;
+                },
+                
+                switchTenant() {
+                    localStorage.setItem('currentTenant', this.currentTenant);
+                    location.reload();
+                },
+                
+                async createTenant() {
+                    try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch('/api/tenants', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify(this.newTenant)
+                        });
+                        
+                        if (response.ok) {
+                            await this.loadTenants();
+                            this.showCreateModal = false;
+                            this.newTenant = { name: '', slug: '', plan: 'free' };
+                        }
+                    } catch (e) {
+                        console.error('Failed to create tenant');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+
