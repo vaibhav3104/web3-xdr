@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import structlog
 
-from ..shared_state import monitor_state
+from ..shared_state import monitor_state, LiveIncident
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/simulator", tags=["Attack Simulator"])
@@ -117,27 +117,27 @@ async def execute_attack(request: AttackRequest):
     start_time = time.time()
     
     attack_id = str(uuid4())[:8]
-    incident_id = str(uuid4())[:8]
+    incident_id = f"SIM-{str(uuid4())[:8]}"
     
-    # Create the incident
-    incident = {
-        "id": incident_id,
-        "title": f"SIMULATED: {template['name']}",
-        "severity": request.severity.upper(),
-        "status": "active",
-        "chain": request.chain.capitalize(),
-        "timestamp": datetime.utcnow().isoformat(),
-        "value_at_risk": f"${request.value_usd:,}",
-        "attack_type": request.attack_type,
-        "detection_rule": template["detection_rule"],
-        "is_simulation": True,
-        "explanation": {
-            "what": f"Simulated {template['name']} detected on {request.chain}",
-            "why": f"This attack was triggered via the Attack Simulator to demonstrate XDR capabilities",
-            "impact": f"Potential loss of ${request.value_usd:,} if this were a real attack",
-            "action": "No action required - this is a simulation"
-        }
-    }
+    # Create the incident as LiveIncident object
+    incident = LiveIncident(
+        id=incident_id,
+        title=f"🎭 SIMULATED: {template['name']}",
+        severity=request.severity.upper(),
+        status="open",
+        attack_type=request.attack_type,
+        confidence=0.95,
+        total_loss_usd=float(request.value_usd),
+        affected_chains=[request.chain.capitalize()],
+        events=[f"sim-event-{attack_id}"],
+        created_at=datetime.utcnow(),
+        recommended_actions=[
+            "No action required - this is a simulation",
+            f"Review {template['name']} detection rules",
+            "Test response playbooks"
+        ],
+        detection_latency_blocks=1
+    )
     
     # Add to monitor state
     monitor_state.add_incident(incident)
