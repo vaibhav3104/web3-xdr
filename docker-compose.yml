@@ -1,0 +1,207 @@
+# ============================================================================
+# Web3 XDR - Docker Compose Configuration (with PostgreSQL)
+# ============================================================================
+#
+# Usage:
+#   Start all services:     docker-compose up -d
+#   View logs:              docker-compose logs -f
+#   Stop all:               docker-compose down
+#   Reset database:         docker-compose down -v && docker-compose up -d
+#
+#   With monitoring:        docker-compose --profile monitoring up -d
+#
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL Database (Required for persistence)
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: web3-xdr-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-xdr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xdr_password}
+      POSTGRES_DB: ${POSTGRES_DB:-web3_xdr}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    networks:
+      - xdr-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xdr} -d ${POSTGRES_DB:-web3_xdr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # Main XDR Application
+  # --------------------------------------------------------------------------
+  xdr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: web3-xdr
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount config for easy editing without rebuild
+      - ./config:/app/config:ro
+      # Mount rules for hot-reloading
+      - ./config/rules:/app/config/rules
+    environment:
+      # Database
+      - POSTGRES_ENABLED=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-xdr}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-xdr_password}
+      - POSTGRES_DB=${POSTGRES_DB:-web3_xdr}
+      - DB_POOL_SIZE=10
+      - DB_MAX_OVERFLOW=20
+      - DB_BATCH_SIZE=100
+      # RPC Endpoints (override in .env file)
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL:-}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-}
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL:-}
+      # Alerting
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHANNEL_ID=${TELEGRAM_CHANNEL_ID:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      # App settings
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - xdr-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # --------------------------------------------------------------------------
+  # Redis (for caching and real-time pub/sub)
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: web3-xdr-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - xdr-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # pgAdmin (Database Management UI)
+  # --------------------------------------------------------------------------
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: web3-xdr-pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@xdr.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - xdr-network
+    profiles:
+      - admin
+
+  # --------------------------------------------------------------------------
+  # Prometheus (Metrics)
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: web3-xdr-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    restart: unless-stopped
+    networks:
+      - xdr-network
+    profiles:
+      - monitoring
+
+  # --------------------------------------------------------------------------
+  # Grafana (Dashboards)
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: web3-xdr-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=postgres:5432
+      - GF_DATABASE_NAME=${POSTGRES_DB:-web3_xdr}
+      - GF_DATABASE_USER=${POSTGRES_USER:-xdr}
+      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-xdr_password}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - postgres
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - xdr-network
+    profiles:
+      - monitoring
+
+# Networks
+networks:
+  xdr-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# Volumes (persistent data)
+volumes:
+  postgres-data:
+    name: web3-xdr-postgres-data
+  redis-data:
+    name: web3-xdr-redis-data
+  pgadmin-data:
+    name: web3-xdr-pgadmin-data
+  prometheus-data:
+    name: web3-xdr-prometheus-data
+  grafana-data:
+    name: web3-xdr-grafana-data

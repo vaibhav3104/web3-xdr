@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 XDR - Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #09090b;
+            --bg-secondary: #18181b;
+            --bg-tertiary: #27272a;
+            --accent: #8b5cf6;
+            --accent-glow: rgba(139, 92, 246, 0.3);
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text: #fafafa;
+            --text-muted: #a1a1aa;
+        }
+        
+        * { box-sizing: border-box; }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid #27272a;
+            border-radius: 16px;
+        }
+        
+        .glow-card {
+            box-shadow: 0 0 40px var(--accent-glow);
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid #3f3f46;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+        
+        .chain-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .chain-ethereum { background: rgba(98, 126, 234, 0.2); color: #627eea; }
+        .chain-polygon { background: rgba(130, 71, 229, 0.2); color: #8247e5; }
+        .chain-solana { background: rgba(20, 241, 149, 0.2); color: #14f195; }
+        .chain-arbitrum { background: rgba(40, 160, 240, 0.2); color: #28a0f0; }
+        .chain-avalanche { background: rgba(232, 65, 66, 0.2); color: #e84142; }
+        .chain-bsc { background: rgba(243, 186, 47, 0.2); color: #f3ba2f; }
+        
+        .severity-critical { background: rgba(239, 68, 68, 0.15); border-left: 3px solid #ef4444; }
+        .severity-high { background: rgba(249, 115, 22, 0.15); border-left: 3px solid #f97316; }
+        .severity-medium { background: rgba(234, 179, 8, 0.15); border-left: 3px solid #eab308; }
+        .severity-low { background: rgba(34, 197, 94, 0.15); border-left: 3px solid #22c55e; }
+        
+        .pulse { animation: pulse 2s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .animate-in {
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+        ::-webkit-scrollbar-thumb { background: #52525b; border-radius: 4px; }
+    </style>
+</head>
+<body x-data="dashboard()">
+    <!-- Header -->
+    <header class="border-b border-zinc-800 px-6 py-4 sticky top-0 bg-zinc-950/90 backdrop-blur-sm z-50">
+        <div class="flex items-center justify-between max-w-[1800px] mx-auto">
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">Web3 XDR</h1>
+                    <p class="text-xs text-zinc-500">Analytics Dashboard</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-6">
+                <div class="flex items-center space-x-2">
+                    <span class="w-2 h-2 rounded-full bg-green-500 pulse"></span>
+                    <span class="text-sm text-zinc-400">Live Monitoring</span>
+                </div>
+                <div class="text-sm text-zinc-500" x-text="'Uptime: ' + formatUptime(stats.uptime)"></div>
+                <a href="index.html" class="text-sm text-violet-400 hover:text-violet-300">Main Dashboard →</a>
+                <a href="admin.html" class="text-sm text-zinc-400 hover:text-white">Admin</a>
+            </div>
+        </div>
+    </header>
+    
+    <main class="p-6 max-w-[1800px] mx-auto">
+        <!-- Stats Row -->
+        <div class="grid grid-cols-6 gap-4 mb-6">
+            <div class="stat-card rounded-xl p-5 animate-in">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">Total Events</span>
+                    <span class="text-green-400 text-xs">Live</span>
+                </div>
+                <div class="text-3xl font-bold" x-text="formatNumber(stats.totalEvents)">0</div>
+                <div class="text-xs text-zinc-500 mt-1" x-text="'+' + stats.eventsPerMin + '/min'"></div>
+            </div>
+            
+            <div class="stat-card rounded-xl p-5 animate-in" style="animation-delay: 0.1s">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">Incidents</span>
+                    <span class="text-red-400 text-xs" x-show="stats.activeIncidents > 0">Active</span>
+                </div>
+                <div class="text-3xl font-bold text-red-400" x-text="stats.activeIncidents">0</div>
+                <div class="text-xs text-zinc-500 mt-1">Total: <span x-text="stats.totalIncidents"></span></div>
+            </div>
+            
+            <div class="stat-card rounded-xl p-5 animate-in" style="animation-delay: 0.2s">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">Critical</span>
+                </div>
+                <div class="text-3xl font-bold text-red-500" x-text="stats.criticalAlerts">0</div>
+                <div class="text-xs text-zinc-500 mt-1">High: <span x-text="stats.highAlerts" class="text-orange-400"></span></div>
+            </div>
+            
+            <div class="stat-card rounded-xl p-5 animate-in" style="animation-delay: 0.3s">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">Blocks Scanned</span>
+                </div>
+                <div class="text-3xl font-bold text-blue-400" x-text="formatNumber(stats.blocksScanned)">0</div>
+                <div class="text-xs text-zinc-500 mt-1">Across all chains</div>
+            </div>
+            
+            <div class="stat-card rounded-xl p-5 animate-in" style="animation-delay: 0.4s">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">Active Chains</span>
+                </div>
+                <div class="text-3xl font-bold text-violet-400" x-text="stats.activeChains">0</div>
+                <div class="text-xs text-zinc-500 mt-1">Connected</div>
+            </div>
+            
+            <div class="stat-card rounded-xl p-5 animate-in" style="animation-delay: 0.5s">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">Rules Active</span>
+                </div>
+                <div class="text-3xl font-bold text-emerald-400" x-text="stats.rulesActive">17</div>
+                <div class="text-xs text-zinc-500 mt-1">YAML-based</div>
+            </div>
+        </div>
+        
+        <!-- Charts Row -->
+        <div class="grid grid-cols-3 gap-6 mb-6">
+            <!-- Events Over Time -->
+            <div class="card p-5 col-span-2">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold">Events Over Time</h3>
+                    <div class="flex space-x-2">
+                        <button @click="timeRange = '1h'" class="px-3 py-1 text-xs rounded-lg" 
+                                :class="timeRange === '1h' ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-500'">1H</button>
+                        <button @click="timeRange = '24h'" class="px-3 py-1 text-xs rounded-lg"
+                                :class="timeRange === '24h' ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-500'">24H</button>
+                        <button @click="timeRange = '7d'" class="px-3 py-1 text-xs rounded-lg"
+                                :class="timeRange === '7d' ? 'bg-violet-500/20 text-violet-400' : 'text-zinc-500'">7D</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="eventsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Events by Chain -->
+            <div class="card p-5">
+                <h3 class="font-semibold mb-4">Events by Chain</h3>
+                <div class="chart-container">
+                    <canvas id="chainChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Second Charts Row -->
+        <div class="grid grid-cols-3 gap-6 mb-6">
+            <!-- Severity Distribution -->
+            <div class="card p-5">
+                <h3 class="font-semibold mb-4">Alert Severity Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Event Types -->
+            <div class="card p-5">
+                <h3 class="font-semibold mb-4">Event Types</h3>
+                <div class="space-y-3 mt-4">
+                    <template x-for="(count, type) in stats.eventsByType" :key="type">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-zinc-400" x-text="type"></span>
+                            <div class="flex items-center space-x-3">
+                                <div class="w-32 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-violet-500 rounded-full" 
+                                         :style="'width: ' + (count / stats.totalEvents * 100) + '%'"></div>
+                                </div>
+                                <span class="text-sm font-mono" x-text="formatNumber(count)"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Chain Status -->
+            <div class="card p-5">
+                <h3 class="font-semibold mb-4">Chain Status</h3>
+                <div class="space-y-3">
+                    <template x-for="chain in chains" :key="chain.id">
+                        <div class="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-2 h-2 rounded-full" 
+                                      :class="chain.status === 'connected' ? 'bg-green-500' : 'bg-red-500'"></span>
+                                <span class="chain-badge" :class="'chain-' + chain.id" x-text="chain.name"></span>
+                            </div>
+                            <span class="text-sm text-zinc-500" x-text="formatNumber(chain.events) + ' events'"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Incidents & Events -->
+        <div class="grid grid-cols-2 gap-6">
+            <!-- Recent Incidents -->
+            <div class="card p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold">Recent Incidents</h3>
+                    <a href="index.html" class="text-sm text-violet-400">View All →</a>
+                </div>
+                <div class="space-y-3 max-h-[400px] overflow-y-auto">
+                    <template x-for="incident in incidents" :key="incident.id">
+                        <div class="p-4 rounded-lg" :class="'severity-' + incident.severity.toLowerCase()">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold uppercase" 
+                                      :class="{
+                                          'text-red-400': incident.severity === 'critical',
+                                          'text-orange-400': incident.severity === 'high',
+                                          'text-yellow-400': incident.severity === 'medium',
+                                          'text-green-400': incident.severity === 'low'
+                                      }"
+                                      x-text="incident.severity"></span>
+                                <span class="text-xs text-zinc-500" x-text="formatTime(incident.created_at)"></span>
+                            </div>
+                            <p class="text-sm font-medium" x-text="incident.title"></p>
+                            <p class="text-xs text-zinc-500 mt-1" x-text="incident.attack_type + ' • ' + incident.affected_chains.join(', ')"></p>
+                        </div>
+                    </template>
+                    <div x-show="incidents.length === 0" class="text-center py-8 text-zinc-500">
+                        No incidents detected
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Live Event Feed -->
+            <div class="card p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold">Live Event Feed</h3>
+                    <span class="flex items-center text-xs text-green-400">
+                        <span class="w-2 h-2 rounded-full bg-green-500 mr-2 pulse"></span>
+                        Streaming
+                    </span>
+                </div>
+                <div class="space-y-2 max-h-[400px] overflow-y-auto font-mono text-sm">
+                    <template x-for="event in events" :key="event.event_id">
+                        <div class="flex items-center space-x-3 p-2 hover:bg-zinc-800/50 rounded">
+                            <span class="chain-badge text-xs" :class="'chain-' + event.chain_id" x-text="event.chain_id"></span>
+                            <span class="text-zinc-400" x-text="event.event_type"></span>
+                            <span class="text-zinc-600 truncate flex-1" x-text="event.tx_hash"></span>
+                            <span class="text-zinc-500 text-xs" x-text="'#' + event.block_number"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        function dashboard() {
+            return {
+                timeRange: '1h',
+                stats: {
+                    totalEvents: 0,
+                    totalIncidents: 0,
+                    activeIncidents: 0,
+                    criticalAlerts: 0,
+                    highAlerts: 0,
+                    blocksScanned: 0,
+                    activeChains: 0,
+                    rulesActive: 17,
+                    uptime: 0,
+                    eventsPerMin: 0,
+                    eventsByType: {},
+                    eventsByChain: {}
+                },
+                incidents: [],
+                events: [],
+                chains: [],
+                charts: {},
+                
+                async init() {
+                    await this.loadData();
+                    this.initCharts();
+                    
+                    // Refresh data every 3 seconds
+                    setInterval(() => this.loadData(), 3000);
+                    // Update charts every 10 seconds
+                    setInterval(() => this.updateCharts(), 10000);
+                },
+                
+                async loadData() {
+                    try {
+                        // Load stats
+                        const statsRes = await fetch('/api/stats');
+                        if (statsRes.ok) {
+                            const data = await statsRes.json();
+                            this.stats = {
+                                totalEvents: data.total_events || 0,
+                                totalIncidents: data.total_incidents || 0,
+                                activeIncidents: data.active_incidents || 0,
+                                criticalAlerts: data.critical_alerts || 0,
+                                highAlerts: data.high_alerts || 0,
+                                blocksScanned: data.blocks_scanned || 0,
+                                activeChains: Object.keys(data.events_by_chain || {}).length,
+                                rulesActive: 17,
+                                uptime: data.uptime_seconds || 0,
+                                eventsPerMin: Math.round(data.total_events / Math.max(data.uptime_seconds / 60, 1)),
+                                eventsByType: data.events_by_type || {},
+                                eventsByChain: data.events_by_chain || {}
+                            };
+                            
+                            // Build chains list
+                            this.chains = Object.entries(data.events_by_chain || {}).map(([id, events]) => ({
+                                id: id,
+                                name: id.charAt(0).toUpperCase() + id.slice(1),
+                                status: 'connected',
+                                events: events
+                            }));
+                        }
+                        
+                        // Load incidents
+                        const incRes = await fetch('/api/incidents?limit=10');
+                        if (incRes.ok) {
+                            this.incidents = await incRes.json();
+                        }
+                        
+                        // Load events
+                        const evtRes = await fetch('/api/events?limit=20');
+                        if (evtRes.ok) {
+                            this.events = await evtRes.json();
+                        }
+                    } catch (e) {
+                        console.log('Error loading data:', e);
+                    }
+                },
+                
+                initCharts() {
+                    // Events Over Time Chart
+                    const eventsCtx = document.getElementById('eventsChart').getContext('2d');
+                    this.charts.events = new Chart(eventsCtx, {
+                        type: 'line',
+                        data: {
+                            labels: this.generateTimeLabels(),
+                            datasets: [{
+                                label: 'Events',
+                                data: this.generateRandomData(12, 50, 200),
+                                borderColor: '#8b5cf6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } },
+                                y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } }
+                            }
+                        }
+                    });
+                    
+                    // Chain Distribution Chart
+                    const chainCtx = document.getElementById('chainChart').getContext('2d');
+                    this.charts.chain = new Chart(chainCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Polygon', 'Ethereum', 'Arbitrum', 'Solana'],
+                            datasets: [{
+                                data: [65, 20, 10, 5],
+                                backgroundColor: ['#8247e5', '#627eea', '#28a0f0', '#14f195'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { 
+                                    position: 'bottom',
+                                    labels: { color: '#a1a1aa', padding: 15 }
+                                } 
+                            },
+                            cutout: '70%'
+                        }
+                    });
+                    
+                    // Severity Chart
+                    const sevCtx = document.getElementById('severityChart').getContext('2d');
+                    this.charts.severity = new Chart(sevCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Critical', 'High', 'Medium', 'Low'],
+                            datasets: [{
+                                data: [this.stats.criticalAlerts, this.stats.highAlerts, 5, 20],
+                                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e'],
+                                borderRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { color: '#71717a' } },
+                                y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } }
+                            }
+                        }
+                    });
+                },
+                
+                updateCharts() {
+                    if (this.charts.chain && this.stats.eventsByChain) {
+                        const labels = Object.keys(this.stats.eventsByChain);
+                        const data = Object.values(this.stats.eventsByChain);
+                        this.charts.chain.data.labels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
+                        this.charts.chain.data.datasets[0].data = data;
+                        this.charts.chain.update();
+                    }
+                },
+                
+                generateTimeLabels() {
+                    const labels = [];
+                    for (let i = 11; i >= 0; i--) {
+                        const d = new Date(Date.now() - i * 5 * 60000);
+                        labels.push(d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                    }
+                    return labels;
+                },
+                
+                generateRandomData(count, min, max) {
+                    return Array.from({length: count}, () => Math.floor(Math.random() * (max - min) + min));
+                },
+                
+                formatNumber(num) {
+                    if (!num) return '0';
+                    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                    return num.toLocaleString();
+                },
+                
+                formatUptime(seconds) {
+                    if (!seconds) return '0s';
+                    if (seconds < 60) return seconds + 's';
+                    if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+                    return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+                },
+                
+                formatTime(iso) {
+                    if (!iso) return '';
+                    return new Date(iso).toLocaleTimeString();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,169 @@
+# =============================================================================
+# Web3 XDR - Kubernetes Deployment
+# =============================================================================
+# Deploy with:
+#   kubectl apply -k deploy/kubernetes/overlays/production
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web3-xdr
+  namespace: web3-xdr
+  labels:
+    app: web3-xdr
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web3-xdr
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: web3-xdr
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: web3-xdr
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: web3-xdr
+          image: web3-xdr:latest
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: web3-xdr-config
+            - secretRef:
+                name: web3-xdr-secrets
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: rules
+              mountPath: /app/config/rules
+              readOnly: true
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      
+      volumes:
+        - name: config
+          configMap:
+            name: web3-xdr-chain-config
+        - name: rules
+          configMap:
+            name: web3-xdr-rules
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: web3-xdr
+                topologyKey: kubernetes.io/hostname
+      
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: web3-xdr
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web3-xdr
+  namespace: web3-xdr
+  labels:
+    app: web3-xdr
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: web3-xdr
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: web3-xdr
+  namespace: web3-xdr
+  labels:
+    app: web3-xdr
+

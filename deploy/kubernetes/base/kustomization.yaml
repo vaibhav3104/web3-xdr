@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: web3-xdr
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - configmap.yaml
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/name: web3-xdr
+  app.kubernetes.io/component: security
+  app.kubernetes.io/part-of: web3-xdr
+

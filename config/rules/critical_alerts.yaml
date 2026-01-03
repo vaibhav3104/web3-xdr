@@ -1,0 +1,157 @@
+# ============================================================================
+# CRITICAL SEVERITY ALERT RULES
+# These rules detect high-impact attacks requiring immediate response
+# ============================================================================
+
+rules:
+  # --------------------------------------------------------------------------
+  # RULE 1: Unbacked Mint Detection (Wormhole-style attack)
+  # --------------------------------------------------------------------------
+  - id: unbacked-mint-001
+    name: Unbacked Cross-Chain Mint
+    description: |
+      Detects when tokens are minted on destination chain without 
+      corresponding lock on source chain. This is the primary attack 
+      vector used in the Wormhole ($320M) and Ronin ($620M) hacks.
+    
+    author: Web3 XDR Team
+    created: 2024-01-01
+    updated: 2024-01-01
+    references:
+      - https://rekt.news/wormhole-rekt/
+      - https://rekt.news/ronin-rekt/
+    
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    # Detection logic
+    detection:
+      type: invariant
+      invariant: MINT_LOCK_PARITY
+      conditions:
+        - field: minted_amount
+          operator: gt
+          compare_to: locked_amount
+          tolerance: 0.01  # Allow small rounding differences
+      
+      time_window: 10m  # Check within 10-minute window
+      
+      # Cross-chain correlation
+      correlation:
+        source_chain: any
+        dest_chain: any
+        require_bridge_match: true
+    
+    # Thresholds
+    thresholds:
+      min_amount_usd: 10000      # Ignore < $10K (likely test transactions)
+      min_imbalance_usd: 1000    # Minimum imbalance to alert
+    
+    # Response actions
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+        
+      - type: webhook
+        url: "${EMERGENCY_WEBHOOK_URL}"
+        method: POST
+        
+      - type: runbook
+        steps:
+          - "1. Verify alert is not false positive"
+          - "2. Check source chain for pending lock transactions"
+          - "3. If confirmed, execute emergency bridge pause"
+          - "4. Alert exchange partners to freeze attacker addresses"
+          - "5. Begin incident response documentation"
+
+  # --------------------------------------------------------------------------
+  # RULE 2: Cross-Chain Redemption Without Burn
+  # --------------------------------------------------------------------------
+  - id: unbacked-redemption-002
+    name: Unauthorized Cross-Chain Redemption
+    description: |
+      Detects when tokens are redeemed/unlocked on source chain without
+      corresponding burn on destination chain.
+    
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: TransferRedeemed
+      conditions:
+        - field: burn_verified
+          operator: eq
+          value: false
+    
+    thresholds:
+      min_amount_usd: 50000
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P1
+
+  # --------------------------------------------------------------------------
+  # RULE 3: Validator Threshold Bypass
+  # --------------------------------------------------------------------------
+  - id: validator-bypass-003
+    name: Validator Signature Threshold Bypass
+    description: |
+      Detects bridge operations that don't meet the required validator
+      signature threshold. Indicates potential validator key compromise.
+    
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: invariant
+      invariant: VALIDATOR_THRESHOLD
+      conditions:
+        - field: signature_count
+          operator: lt
+          compare_to: required_signatures
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: auto_pause
+        target: bridge
+        require_confirmation: true
+
+  # --------------------------------------------------------------------------
+  # RULE 4: Total Supply Inflation
+  # --------------------------------------------------------------------------
+  - id: supply-inflation-004
+    name: Bridged Token Supply Inflation
+    description: |
+      Detects when total supply of bridged tokens exceeds the amount
+      locked on the source chain.
+    
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: invariant
+      invariant: TOTAL_SUPPLY_INVARIANT
+      conditions:
+        - field: total_supply
+          operator: gt
+          compare_to: net_locked
+          tolerance_percent: 0.1
+    
+    schedule:
+      type: interval
+      interval: 300  # Check every 5 minutes
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P1
+

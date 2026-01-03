@@ -1,0 +1,196 @@
+# ============================================================================
+# HIGH SEVERITY ALERT RULES
+# These rules detect serious threats requiring prompt investigation
+# ============================================================================
+
+rules:
+  # --------------------------------------------------------------------------
+  # RULE 1: Large Bridge Transfer
+  # --------------------------------------------------------------------------
+  - id: large-bridge-transfer-101
+    name: Large Cross-Chain Transfer
+    description: |
+      Detects unusually large transfers through monitored bridges.
+      Could indicate whale activity or potential attack preparation.
+    
+    severity: high
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: 
+        - Lock
+        - Mint
+        - Transfer
+      chain: any
+    
+    thresholds:
+      min_amount_usd: 1000000  # $1M+
+    
+    # Rate limiting to avoid alert fatigue
+    rate_limit:
+      max_alerts: 10
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # RULE 2: TVL Drain Detection
+  # --------------------------------------------------------------------------
+  - id: tvl-drain-102
+    name: Abnormal TVL Drain
+    description: |
+      Detects when Total Value Locked decreases faster than normal,
+      which could indicate coordinated withdrawal or exploit.
+    
+    severity: high
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: invariant
+      invariant: TVL_VELOCITY
+      conditions:
+        - field: drain_percent_per_hour
+          operator: gt
+          value: 10  # >10% drain per hour
+        - field: drain_amount_usd
+          operator: gt
+          value: 100000  # >$100K
+    
+    time_window: 1h
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: runbook
+        steps:
+          - "1. Check if drain is from single address or distributed"
+          - "2. Verify if scheduled maintenance or legitimate withdrawal"
+          - "3. Monitor for continuation pattern"
+          - "4. Prepare bridge pause if needed"
+
+  # --------------------------------------------------------------------------
+  # RULE 3: Bridge Message Spike
+  # --------------------------------------------------------------------------
+  - id: bridge-message-spike-103
+    name: Bridge Message Activity Spike
+    description: |
+      Detects unusual spike in bridge message publications,
+      which could indicate attack preparation or ongoing exploit.
+    
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: LogMessagePublished
+      chain: any
+      
+      aggregation:
+        function: count
+        group_by: [chain, bridge_id]
+        time_window: 5m
+        threshold: 10  # >10 messages per 5 minutes
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # RULE 4: Suspicious Withdrawal Pattern
+  # --------------------------------------------------------------------------
+  - id: suspicious-withdrawal-104
+    name: Suspicious Withdrawal Pattern
+    description: |
+      Detects withdrawal events from bridge contracts.
+      Requires investigation to determine if legitimate.
+    
+    severity: high
+    confidence: 0.60
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Withdrawal
+      chain: any
+    
+    thresholds:
+      min_amount_usd: 100000  # $100K+
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # RULE 5: Governance Timelock Bypass
+  # --------------------------------------------------------------------------
+  - id: timelock-bypass-105
+    name: Governance Timelock Bypass Attempt
+    description: |
+      Detects when governance actions are executed faster than
+      the required timelock delay.
+    
+    severity: high
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: invariant
+      invariant: TIMELOCK_RESPECTED
+      conditions:
+        - field: execution_delay
+          operator: lt
+          compare_to: required_delay
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # --------------------------------------------------------------------------
+  # RULE 6: Flash Loan Detection
+  # --------------------------------------------------------------------------
+  - id: flash-loan-106
+    name: Flash Loan Attack Pattern
+    description: |
+      Detects patterns consistent with flash loan attacks:
+      large borrowed amounts with high-value operations in same block.
+    
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: flash_loan_attack
+      conditions:
+        - field: block_operation_count
+          operator: gt
+          value: 20
+        - field: block_volume_usd
+          operator: gt
+          value: 1000000
+        - field: same_block
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: runbook
+        steps:
+          - "1. Analyze transaction sequence in block"
+          - "2. Identify flash loan source (Aave, dYdX, etc.)"
+          - "3. Trace fund flow through protocols"
+          - "4. Assess impact and affected protocols"
+

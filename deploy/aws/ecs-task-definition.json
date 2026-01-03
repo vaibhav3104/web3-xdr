@@ -1,0 +1,70 @@
+{
+  "family": "web3-xdr",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/web3-xdr-task-role",
+  "containerDefinitions": [
+    {
+      "name": "web3-xdr",
+      "image": "${ECR_REGISTRY}/web3-xdr:${IMAGE_TAG}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "ENVIRONMENT", "value": "production"},
+        {"name": "LOG_LEVEL", "value": "INFO"},
+        {"name": "POSTGRES_ENABLED", "value": "true"},
+        {"name": "POSTGRES_HOST", "value": "${RDS_ENDPOINT}"},
+        {"name": "POSTGRES_PORT", "value": "5432"},
+        {"name": "POSTGRES_DB", "value": "web3_xdr"},
+        {"name": "DB_POOL_SIZE", "value": "10"},
+        {"name": "DB_BATCH_SIZE", "value": "100"}
+      ],
+      "secrets": [
+        {
+          "name": "POSTGRES_USER",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:web3-xdr/db:username::"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:web3-xdr/db:password::"
+        },
+        {
+          "name": "INFURA_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:web3-xdr/rpc:infura_key::"
+        },
+        {
+          "name": "TELEGRAM_BOT_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:web3-xdr/alerts:telegram_token::"
+        },
+        {
+          "name": "SLACK_WEBHOOK_URL",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:web3-xdr/alerts:slack_webhook::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/web3-xdr",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
+

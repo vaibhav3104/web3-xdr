@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 XDR Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent-red: #ff3b3b;
+            --accent-orange: #ff8a3b;
+            --accent-yellow: #ffd93b;
+            --accent-green: #3bff7e;
+            --accent-blue: #3b8aff;
+            --accent-purple: #8a3bff;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border-color: #2a2a3a;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .gradient-border {
+            background: linear-gradient(135deg, var(--accent-red), var(--accent-purple));
+            padding: 1px;
+        }
+        
+        .gradient-border > * {
+            background: var(--bg-secondary);
+        }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        
+        .severity-critical {
+            background: linear-gradient(135deg, rgba(255, 59, 59, 0.2), rgba(255, 59, 59, 0.1));
+            border-left: 4px solid var(--accent-red);
+        }
+        
+        .severity-high {
+            background: linear-gradient(135deg, rgba(255, 138, 59, 0.2), rgba(255, 138, 59, 0.1));
+            border-left: 4px solid var(--accent-orange);
+        }
+        
+        .severity-medium {
+            background: linear-gradient(135deg, rgba(255, 217, 59, 0.2), rgba(255, 217, 59, 0.1));
+            border-left: 4px solid var(--accent-yellow);
+        }
+        
+        .severity-low {
+            background: linear-gradient(135deg, rgba(59, 255, 126, 0.2), rgba(59, 255, 126, 0.1));
+            border-left: 4px solid var(--accent-green);
+        }
+        
+        .pulse-critical {
+            animation: pulse-red 2s infinite;
+        }
+        
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.4); }
+            50% { box-shadow: 0 0 20px 5px rgba(255, 59, 59, 0.2); }
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen" x-data="dashboard()">
+    <!-- Header -->
+    <header class="border-b border-gray-800 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
+                        Web3 XDR
+                    </span>
+                </div>
+                <span class="text-gray-500">|</span>
+                <span class="text-gray-400 text-sm">Cross-Chain Security</span>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2 text-sm">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span class="text-gray-400">System Active</span>
+                </div>
+                <button class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
+                    Settings
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="p-6">
+        <!-- Stats Row -->
+        <div class="grid grid-cols-5 gap-4 mb-6">
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">🚨 Incidents</div>
+                <div class="text-3xl font-bold text-red-400" x-text="stats.activeIncidents">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">🔴 Critical</div>
+                <div class="text-3xl font-bold text-orange-400" x-text="stats.criticalIncidents">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">📊 Events</div>
+                <div class="text-3xl font-bold text-blue-400" x-text="stats.totalEvents">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">🔗 Blocks</div>
+                <div class="text-3xl font-bold text-green-400" x-text="stats.blocksScanned">0</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-gray-400 text-sm mb-1">⏱️ Uptime</div>
+                <div class="text-3xl font-bold text-purple-400" x-text="formatUptime(stats.uptime)">0s</div>
+            </div>
+        </div>
+        
+        <!-- Main Grid -->
+        <div class="grid grid-cols-3 gap-6">
+            <!-- Incidents Panel -->
+            <div class="col-span-2">
+                <div class="card">
+                    <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold">Active Incidents</h2>
+                        <select class="bg-gray-800 text-sm rounded-lg px-3 py-1.5 border border-gray-700" x-model="filters.severity">
+                            <option value="">All Severities</option>
+                            <option value="CRITICAL">Critical</option>
+                            <option value="HIGH">High</option>
+                            <option value="MEDIUM">Medium</option>
+                        </select>
+                    </div>
+                    <div class="p-4 space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin">
+                        <template x-for="incident in filteredIncidents" :key="incident.id">
+                            <div 
+                                class="p-4 rounded-lg cursor-pointer transition hover:bg-gray-800/50"
+                                :class="{
+                                    'severity-critical pulse-critical': incident.severity === 'CRITICAL',
+                                    'severity-high': incident.severity === 'HIGH',
+                                    'severity-medium': incident.severity === 'MEDIUM',
+                                    'severity-low': incident.severity === 'LOW'
+                                }"
+                                @click="selectIncident(incident)"
+                            >
+                                <div class="flex items-start justify-between mb-2">
+                                    <div>
+                                        <span 
+                                            class="status-badge"
+                                            :class="{
+                                                'bg-red-500/20 text-red-400': incident.severity === 'CRITICAL',
+                                                'bg-orange-500/20 text-orange-400': incident.severity === 'HIGH',
+                                                'bg-yellow-500/20 text-yellow-400': incident.severity === 'MEDIUM',
+                                                'bg-green-500/20 text-green-400': incident.severity === 'LOW'
+                                            }"
+                                            x-text="incident.severity"
+                                        ></span>
+                                    </div>
+                                    <span class="text-xs text-gray-500 font-mono" x-text="formatTime(incident.created_at)"></span>
+                                </div>
+                                <h3 class="font-semibold mb-1" x-text="incident.title"></h3>
+                                <div class="flex items-center space-x-4 text-sm text-gray-400">
+                                    <span x-text="incident.attack_type"></span>
+                                    <span>•</span>
+                                    <span x-text="formatUSD(incident.total_loss_usd) + ' at risk'"></span>
+                                    <span>•</span>
+                                    <span x-text="incident.affected_chains.join(', ')"></span>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <div x-show="filteredIncidents.length === 0" class="text-center py-12 text-gray-500">
+                            <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <p>No active incidents</p>
+                            <p class="text-sm">System is monitoring for threats</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel -->
+            <div class="space-y-6">
+                <!-- Incident Detail -->
+                <div class="card" x-show="selectedIncident">
+                    <div class="p-4 border-b border-gray-800">
+                        <h2 class="text-lg font-semibold">Incident Details</h2>
+                    </div>
+                    <div class="p-4" x-show="selectedIncident">
+                        <div class="mb-4">
+                            <span 
+                                class="status-badge"
+                                :class="{
+                                    'bg-red-500/20 text-red-400': selectedIncident?.severity === 'CRITICAL',
+                                    'bg-orange-500/20 text-orange-400': selectedIncident?.severity === 'HIGH',
+                                    'bg-yellow-500/20 text-yellow-400': selectedIncident?.severity === 'MEDIUM'
+                                }"
+                                x-text="selectedIncident?.severity"
+                            ></span>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2" x-text="selectedIncident?.title"></h3>
+                        
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Attack Type</span>
+                                <span class="font-mono" x-text="selectedIncident?.attack_type"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Confidence</span>
+                                <span x-text="(selectedIncident?.confidence * 100).toFixed(0) + '%'"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Total Loss</span>
+                                <span class="text-red-400 font-semibold" x-text="formatUSD(selectedIncident?.total_loss_usd)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Chains</span>
+                                <span x-text="selectedIncident?.affected_chains?.join(', ')"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Detection Latency</span>
+                                <span x-text="selectedIncident?.detection_latency_blocks + ' blocks'"></span>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 space-y-2">
+                            <button 
+                                class="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-2"
+                                @click="analyzeWithAI(selectedIncident)"
+                                :disabled="aiAnalyzing"
+                            >
+                                <span x-show="!aiAnalyzing">🤖 AI Analysis</span>
+                                <span x-show="aiAnalyzing" class="animate-pulse">⏳ Analyzing...</span>
+                            </button>
+                            <button class="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-semibold transition">
+                                🔴 Emergency Pause
+                            </button>
+                            <button class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">
+                                View Full Explanation
+                            </button>
+                            <button class="w-full py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
+                                Acknowledge
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI Analysis Panel -->
+                <div class="card" x-show="aiAnalysis">
+                    <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold">🤖 AI Analysis</h2>
+                        <button @click="aiAnalysis = null" class="text-gray-500 hover:text-white">✕</button>
+                    </div>
+                    <div class="p-4 max-h-[400px] overflow-y-auto scrollbar-thin">
+                        <div class="mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                            <div class="flex items-center space-x-2 text-sm text-purple-400">
+                                <span>Backend:</span>
+                                <span class="font-mono" x-text="aiAnalysis?.backend"></span>
+                                <span>|</span>
+                                <span x-text="(aiAnalysis?.latency_seconds || 0).toFixed(2) + 's'"></span>
+                            </div>
+                        </div>
+                        
+                        <div class="prose prose-invert prose-sm max-w-none">
+                            <div class="text-sm whitespace-pre-wrap" x-html="formatMarkdown(aiAnalysis?.analysis)"></div>
+                        </div>
+                        
+                        <div class="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg" x-show="aiAnalysis?.recommendations?.length > 0">
+                            <h4 class="text-sm font-semibold text-blue-400 mb-2">📋 Recommendations</h4>
+                            <ul class="text-sm space-y-1">
+                                <template x-for="(rec, i) in aiAnalysis?.recommendations || []" :key="i">
+                                    <li class="flex items-start space-x-2">
+                                        <span class="text-blue-500" x-text="(i+1) + '.'"></span>
+                                        <span x-text="rec"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Events -->
+                <div class="card">
+                    <div class="p-4 border-b border-gray-800">
+                        <h2 class="text-lg font-semibold">🔴 Live Event Feed</h2>
+                    </div>
+                    <div class="p-4 max-h-[300px] overflow-y-auto scrollbar-thin space-y-2">
+                        <template x-for="event in recentEvents" :key="event.event_id">
+                            <div class="p-2 rounded bg-gray-800/50 text-sm">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span 
+                                        class="px-2 py-0.5 rounded text-xs font-semibold"
+                                        :class="{
+                                            'bg-red-500/20 text-red-400': event.severity === 'critical',
+                                            'bg-orange-500/20 text-orange-400': event.severity === 'high',
+                                            'bg-yellow-500/20 text-yellow-400': event.severity === 'medium',
+                                            'bg-green-500/20 text-green-400': event.severity === 'low'
+                                        }"
+                                        x-text="event.event_type"
+                                    ></span>
+                                    <span class="text-gray-500 text-xs uppercase" x-text="event.chain_id"></span>
+                                </div>
+                                <div class="text-gray-400 font-mono text-xs truncate" x-text="'TX: ' + event.tx_hash"></div>
+                                <div class="text-gray-500 text-xs" x-text="'Block: ' + (event.block_number || '')"></div>
+                            </div>
+                        </template>
+                        
+                        <div x-show="recentEvents.length === 0" class="text-center py-8 text-gray-500">
+                            <p>Waiting for events...</p>
+                            <p class="text-xs mt-1">Events will appear here in real-time</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        function dashboard() {
+            return {
+                stats: {
+                    activeIncidents: 0,
+                    criticalIncidents: 0,
+                    totalEvents: 0,
+                    chainsMonitored: 3,
+                    highAlerts: 0,
+                    mediumAlerts: 0,
+                    blocksScanned: 0,
+                    uptime: 0
+                },
+                incidents: [],
+                recentEvents: [],
+                selectedIncident: null,
+                aiAnalysis: null,
+                aiAnalyzing: false,
+                filters: {
+                    severity: ''
+                },
+                
+                get filteredIncidents() {
+                    if (!this.filters.severity) return this.incidents;
+                    return this.incidents.filter(i => i.severity.toUpperCase() === this.filters.severity);
+                },
+                
+                async init() {
+                    // Load initial data
+                    await this.loadAll();
+                    
+                    // Poll for updates every 3 seconds
+                    setInterval(() => this.loadAll(), 3000);
+                },
+                
+                async loadAll() {
+                    await Promise.all([
+                        this.loadStats(),
+                        this.loadIncidents(),
+                        this.loadEvents()
+                    ]);
+                },
+                
+                async loadStats() {
+                    try {
+                        const res = await fetch('/api/stats');
+                        if (!res.ok) throw new Error('API error');
+                        const data = await res.json();
+                        this.stats = {
+                            activeIncidents: data.active_incidents || data.total_incidents || 0,
+                            criticalIncidents: data.critical_alerts || 0,
+                            highAlerts: data.high_alerts || 0,
+                            mediumAlerts: data.medium_alerts || 0,
+                            totalEvents: data.total_events || 0,
+                            chainsMonitored: Object.keys(data.events_by_chain || {}).length || 3,
+                            blocksScanned: data.blocks_scanned || 0,
+                            uptime: data.uptime_seconds || 0
+                        };
+                    } catch (e) {
+                        console.log('Stats API not ready');
+                    }
+                },
+                
+                async loadIncidents() {
+                    try {
+                        const res = await fetch('/api/incidents');
+                        if (!res.ok) throw new Error('API error');
+                        const data = await res.json();
+                        // Normalize severity to uppercase
+                        this.incidents = data.map(inc => ({
+                            ...inc,
+                            severity: (inc.severity || 'low').toUpperCase()
+                        }));
+                    } catch (e) {
+                        console.log('Incidents API not ready');
+                    }
+                },
+                
+                async loadEvents() {
+                    try {
+                        const res = await fetch('/api/events?limit=20');
+                        if (!res.ok) throw new Error('API error');
+                        const data = await res.json();
+                        this.recentEvents = data;
+                    } catch (e) {
+                        console.log('Events API not ready');
+                    }
+                },
+                
+                selectIncident(incident) {
+                    this.selectedIncident = incident;
+                    this.aiAnalysis = null;
+                },
+                
+                async analyzeWithAI(incident) {
+                    if (!incident) return;
+                    
+                    this.aiAnalyzing = true;
+                    try {
+                        const res = await fetch(`/api/ai/analyze/${incident.id}`);
+                        if (res.ok) {
+                            this.aiAnalysis = await res.json();
+                        } else {
+                            console.error('AI analysis failed');
+                        }
+                    } catch (e) {
+                        console.error('AI analysis error:', e);
+                    } finally {
+                        this.aiAnalyzing = false;
+                    }
+                },
+                
+                formatMarkdown(text) {
+                    if (!text) return '';
+                    // Simple markdown to HTML conversion
+                    return text
+                        .replace(/^## (.*$)/gm, '<h2 class="text-lg font-bold text-white mt-4 mb-2">$1</h2>')
+                        .replace(/^### (.*$)/gm, '<h3 class="text-md font-semibold text-gray-300 mt-3 mb-1">$1</h3>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                        .replace(/^\- (.*$)/gm, '<li class="ml-4 text-gray-400">• $1</li>')
+                        .replace(/^(\d+)\. (.*$)/gm, '<div class="ml-4 text-gray-400"><span class="text-blue-400">$1.</span> $2</div>')
+                        .replace(/\n\n/g, '<br><br>')
+                        .replace(/\n/g, '<br>');
+                },
+                
+                formatTime(iso) {
+                    if (!iso) return '';
+                    const date = new Date(iso);
+                    return date.toLocaleTimeString();
+                },
+                
+                formatUSD(amount) {
+                    if (!amount) return '$0';
+                    if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M';
+                    if (amount >= 1000) return '$' + (amount / 1000).toFixed(0) + 'K';
+                    return '$' + amount.toFixed(0);
+                },
+                
+                formatUptime(seconds) {
+                    if (!seconds) return '0s';
+                    if (seconds < 60) return seconds + 's';
+                    if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+                    return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+

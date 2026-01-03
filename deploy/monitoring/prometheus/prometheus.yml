@@ -1,0 +1,54 @@
+# Prometheus Configuration for Web3 XDR
+# =====================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'web3-xdr-monitor'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Web3 XDR Application
+  - job_name: 'web3-xdr'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['web3-xdr:80']
+        labels:
+          app: 'web3-xdr'
+          environment: 'production'
+    
+    # For Kubernetes service discovery
+    # kubernetes_sd_configs:
+    #   - role: pod
+    #     namespaces:
+    #       names:
+    #         - web3-xdr
+    # relabel_configs:
+    #   - source_labels: [__meta_kubernetes_pod_label_app]
+    #     action: keep
+    #     regex: web3-xdr
+
+  # Node Exporter (if deployed)
+  - job_name: 'node'
+    static_configs:
+      - targets: []
+        # - node-exporter:9100
+

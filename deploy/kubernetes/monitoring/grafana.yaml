@@ -1,0 +1,229 @@
+# Grafana Kubernetes Deployment for Web3 XDR
+# ==========================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: web3-xdr
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: web3-xdr
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'Web3 XDR'
+        orgId: 1
+        folder: 'Web3 XDR'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-web3xdr
+  namespace: web3-xdr
+data:
+  web3-xdr.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 0,
+      "panels": [
+        {
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"colorMode": "value", "graphMode": "area"},
+          "targets": [{"expr": "sum(increase(web3_xdr_incidents_total{severity=\"critical\"}[24h]))", "legendFormat": "Critical"}],
+          "title": "🔴 Critical Incidents (24h)",
+          "type": "stat"
+        },
+        {
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "id": 2,
+          "options": {"colorMode": "value", "graphMode": "area"},
+          "targets": [{"expr": "sum(increase(web3_xdr_incidents_total{severity=\"high\"}[24h]))", "legendFormat": "High"}],
+          "title": "🟠 High Severity (24h)",
+          "type": "stat"
+        },
+        {
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "id": 3,
+          "targets": [{"expr": "sum(increase(web3_xdr_events_total[24h]))", "legendFormat": "Events"}],
+          "title": "📊 Events (24h)",
+          "type": "stat"
+        },
+        {
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+          "id": 4,
+          "targets": [{"expr": "sum(web3_xdr_chain_connected)", "legendFormat": "Chains"}],
+          "title": "🔗 Chains Connected",
+          "type": "stat"
+        },
+        {
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "id": 10,
+          "targets": [
+            {"expr": "sum(rate(web3_xdr_incidents_total{severity=\"critical\"}[5m])) * 60", "legendFormat": "Critical"},
+            {"expr": "sum(rate(web3_xdr_incidents_total{severity=\"high\"}[5m])) * 60", "legendFormat": "High"},
+            {"expr": "sum(rate(web3_xdr_incidents_total{severity=\"medium\"}[5m])) * 60", "legendFormat": "Medium"}
+          ],
+          "title": "Incidents/min by Severity",
+          "type": "timeseries"
+        },
+        {
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "id": 11,
+          "targets": [{"expr": "sum by (chain) (rate(web3_xdr_events_total[5m])) * 60", "legendFormat": "{{chain}}"}],
+          "title": "Events/min by Chain",
+          "type": "timeseries"
+        },
+        {
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 12},
+          "id": 20,
+          "targets": [{"expr": "web3_xdr_chain_connected", "legendFormat": "{{chain}}"}],
+          "title": "Chain Status",
+          "type": "stat"
+        },
+        {
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 12},
+          "id": 21,
+          "targets": [{"expr": "histogram_quantile(0.95, rate(web3_xdr_chain_latency_seconds_bucket[5m]))", "legendFormat": "{{chain}}"}],
+          "title": "RPC Latency (p95)",
+          "type": "timeseries"
+        },
+        {
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 12},
+          "id": 22,
+          "targets": [{"expr": "web3_xdr_chain_block_height", "legendFormat": "{{chain}}"}],
+          "title": "Block Height",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 36,
+      "style": "dark",
+      "tags": ["web3", "xdr", "security"],
+      "time": {"from": "now-1h", "to": "now"},
+      "title": "Web3 XDR Dashboard",
+      "uid": "web3-xdr-main"
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: web3-xdr
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.1.0
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "web3xdr123"
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_SERVER_ROOT_URL
+              value: "http://localhost:3000"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Viewer"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboard-web3xdr
+        - name: data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: web3-xdr
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: grafana
+

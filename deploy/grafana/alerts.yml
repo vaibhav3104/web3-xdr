@@ -1,0 +1,43 @@
+groups:
+  - name: web3-xdr-alerts
+    rules:
+      # Critical incident detected
+      - alert: CriticalIncidentDetected
+        expr: web3_xdr_incidents_total{severity="critical"} > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical Web3 security incident detected"
+          description: "{{ $value }} critical incidents detected. Immediate action required."
+
+      # High number of events
+      - alert: HighEventRate
+        expr: rate(web3_xdr_events_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High event rate detected"
+          description: "Event rate is {{ $value }} events/sec over the last 5 minutes."
+
+      # Service down
+      - alert: Web3XDRDown
+        expr: up{job="web3-xdr-production"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Web3 XDR service is down"
+          description: "The Web3 XDR service has been unreachable for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(web3_xdr_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in Web3 XDR"
+          description: "Error rate is {{ $value }} errors/sec over the last 5 minutes."
+

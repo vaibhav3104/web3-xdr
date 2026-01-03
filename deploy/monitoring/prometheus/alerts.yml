@@ -1,0 +1,90 @@
+# Prometheus Alert Rules for Web3 XDR
+# ====================================
+
+groups:
+  - name: web3-xdr-critical
+    rules:
+      # Critical incident detected
+      - alert: CriticalIncidentDetected
+        expr: increase(web3_xdr_incidents_total{severity="critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical security incident detected"
+          description: "Web3 XDR detected a critical incident on {{ $labels.chain }}"
+
+      # Chain disconnected
+      - alert: ChainDisconnected
+        expr: web3_xdr_chain_connected == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Blockchain connection lost"
+          description: "Lost connection to {{ $labels.chain }}"
+
+  - name: web3-xdr-warning
+    rules:
+      # High incident rate
+      - alert: HighIncidentRate
+        expr: rate(web3_xdr_incidents_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High incident detection rate"
+          description: "Detecting more than 10 incidents per minute"
+
+      # High event processing time
+      - alert: SlowEventProcessing
+        expr: histogram_quantile(0.95, rate(web3_xdr_event_processing_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow event processing"
+          description: "95th percentile event processing time is above 1 second"
+
+      # Chain latency high
+      - alert: HighChainLatency
+        expr: histogram_quantile(0.95, rate(web3_xdr_chain_latency_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High RPC latency"
+          description: "Chain {{ $labels.chain }} has high latency (>2s)"
+
+      # Alert delivery failures
+      - alert: AlertDeliveryFailure
+        expr: increase(web3_xdr_alert_failures_total[15m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alert delivery failures"
+          description: "Multiple alert delivery failures in the last 15 minutes"
+
+  - name: web3-xdr-info
+    rules:
+      # Application restarted
+      - alert: ApplicationRestarted
+        expr: web3_xdr_uptime_seconds < 300
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Web3 XDR restarted"
+          description: "Application uptime is less than 5 minutes"
+
+      # No events received
+      - alert: NoEventsReceived
+        expr: rate(web3_xdr_events_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No events being processed"
+          description: "No blockchain events received in the last 10 minutes"
+

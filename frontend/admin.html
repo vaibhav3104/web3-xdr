@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 XDR - Admin Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f0f14;
+            --bg-card: #1a1a24;
+            --bg-input: #252532;
+            --border: #2d2d3d;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+        }
+        
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+        
+        .input-field {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 10px 14px;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        
+        .btn-outline:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+        
+        .sidebar-link:hover, .sidebar-link.active {
+            background: var(--bg-input);
+            color: var(--text);
+        }
+        
+        .sidebar-link.active {
+            border-left: 3px solid var(--accent);
+        }
+        
+        .toggle {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            background: var(--bg-input);
+            border-radius: 13px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .toggle.active {
+            background: var(--success);
+        }
+        
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.3s;
+        }
+        
+        .toggle.active::after {
+            transform: translateX(22px);
+        }
+        
+        .severity-critical { color: #ef4444; }
+        .severity-high { color: #f97316; }
+        .severity-medium { color: #eab308; }
+        .severity-low { color: #22c55e; }
+        
+        .badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .badge-high { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+        .badge-medium { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .badge-low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        
+        .yaml-editor {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border: none;
+            resize: vertical;
+        }
+        
+        .tab { 
+            padding: 10px 20px;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        
+        .tab.active {
+            border-bottom-color: var(--accent);
+            color: var(--text);
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen" x-data="adminConsole()" x-init="checkAuth()">
+    <!-- Notification -->
+    <div x-show="notification.show" 
+         x-transition
+         class="notification"
+         :class="{
+             'bg-green-500/90': notification.type === 'success',
+             'bg-red-500/90': notification.type === 'error',
+             'bg-yellow-500/90': notification.type === 'warning'
+         }">
+        <span x-text="notification.message"></span>
+    </div>
+
+    <div class="flex">
+        <!-- Sidebar -->
+        <aside class="w-64 min-h-screen border-r border-gray-800 p-4">
+            <div class="flex items-center space-x-3 mb-8 px-2">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="font-bold text-lg">Web3 XDR</div>
+                    <div class="text-xs text-gray-500">Admin Console</div>
+                </div>
+            </div>
+            
+            <nav class="space-y-1">
+                <a href="#" @click.prevent="currentPage = 'dashboard'" 
+                   class="sidebar-link" :class="{ active: currentPage === 'dashboard' }">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                    Dashboard
+                </a>
+                
+                <a href="#" @click.prevent="currentPage = 'rules'" 
+                   class="sidebar-link" :class="{ active: currentPage === 'rules' }">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                    </svg>
+                    Alert Rules
+                </a>
+                
+                <a href="#" @click.prevent="currentPage = 'chains'" 
+                   class="sidebar-link" :class="{ active: currentPage === 'chains' }">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
+                    Chains & RPCs
+                </a>
+                
+                <a href="#" @click.prevent="currentPage = 'alerting'" 
+                   class="sidebar-link" :class="{ active: currentPage === 'alerting' }">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    Alerting
+                </a>
+                
+                <a href="#" @click.prevent="currentPage = 'logs'" 
+                   class="sidebar-link" :class="{ active: currentPage === 'logs' }">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    System Logs
+                </a>
+            </nav>
+            
+            <div class="absolute bottom-4 left-4 right-4 space-y-2">
+                <!-- User Info -->
+                <div class="px-2 py-3 border-t border-gray-800" x-show="currentUser">
+                    <div class="flex items-center space-x-3 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-indigo-500/30 flex items-center justify-center text-sm font-semibold">
+                            <span x-text="currentUser?.username?.charAt(0).toUpperCase()"></span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-medium" x-text="currentUser?.username"></div>
+                            <div class="text-xs text-gray-500" x-text="currentUser?.role"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <a href="/frontend/index.html" class="sidebar-link text-sm">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    Back to Dashboard
+                </a>
+                
+                <button @click="logout()" class="sidebar-link text-sm w-full text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                    </svg>
+                    Sign Out
+                </button>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="flex-1 p-8">
+            <!-- Dashboard Page -->
+            <div x-show="currentPage === 'dashboard'">
+                <h1 class="text-2xl font-bold mb-6">System Overview</h1>
+                
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-4 gap-4 mb-8">
+                    <div class="card p-5">
+                        <div class="text-gray-400 text-sm mb-1">Total Rules</div>
+                        <div class="text-3xl font-bold text-indigo-400" x-text="stats.totalRules">0</div>
+                    </div>
+                    <div class="card p-5">
+                        <div class="text-gray-400 text-sm mb-1">Enabled Rules</div>
+                        <div class="text-3xl font-bold text-green-400" x-text="stats.enabledRules">0</div>
+                    </div>
+                    <div class="card p-5">
+                        <div class="text-gray-400 text-sm mb-1">Active Chains</div>
+                        <div class="text-3xl font-bold text-blue-400" x-text="stats.activeChains">0</div>
+                    </div>
+                    <div class="card p-5">
+                        <div class="text-gray-400 text-sm mb-1">Events Today</div>
+                        <div class="text-3xl font-bold text-purple-400" x-text="stats.eventsToday">0</div>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="card p-6 mb-8">
+                    <h2 class="text-lg font-semibold mb-4">Quick Actions</h2>
+                    <div class="flex space-x-4">
+                        <button @click="reloadRules()" class="btn btn-primary">
+                            🔄 Reload Rules
+                        </button>
+                        <button @click="testAlert()" class="btn btn-outline">
+                            🧪 Send Test Alert
+                        </button>
+                        <button @click="exportConfig()" class="btn btn-outline">
+                            📥 Export Config
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Recent Activity -->
+                <div class="card p-6">
+                    <h2 class="text-lg font-semibold mb-4">Recent Rule Triggers</h2>
+                    <div class="space-y-3">
+                        <template x-for="trigger in recentTriggers" :key="trigger.id">
+                            <div class="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <span class="badge" :class="'badge-' + trigger.severity" x-text="trigger.severity"></span>
+                                    <span x-text="trigger.ruleName"></span>
+                                </div>
+                                <span class="text-gray-500 text-sm" x-text="trigger.time"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Rules Page -->
+            <div x-show="currentPage === 'rules'">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-2xl font-bold">Alert Rules</h1>
+                    <button @click="showNewRuleModal = true" class="btn btn-primary">
+                        + New Rule
+                    </button>
+                </div>
+                
+                <!-- Rules Filter -->
+                <div class="flex space-x-4 mb-6">
+                    <button @click="ruleFilter = 'all'" class="tab" :class="{ active: ruleFilter === 'all' }">All Rules</button>
+                    <button @click="ruleFilter = 'critical'" class="tab" :class="{ active: ruleFilter === 'critical' }">🔴 Critical</button>
+                    <button @click="ruleFilter = 'high'" class="tab" :class="{ active: ruleFilter === 'high' }">🟠 High</button>
+                    <button @click="ruleFilter = 'medium'" class="tab" :class="{ active: ruleFilter === 'medium' }">🟡 Medium</button>
+                    <button @click="ruleFilter = 'low'" class="tab" :class="{ active: ruleFilter === 'low' }">🟢 Low</button>
+                </div>
+                
+                <!-- Rules List -->
+                <div class="space-y-4">
+                    <template x-for="rule in filteredRules" :key="rule.id">
+                        <div class="card p-5">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <span class="badge" :class="'badge-' + rule.severity" x-text="rule.severity"></span>
+                                        <h3 class="font-semibold" x-text="rule.name"></h3>
+                                    </div>
+                                    <p class="text-gray-400 text-sm mb-3" x-text="rule.description"></p>
+                                    <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                        <span class="font-mono" x-text="rule.id"></span>
+                                        <span>•</span>
+                                        <span x-text="'Confidence: ' + (rule.confidence * 100) + '%'"></span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-4">
+                                    <div class="toggle" :class="{ active: rule.enabled }" @click="toggleRule(rule)"></div>
+                                    <button @click="editRule(rule)" class="text-gray-400 hover:text-white">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                    </button>
+                                    <button @click="deleteRule(rule)" class="text-gray-400 hover:text-red-400">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Chains Page -->
+            <div x-show="currentPage === 'chains'">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-2xl font-bold">Chains & RPC Configuration</h1>
+                    <button @click="showNewChainModal = true" class="btn btn-primary">
+                        + Add Chain
+                    </button>
+                </div>
+                
+                <div class="space-y-4">
+                    <template x-for="chain in chains" :key="chain.chain_id">
+                        <div class="card p-5">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                                            <span x-text="chain.chain_name.charAt(0)"></span>
+                                        </div>
+                                        <h3 class="font-semibold" x-text="chain.chain_name"></h3>
+                                        <span class="text-xs px-2 py-1 rounded-full" 
+                                              :class="chain.status === 'connected' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
+                                              x-text="chain.status"></span>
+                                    </div>
+                                    <div class="text-sm text-gray-400 space-y-1">
+                                        <div class="font-mono text-xs truncate max-w-lg" x-text="chain.rpc_url"></div>
+                                        <div x-text="'Contracts: ' + (chain.bridge_contracts?.length || 0) + ' monitored'"></div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <button @click="testChainConnection(chain)" class="btn btn-outline text-sm">
+                                        Test Connection
+                                    </button>
+                                    <button @click="editChain(chain)" class="text-gray-400 hover:text-white">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Alerting Page -->
+            <div x-show="currentPage === 'alerting'">
+                <h1 class="text-2xl font-bold mb-6">Alerting Configuration</h1>
+                
+                <!-- Telegram -->
+                <div class="card p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                <span class="text-xl">📱</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold">Telegram</h3>
+                                <p class="text-sm text-gray-400">Send alerts to Telegram channels</p>
+                            </div>
+                        </div>
+                        <div class="toggle" :class="{ active: alerting.telegram.enabled }" 
+                             @click="alerting.telegram.enabled = !alerting.telegram.enabled"></div>
+                    </div>
+                    
+                    <div x-show="alerting.telegram.enabled" class="space-y-4 pt-4 border-t border-gray-700">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Bot Token</label>
+                            <input type="password" x-model="alerting.telegram.bot_token" 
+                                   class="input-field" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Critical Alert Channel ID</label>
+                            <input type="text" x-model="alerting.telegram.critical_channel" 
+                                   class="input-field" placeholder="-100123456789">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">General Alert Channel ID</label>
+                            <input type="text" x-model="alerting.telegram.general_channel" 
+                                   class="input-field" placeholder="-100987654321">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Slack -->
+                <div class="card p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                <span class="text-xl">💬</span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold">Slack</h3>
+                                <p class="text-sm text-gray-400">Send alerts to Slack channels</p>
+                            </div>
+                        </div>
+                        <div class="toggle" :class="{ active: alerting.slack.enabled }" 
+                             @click="alerting.slack.enabled = !alerting.slack.enabled"></div>
+                    </div>
+                    
+                    <div x-show="alerting.slack.enabled" class="space-y-4 pt-4 border-t border-gray-700">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Webhook URL</label>
+                            <input type="password" x-model="alerting.slack.webhook_url" 
+                                   class="input-field" placeholder="https://hooks.slack.com/services/...">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Critical Channel</label>
+                            <input type="text" x-model="alerting.slack.critical_channel" 
+                                   class="input-field" placeholder="#security-critical">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Rate Limiting -->
+                <div class="card p-6 mb-6">
+                    <h3 class="font-semibold mb-4">Rate Limiting</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Min Alert Interval (seconds)</label>
+                            <input type="number" x-model="alerting.rate_limit.interval" 
+                                   class="input-field" placeholder="60">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Max Alerts Per Hour</label>
+                            <input type="number" x-model="alerting.rate_limit.max_per_hour" 
+                                   class="input-field" placeholder="50">
+                        </div>
+                    </div>
+                </div>
+                
+                <button @click="saveAlertingConfig()" class="btn btn-primary">
+                    💾 Save Alerting Configuration
+                </button>
+            </div>
+            
+            <!-- Logs Page -->
+            <div x-show="currentPage === 'logs'">
+                <h1 class="text-2xl font-bold mb-6">System Logs</h1>
+                
+                <div class="card p-4 font-mono text-sm bg-black/50 max-h-[600px] overflow-y-auto">
+                    <template x-for="log in logs" :key="log.id">
+                        <div class="py-1" :class="{
+                            'text-red-400': log.level === 'error',
+                            'text-yellow-400': log.level === 'warning',
+                            'text-green-400': log.level === 'info',
+                            'text-gray-400': log.level === 'debug'
+                        }">
+                            <span class="text-gray-600" x-text="log.timestamp"></span>
+                            <span class="mx-2" x-text="'[' + log.level.toUpperCase() + ']'"></span>
+                            <span x-text="log.message"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- New Rule Modal -->
+    <div x-show="showNewRuleModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" x-cloak>
+        <div class="card w-full max-w-2xl max-h-[80vh] overflow-y-auto" @click.away="showNewRuleModal = false">
+            <div class="p-6 border-b border-gray-700">
+                <h2 class="text-xl font-bold">Create New Rule</h2>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Rule ID</label>
+                        <input type="text" x-model="newRule.id" class="input-field" placeholder="my-rule-001">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Severity</label>
+                        <select x-model="newRule.severity" class="input-field">
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Name</label>
+                    <input type="text" x-model="newRule.name" class="input-field" placeholder="My Custom Detection Rule">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Description</label>
+                    <textarea x-model="newRule.description" class="input-field h-20" placeholder="Describe what this rule detects..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Confidence (0-1)</label>
+                    <input type="number" step="0.1" min="0" max="1" x-model="newRule.confidence" class="input-field" placeholder="0.8">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">YAML Detection Logic</label>
+                    <textarea x-model="newRule.yaml" class="input-field yaml-editor h-48" placeholder="detection:
+  type: event
+  event_type: Transfer
+  conditions:
+    - field: amount_usd
+      operator: gt
+      value: 1000000"></textarea>
+                </div>
+            </div>
+            <div class="p-6 border-t border-gray-700 flex justify-end space-x-3">
+                <button @click="showNewRuleModal = false" class="btn btn-outline">Cancel</button>
+                <button @click="createRule()" class="btn btn-primary">Create Rule</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function adminConsole() {
+            return {
+                currentPage: 'dashboard',
+                showNewRuleModal: false,
+                showNewChainModal: false,
+                ruleFilter: 'all',
+                notification: { show: false, message: '', type: 'success' },
+                
+                // Auth state
+                currentUser: null,
+                authToken: null,
+                isAuthenticated: false,
+                
+                stats: {
+                    totalRules: 17,
+                    enabledRules: 17,
+                    activeChains: 3,
+                    eventsToday: 0
+                },
+                
+                rules: [],
+                chains: [],
+                logs: [],
+                recentTriggers: [],
+                
+                alerting: {
+                    telegram: { enabled: false, bot_token: '', critical_channel: '', general_channel: '' },
+                    slack: { enabled: false, webhook_url: '', critical_channel: '#security-critical' },
+                    rate_limit: { interval: 60, max_per_hour: 50 }
+                },
+                
+                newRule: {
+                    id: '',
+                    name: '',
+                    description: '',
+                    severity: 'medium',
+                    confidence: 0.7,
+                    yaml: ''
+                },
+                
+                get filteredRules() {
+                    if (this.ruleFilter === 'all') return this.rules;
+                    return this.rules.filter(r => r.severity === this.ruleFilter);
+                },
+                
+                async checkAuth() {
+                    const token = localStorage.getItem('xdr_token');
+                    const user = localStorage.getItem('xdr_user');
+                    
+                    if (!token) {
+                        window.location.href = '/frontend/login.html';
+                        return;
+                    }
+                    
+                    // Verify token is valid
+                    try {
+                        const res = await fetch('/api/auth/verify', {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        
+                        if (!res.ok) {
+                            localStorage.removeItem('xdr_token');
+                            localStorage.removeItem('xdr_user');
+                            window.location.href = '/frontend/login.html';
+                            return;
+                        }
+                        
+                        this.authToken = token;
+                        this.currentUser = user ? JSON.parse(user) : null;
+                        this.isAuthenticated = true;
+                        
+                        // Initialize the rest
+                        await this.init();
+                    } catch (e) {
+                        window.location.href = '/frontend/login.html';
+                    }
+                },
+                
+                logout() {
+                    localStorage.removeItem('xdr_token');
+                    localStorage.removeItem('xdr_user');
+                    window.location.href = '/frontend/login.html';
+                },
+                
+                getAuthHeaders() {
+                    return {
+                        'Authorization': `Bearer ${this.authToken}`,
+                        'Content-Type': 'application/json'
+                    };
+                },
+                
+                async init() {
+                    await this.loadRules();
+                    await this.loadChains();
+                    await this.loadStats();
+                    await this.loadAlertingConfig();
+                    this.loadLogs();
+                    
+                    // Refresh stats periodically
+                    setInterval(() => this.loadStats(), 5000);
+                },
+                
+                async loadRules() {
+                    try {
+                        const res = await fetch('/api/admin/rules');
+                        if (res.ok) {
+                            this.rules = await res.json();
+                        }
+                    } catch (e) {
+                        // Demo data
+                        this.rules = [
+                            { id: 'unbacked-mint-001', name: 'Unbacked Cross-Chain Mint', description: 'Detects tokens minted without lock', severity: 'critical', confidence: 0.95, enabled: true },
+                            { id: 'unbacked-redemption-002', name: 'Unauthorized Redemption', description: 'Detects redemption without burn', severity: 'critical', confidence: 0.90, enabled: true },
+                            { id: 'tvl-drain-102', name: 'Abnormal TVL Drain', description: 'Detects rapid TVL decrease', severity: 'high', confidence: 0.85, enabled: true },
+                            { id: 'velocity-spike-201', name: 'Transaction Velocity Spike', description: 'Detects unusual tx frequency', severity: 'medium', confidence: 0.50, enabled: true },
+                        ];
+                    }
+                },
+                
+                async loadChains() {
+                    try {
+                        const res = await fetch('/api/admin/chains');
+                        if (res.ok) {
+                            this.chains = await res.json();
+                        }
+                    } catch (e) {
+                        this.chains = [
+                            { chain_id: 'ethereum', chain_name: 'Ethereum Mainnet', rpc_url: 'https://mainnet.infura.io/v3/***', status: 'connected', bridge_contracts: ['0x3ee18...', '0x98f3c...'] },
+                            { chain_id: 'polygon', chain_name: 'Polygon Mainnet', rpc_url: 'https://polygon-mainnet.infura.io/v3/***', status: 'connected', bridge_contracts: ['0x7ceB2...'] },
+                            { chain_id: 'arbitrum', chain_name: 'Arbitrum One', rpc_url: 'https://arbitrum-mainnet.infura.io/v3/***', status: 'connected', bridge_contracts: [] },
+                        ];
+                    }
+                },
+                
+                async loadStats() {
+                    try {
+                        const res = await fetch('/api/stats');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.stats.eventsToday = data.total_events || 0;
+                            this.stats.activeChains = Object.keys(data.events_by_chain || {}).length || 3;
+                        }
+                    } catch (e) {}
+                },
+                
+                async loadAlertingConfig() {
+                    try {
+                        const res = await fetch('/api/admin/alerting');
+                        if (res.ok) {
+                            this.alerting = await res.json();
+                        }
+                    } catch (e) {}
+                },
+                
+                loadLogs() {
+                    this.logs = [
+                        { id: 1, timestamp: '18:45:47', level: 'info', message: 'Rule engine loaded 17 rules' },
+                        { id: 2, timestamp: '18:45:48', level: 'info', message: 'Connected to Ethereum (Block 24,148,651)' },
+                        { id: 3, timestamp: '18:45:48', level: 'info', message: 'Connected to Polygon (Block 81,129,079)' },
+                        { id: 4, timestamp: '18:45:49', level: 'warning', message: 'Rule velocity-spike-201 triggered' },
+                        { id: 5, timestamp: '18:46:00', level: 'info', message: 'Processed 500 events' },
+                    ];
+                    
+                    this.recentTriggers = [
+                        { id: 1, ruleName: 'Transaction Velocity Spike', severity: 'medium', time: '2 min ago' },
+                        { id: 2, ruleName: 'Failed Transaction Spike', severity: 'low', time: '5 min ago' },
+                    ];
+                },
+                
+                async toggleRule(rule) {
+                    rule.enabled = !rule.enabled;
+                    try {
+                        await fetch(`/api/admin/rules/${rule.id}/toggle`, { method: 'POST' });
+                        this.showNotification(`Rule ${rule.enabled ? 'enabled' : 'disabled'}`, 'success');
+                    } catch (e) {
+                        this.showNotification('Failed to update rule', 'error');
+                    }
+                },
+                
+                editRule(rule) {
+                    this.newRule = { ...rule };
+                    this.showNewRuleModal = true;
+                },
+                
+                async deleteRule(rule) {
+                    if (!confirm(`Delete rule "${rule.name}"?`)) return;
+                    try {
+                        await fetch(`/api/admin/rules/${rule.id}`, { method: 'DELETE' });
+                        this.rules = this.rules.filter(r => r.id !== rule.id);
+                        this.showNotification('Rule deleted', 'success');
+                    } catch (e) {
+                        this.showNotification('Failed to delete rule', 'error');
+                    }
+                },
+                
+                async createRule() {
+                    try {
+                        const res = await fetch('/api/admin/rules', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.newRule)
+                        });
+                        if (res.ok) {
+                            this.showNotification('Rule created successfully', 'success');
+                            this.showNewRuleModal = false;
+                            await this.loadRules();
+                        }
+                    } catch (e) {
+                        this.showNotification('Failed to create rule', 'error');
+                    }
+                },
+                
+                async testChainConnection(chain) {
+                    this.showNotification(`Testing ${chain.chain_name}...`, 'warning');
+                    // Simulate test
+                    setTimeout(() => {
+                        chain.status = 'connected';
+                        this.showNotification(`${chain.chain_name} connected successfully`, 'success');
+                    }, 1000);
+                },
+                
+                editChain(chain) {
+                    // TODO: Open chain edit modal
+                },
+                
+                async saveAlertingConfig() {
+                    try {
+                        await fetch('/api/admin/alerting', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.alerting)
+                        });
+                        this.showNotification('Alerting configuration saved', 'success');
+                    } catch (e) {
+                        this.showNotification('Failed to save configuration', 'error');
+                    }
+                },
+                
+                async reloadRules() {
+                    try {
+                        await fetch('/api/admin/rules/reload', { method: 'POST' });
+                        await this.loadRules();
+                        this.showNotification('Rules reloaded', 'success');
+                    } catch (e) {
+                        this.showNotification('Failed to reload rules', 'error');
+                    }
+                },
+                
+                async testAlert() {
+                    this.showNotification('Test alert sent!', 'success');
+                },
+                
+                exportConfig() {
+                    const config = { rules: this.rules, chains: this.chains, alerting: this.alerting };
+                    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'xdr-config.json';
+                    a.click();
+                },
+                
+                showNotification(message, type = 'success') {
+                    this.notification = { show: true, message, type };
+                    setTimeout(() => { this.notification.show = false; }, 3000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+

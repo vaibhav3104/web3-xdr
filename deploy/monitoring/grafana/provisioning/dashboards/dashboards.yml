@@ -1,0 +1,15 @@
+# Grafana Dashboard Provisioning
+apiVersion: 1
+
+providers:
+  - name: 'Web3 XDR Dashboards'
+    orgId: 1
+    folder: 'Web3 XDR'
+    folderUid: 'web3-xdr'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+

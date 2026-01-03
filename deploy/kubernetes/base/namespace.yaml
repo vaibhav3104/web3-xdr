@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: web3-xdr
+  labels:
+    app: web3-xdr
+    istio-injection: enabled
+

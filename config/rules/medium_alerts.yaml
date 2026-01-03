@@ -1,0 +1,231 @@
+# ============================================================================
+# MEDIUM & LOW SEVERITY ALERT RULES
+# These rules detect anomalies requiring monitoring or review
+# ============================================================================
+
+rules:
+  # --------------------------------------------------------------------------
+  # RULE 1: Transaction Velocity Spike
+  # --------------------------------------------------------------------------
+  - id: velocity-spike-201
+    name: Transaction Velocity Spike
+    description: |
+      Detects unusually high transaction frequency on bridge contracts.
+      Often normal during high-activity periods, but worth monitoring.
+    
+    severity: medium
+    confidence: 0.50
+    enabled: true
+    
+    detection:
+      type: velocity
+      metric: events_per_minute
+      chain: any
+      
+      thresholds:
+        warning: 100   # Yellow alert
+        critical: 500  # Escalate to high
+    
+    time_window: 1m
+    
+    # Suppress during known high-activity times
+    suppress:
+      - schedule: "0 0 * * 1"  # Mondays (often high activity)
+      - during_events: [airdrop, token_launch]
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # --------------------------------------------------------------------------
+  # RULE 2: New Address Large Transfer
+  # --------------------------------------------------------------------------
+  - id: new-address-transfer-202
+    name: Large Transfer from New Address
+    description: |
+      Detects large transfers from addresses with no prior history.
+      Could indicate fresh attack wallet or legitimate new user.
+    
+    severity: medium
+    confidence: 0.60
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      conditions:
+        - field: sender_age_hours
+          operator: lt
+          value: 24  # Address created < 24 hours ago
+        - field: sender_tx_count
+          operator: lt
+          value: 5   # Fewer than 5 prior transactions
+    
+    thresholds:
+      min_amount_usd: 100000
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+      - type: enrich
+        add_fields:
+          - address_reputation
+          - funding_source
+
+  # --------------------------------------------------------------------------
+  # RULE 3: Admin Action Monitoring
+  # --------------------------------------------------------------------------
+  - id: admin-action-203
+    name: Admin Action Detected
+    description: |
+      Monitors privileged operations on bridge contracts.
+      Normal during maintenance, suspicious if unexpected.
+    
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: event
+      event_type:
+        - OwnershipTransferred
+        - AdminChanged
+        - UpgradeExecuted
+        - PauseToggled
+        - ParameterChanged
+      chain: any
+    
+    # Alert if >5 admin actions per hour
+    rate_threshold:
+      count: 5
+      period: 1h
+      escalate_to: high
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+      - type: log
+        level: info
+
+  # --------------------------------------------------------------------------
+  # RULE 4: Cross-Chain Arbitrage Pattern
+  # --------------------------------------------------------------------------
+  - id: arbitrage-pattern-204
+    name: Cross-Chain Arbitrage Detected
+    description: |
+      Detects rapid back-and-forth bridging that may indicate
+      arbitrage activity or potential attack preparation.
+    
+    severity: medium
+    confidence: 0.50
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: rapid_bridging
+      conditions:
+        - field: bridge_count
+          operator: gt
+          value: 3
+        - field: time_window
+          operator: lt
+          value: 1h
+        - field: same_address
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P4
+
+  # --------------------------------------------------------------------------
+  # RULE 5: Contract Interaction Anomaly
+  # --------------------------------------------------------------------------
+  - id: contract-anomaly-205
+    name: Unusual Contract Interaction
+    description: |
+      Detects interactions with bridge contracts from unusual sources
+      (unverified contracts, known attack contracts, etc.)
+    
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: any
+      conditions:
+        - field: caller_type
+          operator: eq
+          value: contract
+        - field: caller_verified
+          operator: eq
+          value: false
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+      - type: enrich
+        add_fields:
+          - contract_analysis
+          - similar_contracts
+
+  # --------------------------------------------------------------------------
+  # RULE 6: Failed Transaction Spike (LOW)
+  # --------------------------------------------------------------------------
+  - id: failed-tx-spike-301
+    name: Failed Transaction Spike
+    description: |
+      Detects spike in failed transactions, which could indicate
+      attack attempts or contract issues.
+    
+    severity: low
+    confidence: 0.40
+    enabled: true
+    
+    detection:
+      type: velocity
+      metric: failed_transactions_per_minute
+      chain: any
+      threshold: 10
+    
+    actions:
+      - type: log
+        level: warning
+      - type: alert
+        channels: [slack]
+        priority: P4
+        # Only alert during business hours
+        schedule: "09:00-18:00 UTC Mon-Fri"
+
+  # --------------------------------------------------------------------------
+  # RULE 7: Token Approval Monitoring (LOW)
+  # --------------------------------------------------------------------------
+  - id: token-approval-302
+    name: Large Token Approval
+    description: |
+      Monitors large or unlimited token approvals to bridge contracts.
+      Normal for users, but tracking for forensics.
+    
+    severity: low
+    confidence: 0.30
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Approval
+      conditions:
+        - field: amount
+          operator: eq
+          value: unlimited  # Max uint256
+    
+    actions:
+      - type: log
+        level: info
+        # No alert, just log for forensics
+

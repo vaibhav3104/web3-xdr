@@ -1,0 +1,136 @@
+# Prometheus Kubernetes Deployment for Web3 XDR
+# ==============================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: web3-xdr
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'web3-xdr'
+        metrics_path: '/metrics'
+        scrape_interval: 10s
+        static_configs:
+          - targets: ['web3-xdr.web3-xdr.svc.cluster.local:80']
+            labels:
+              app: 'web3-xdr'
+
+  alerts.yml: |
+    groups:
+      - name: web3-xdr-alerts
+        rules:
+          - alert: CriticalIncidentDetected
+            expr: increase(web3_xdr_incidents_total{severity="critical"}[5m]) > 0
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Critical security incident detected"
+              
+          - alert: ChainDisconnected
+            expr: web3_xdr_chain_connected == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Blockchain connection lost"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: web3-xdr
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.47.0
+          args:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=15d'
+            - '--web.enable-lifecycle'
+            - '--web.enable-admin-api'
+          ports:
+            - containerPort: 9090
+              name: http
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: rules
+          configMap:
+            name: prometheus-config
+            items:
+              - key: alerts.yml
+                path: alerts.yml
+        - name: data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: web3-xdr
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http
+  selector:
+    app: prometheus
+

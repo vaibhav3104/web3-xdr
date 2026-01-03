@@ -1,0 +1,98 @@
+# Web3 XDR Configuration
+# Copy to chains.yaml and configure with your settings
+
+# Chain configurations
+chains:
+  - chain_id: "ethereum"
+    chain_name: "Ethereum Mainnet"
+    rpc_url: "https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    ws_url: "wss://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    bridge_contracts:
+      - "0x..." # Wormhole Token Bridge
+    token_contracts:
+      - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" # WETH
+      - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" # USDC
+    poll_interval_seconds: 12
+    confirmations_required: 2
+    
+  - chain_id: "polygon"
+    chain_name: "Polygon Mainnet"
+    rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    ws_url: "wss://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+    bridge_contracts:
+      - "0x..." # Polygon Bridge
+    poll_interval_seconds: 2
+    confirmations_required: 10
+
+  - chain_id: "solana"
+    chain_name: "Solana Mainnet"
+    rpc_url: "https://api.mainnet-beta.solana.com"
+    bridge_contracts:
+      - "worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth" # Wormhole
+    poll_interval_seconds: 0.4
+    confirmations_required: 32
+
+# Bridge configurations
+bridges:
+  - id: "wormhole_eth_sol"
+    name: "Wormhole Ethereum-Solana"
+    source_chain: "ethereum"
+    dest_chain: "solana"
+    contracts:
+      - "0x..." # Ethereum side
+      - "worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth" # Solana side
+    
+  - id: "polygon_bridge"
+    name: "Polygon PoS Bridge"
+    source_chain: "ethereum"
+    dest_chain: "polygon"
+    contracts:
+      - "0x..." # Root chain manager
+      - "0x..." # Child chain manager
+
+# Invariant configuration
+invariants:
+  mint_lock_parity:
+    enabled: true
+    tolerance_window_minutes: 10
+    tolerance_amount: 0.01
+    
+  tvl_velocity:
+    enabled: true
+    max_drain_percent_per_hour: 10.0
+    min_drain_usd: 100000
+    
+  signature_threshold:
+    enabled: true
+    # Per-bridge threshold configuration
+    
+  admin_action:
+    enabled: true
+    max_actions_per_hour: 5
+
+# Alerting configuration
+alerting:
+  telegram_enabled: false
+  telegram_bot_token: ""
+  telegram_critical_channel: ""
+  telegram_general_channel: ""
+  
+  slack_enabled: false
+  slack_webhook_url: ""
+  slack_critical_channel: "#security-critical"
+  slack_general_channel: "#security-alerts"
+  
+  pagerduty_enabled: false
+  pagerduty_api_key: ""
+  pagerduty_service_id: ""
+  
+  # Rate limiting
+  min_alert_interval_seconds: 60
+  max_alerts_per_hour: 50
+
+# Dashboard configuration
+dashboard:
+  enabled: true
+  port: 8080
+  host: "0.0.0.0"
+
