@@ -723,16 +723,54 @@
                         const res = await fetch('/api/admin/rules');
                         if (res.ok) {
                             this.rules = await res.json();
+                            console.log(`Loaded ${this.rules.length} rules from API`);
                         }
                     } catch (e) {
-                        // Demo data
+                        console.error('Failed to load rules from API, using demo data');
+                        // Demo data - matches actual rule files
                         this.rules = [
-                            { id: 'unbacked-mint-001', name: 'Unbacked Cross-Chain Mint', description: 'Detects tokens minted without lock', severity: 'critical', confidence: 0.95, enabled: true },
-                            { id: 'unbacked-redemption-002', name: 'Unauthorized Redemption', description: 'Detects redemption without burn', severity: 'critical', confidence: 0.90, enabled: true },
-                            { id: 'tvl-drain-102', name: 'Abnormal TVL Drain', description: 'Detects rapid TVL decrease', severity: 'high', confidence: 0.85, enabled: true },
-                            { id: 'velocity-spike-201', name: 'Transaction Velocity Spike', description: 'Detects unusual tx frequency', severity: 'medium', confidence: 0.50, enabled: true },
+                            // Critical (4)
+                            { id: 'unbacked-mint-001', name: 'Unbacked Cross-Chain Mint', severity: 'critical', confidence: 0.95, enabled: true, _file: 'critical_alerts.yaml' },
+                            { id: 'unbacked-redemption-002', name: 'Unauthorized Redemption', severity: 'critical', confidence: 0.90, enabled: true, _file: 'critical_alerts.yaml' },
+                            { id: 'validator-bypass-003', name: 'Validator Threshold Bypass', severity: 'critical', confidence: 0.95, enabled: true, _file: 'critical_alerts.yaml' },
+                            { id: 'supply-inflation-004', name: 'Token Supply Inflation', severity: 'critical', confidence: 0.95, enabled: true, _file: 'critical_alerts.yaml' },
+                            // High (6)
+                            { id: 'large-bridge-transfer-101', name: 'Large Cross-Chain Transfer', severity: 'high', confidence: 0.70, enabled: true, _file: 'high_alerts.yaml' },
+                            { id: 'tvl-drain-102', name: 'Abnormal TVL Drain', severity: 'high', confidence: 0.85, enabled: true, _file: 'high_alerts.yaml' },
+                            { id: 'bridge-message-spike-103', name: 'Bridge Message Spike', severity: 'high', confidence: 0.75, enabled: true, _file: 'high_alerts.yaml' },
+                            { id: 'suspicious-withdrawal-104', name: 'Suspicious Withdrawal', severity: 'high', confidence: 0.60, enabled: true, _file: 'high_alerts.yaml' },
+                            { id: 'timelock-bypass-105', name: 'Timelock Bypass', severity: 'high', confidence: 0.95, enabled: true, _file: 'high_alerts.yaml' },
+                            { id: 'flash-loan-106', name: 'Flash Loan Attack', severity: 'high', confidence: 0.80, enabled: true, _file: 'high_alerts.yaml' },
+                            // DeFi Protocols (16)
+                            { id: 'aave-flash-loan-001', name: 'Aave Flash Loan Large', severity: 'high', confidence: 0.75, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'aave-liquidation-002', name: 'Aave Mass Liquidation', severity: 'high', confidence: 0.80, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'aave-borrow-spike-003', name: 'Aave Abnormal Borrow', severity: 'medium', confidence: 0.65, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'uniswap-large-swap-001', name: 'Uniswap Large Swap', severity: 'medium', confidence: 0.60, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'uniswap-pool-drain-002', name: 'Uniswap Pool Drain', severity: 'critical', confidence: 0.85, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'uniswap-sandwich-003', name: 'Uniswap Sandwich Attack', severity: 'medium', confidence: 0.70, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'compound-oracle-001', name: 'Compound Oracle Manipulation', severity: 'critical', confidence: 0.90, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'compound-governance-002', name: 'Compound Governance Attack', severity: 'high', confidence: 0.75, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'maker-vault-001', name: 'MakerDAO Mass Liquidation', severity: 'high', confidence: 0.85, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'maker-dai-peg-002', name: 'DAI Peg Deviation', severity: 'high', confidence: 0.80, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'curve-pool-imbalance-001', name: 'Curve Pool Imbalance', severity: 'high', confidence: 0.80, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'curve-depeg-002', name: 'Curve Stablecoin Depeg', severity: 'critical', confidence: 0.90, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'lido-steth-depeg-001', name: 'Lido stETH Depeg', severity: 'high', confidence: 0.85, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'defi-reentrancy-001', name: 'Reentrancy Attack', severity: 'critical', confidence: 0.75, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'defi-access-control-001', name: 'Unauthorized Admin Call', severity: 'critical', confidence: 0.90, enabled: true, _file: 'defi_protocols.yaml' },
+                            { id: 'defi-token-approval-001', name: 'Suspicious Token Approval', severity: 'medium', confidence: 0.60, enabled: true, _file: 'defi_protocols.yaml' },
+                            // Medium (5)
+                            { id: 'velocity-spike-201', name: 'Transaction Velocity Spike', severity: 'medium', confidence: 0.50, enabled: true, _file: 'medium_alerts.yaml' },
+                            { id: 'new-address-transfer-202', name: 'New Address Large Transfer', severity: 'medium', confidence: 0.60, enabled: true, _file: 'medium_alerts.yaml' },
+                            { id: 'admin-action-203', name: 'Admin Action Detected', severity: 'medium', confidence: 0.70, enabled: true, _file: 'medium_alerts.yaml' },
+                            { id: 'arbitrage-pattern-204', name: 'Cross-Chain Arbitrage', severity: 'medium', confidence: 0.50, enabled: true, _file: 'medium_alerts.yaml' },
+                            { id: 'contract-anomaly-205', name: 'Contract Interaction Anomaly', severity: 'medium', confidence: 0.65, enabled: true, _file: 'medium_alerts.yaml' },
+                            // Low (2)
+                            { id: 'failed-tx-spike-301', name: 'Failed Transaction Spike', severity: 'low', confidence: 0.40, enabled: true, _file: 'medium_alerts.yaml' },
+                            { id: 'token-approval-302', name: 'Large Token Approval', severity: 'low', confidence: 0.30, enabled: true, _file: 'medium_alerts.yaml' },
                         ];
                     }
+                    this.stats.totalRules = this.rules.length;
+                    this.stats.enabledRules = this.rules.filter(r => r.enabled).length;
                 },
                 
                 async loadChains() {
@@ -772,11 +810,13 @@
                 
                 loadLogs() {
                     this.logs = [
-                        { id: 1, timestamp: '18:45:47', level: 'info', message: 'Rule engine loaded 17 rules' },
+                        { id: 1, timestamp: '18:45:47', level: 'info', message: `Rule engine loaded ${this.rules.length} rules from 4 files` },
                         { id: 2, timestamp: '18:45:48', level: 'info', message: 'Connected to Ethereum (Block 24,148,651)' },
                         { id: 3, timestamp: '18:45:48', level: 'info', message: 'Connected to Polygon (Block 81,129,079)' },
-                        { id: 4, timestamp: '18:45:49', level: 'warning', message: 'Rule velocity-spike-201 triggered' },
-                        { id: 5, timestamp: '18:46:00', level: 'info', message: 'Processed 500 events' },
+                        { id: 4, timestamp: '18:45:48', level: 'info', message: 'Connected to Arbitrum (Block 168,523,801)' },
+                        { id: 5, timestamp: '18:45:49', level: 'info', message: 'Loaded DeFi protocol rules: Aave, Uniswap, Compound, MakerDAO, Curve, Lido' },
+                        { id: 6, timestamp: '18:45:50', level: 'warning', message: 'Rule velocity-spike-201 triggered' },
+                        { id: 7, timestamp: '18:46:00', level: 'info', message: 'Processed 500 events' },
                     ];
                     
                     this.recentTriggers = [
