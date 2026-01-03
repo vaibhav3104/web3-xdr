@@ -35,7 +35,7 @@ class AIAnalyzer:
         self,
         openai_api_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
-        model: str = "gpt-4",
+        model: str = "gpt-4o-mini",  # Use gpt-4o-mini (faster, cheaper, available to all)
         timeout: int = 30
     ):
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
