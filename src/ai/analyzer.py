@@ -44,13 +44,17 @@ class AIAnalyzer:
         self.timeout = timeout
         
         # Determine which backend to use
-        if self.openai_api_key:
+        # Default to local (rule-based) which is free and always works
+        # Set USE_AI_API=true environment variable to use OpenAI/Anthropic
+        use_ai_api = os.getenv("USE_AI_API", "false").lower() == "true"
+        
+        if use_ai_api and self.openai_api_key:
             self.backend = "openai"
-        elif self.anthropic_api_key:
+        elif use_ai_api and self.anthropic_api_key:
             self.backend = "anthropic"
         else:
             self.backend = "local"
-            logger.warning("No API keys found, using local rule-based analysis")
+            logger.info("Using local rule-based analysis (free, no API needed)")
         
         logger.info("ai_analyzer_initialized", backend=self.backend, model=model)
     
