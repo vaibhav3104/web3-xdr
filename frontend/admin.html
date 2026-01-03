@@ -389,12 +389,17 @@
                                 </div>
                                 <div class="flex items-center space-x-4">
                                     <div class="toggle" :class="{ active: rule.enabled }" @click="toggleRule(rule)"></div>
-                                    <button @click="editRule(rule)" class="text-gray-400 hover:text-white">
+                                    <button @click="viewRuleYaml(rule)" class="text-gray-400 hover:text-blue-400" title="View YAML">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                                        </svg>
+                                    </button>
+                                    <button @click="editRule(rule)" class="text-gray-400 hover:text-white" title="Edit Rule">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                                         </svg>
                                     </button>
-                                    <button @click="deleteRule(rule)" class="text-gray-400 hover:text-red-400">
+                                    <button @click="deleteRule(rule)" class="text-gray-400 hover:text-red-400" title="Delete Rule">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                         </svg>
@@ -614,6 +619,43 @@
             </div>
         </div>
     </div>
+    
+    <!-- YAML View Modal -->
+    <div x-show="showYamlModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" x-cloak>
+        <div class="card w-full max-w-3xl max-h-[80vh] overflow-y-auto" @click.away="showYamlModal = false">
+            <div class="p-6 border-b border-gray-700 flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold" x-text="viewingRule?.name"></h2>
+                    <span class="text-sm text-gray-400 font-mono" x-text="viewingRule?.id"></span>
+                </div>
+                <span class="badge" :class="'badge-' + viewingRule?.severity" x-text="viewingRule?.severity"></span>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400 mb-2">📋 Detection Logic (YAML)</label>
+                    <pre class="yaml-editor p-4 rounded-lg overflow-x-auto text-sm" x-text="viewingRule?.yaml"></pre>
+                </div>
+                <div class="grid grid-cols-3 gap-4 text-sm">
+                    <div class="p-3 bg-gray-800/50 rounded-lg">
+                        <div class="text-gray-400">Confidence</div>
+                        <div class="font-semibold" x-text="(viewingRule?.confidence * 100) + '%'"></div>
+                    </div>
+                    <div class="p-3 bg-gray-800/50 rounded-lg">
+                        <div class="text-gray-400">Source File</div>
+                        <div class="font-mono text-xs" x-text="viewingRule?._file || 'custom'"></div>
+                    </div>
+                    <div class="p-3 bg-gray-800/50 rounded-lg">
+                        <div class="text-gray-400">Status</div>
+                        <div class="font-semibold" :class="viewingRule?.enabled ? 'text-green-400' : 'text-red-400'" x-text="viewingRule?.enabled ? 'Enabled' : 'Disabled'"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 border-t border-gray-700 flex justify-end space-x-3">
+                <button @click="showYamlModal = false" class="btn btn-outline">Close</button>
+                <button @click="showYamlModal = false; editRule(viewingRule)" class="btn btn-primary">Edit Rule</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         function adminConsole() {
@@ -621,6 +663,8 @@
                 currentPage: 'dashboard',
                 showNewRuleModal: false,
                 showNewChainModal: false,
+                showYamlModal: false,
+                viewingRule: null,
                 ruleFilter: 'all',
                 notification: { show: false, message: '', type: 'success' },
                 
@@ -825,6 +869,14 @@
                     ];
                 },
                 
+                viewRuleYaml(rule) {
+                    this.viewingRule = {
+                        ...rule,
+                        yaml: this.getDetectionYaml(rule)
+                    };
+                    this.showYamlModal = true;
+                },
+                
                 async toggleRule(rule) {
                     rule.enabled = !rule.enabled;
                     try {
@@ -836,8 +888,212 @@
                 },
                 
                 editRule(rule) {
-                    this.newRule = { ...rule };
+                    // Convert rule to editable format with YAML
+                    this.newRule = { 
+                        ...rule,
+                        yaml: this.getDetectionYaml(rule)
+                    };
                     this.showNewRuleModal = true;
+                },
+                
+                getDetectionYaml(rule) {
+                    // Generate YAML from rule's detection logic
+                    if (rule.detection) {
+                        return this.objectToYaml(rule.detection, 0);
+                    }
+                    
+                    // Generate based on rule type
+                    const yamlTemplates = {
+                        'unbacked-mint-001': `detection:
+  type: invariant
+  invariant: MINT_LOCK_PARITY
+  conditions:
+    - field: minted_amount
+      operator: gt
+      compare_to: locked_amount
+      tolerance: 0.01
+  time_window: 10m
+  correlation:
+    source_chain: any
+    dest_chain: any`,
+                        'unbacked-redemption-002': `detection:
+  type: event
+  event_type: TransferRedeemed
+  conditions:
+    - field: burn_verified
+      operator: eq
+      value: false
+thresholds:
+  min_amount_usd: 50000`,
+                        'validator-bypass-003': `detection:
+  type: invariant
+  invariant: VALIDATOR_THRESHOLD
+  conditions:
+    - field: signature_count
+      operator: lt
+      compare_to: required_signatures`,
+                        'supply-inflation-004': `detection:
+  type: invariant
+  invariant: TOTAL_SUPPLY_INVARIANT
+  conditions:
+    - field: total_supply
+      operator: gt
+      compare_to: net_locked
+      tolerance_percent: 0.1
+schedule:
+  type: interval
+  interval: 300`,
+                        'large-bridge-transfer-101': `detection:
+  type: event
+  event_type: 
+    - Lock
+    - Mint
+    - Transfer
+  chain: any
+thresholds:
+  min_amount_usd: 1000000
+rate_limit:
+  max_alerts: 10
+  period: 1h`,
+                        'tvl-drain-102': `detection:
+  type: invariant
+  invariant: TVL_VELOCITY
+  conditions:
+    - field: drain_percent_per_hour
+      operator: gt
+      value: 10
+    - field: drain_amount_usd
+      operator: gt
+      value: 100000
+time_window: 1h`,
+                        'flash-loan-106': `detection:
+  type: pattern
+  pattern: flash_loan_attack
+  conditions:
+    - field: block_operation_count
+      operator: gt
+      value: 20
+    - field: block_volume_usd
+      operator: gt
+      value: 1000000
+    - field: same_block
+      operator: eq
+      value: true`,
+                        'aave-flash-loan-001': `detection:
+  type: event
+  event_type: FlashLoan
+  chain: any
+  contracts:
+    - "0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9"  # Aave V2
+    - "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"  # Aave V3
+  conditions:
+    - field: amount_usd
+      operator: gt
+      value: 10000000`,
+                        'aave-liquidation-002': `detection:
+  type: event
+  event_type: LiquidationCall
+  chain: any
+  aggregation:
+    function: count
+    group_by: [chain]
+    time_window: 10m
+    threshold: 10`,
+                        'uniswap-pool-drain-002': `detection:
+  type: event
+  event_type: Burn
+  conditions:
+    - field: liquidity_removed_percent
+      operator: gt
+      value: 50`,
+                        'uniswap-sandwich-003': `detection:
+  type: pattern
+  pattern: sandwich_attack
+  conditions:
+    - field: same_block
+      operator: eq
+      value: true
+    - field: swap_count
+      operator: gte
+      value: 3
+    - field: profit_usd
+      operator: gt
+      value: 1000`,
+                        'compound-oracle-001': `detection:
+  type: event
+  event_type: PriceUpdated
+  contracts:
+    - "0x50ce56A3239671Ab62f185704Caedf626352741e"
+  conditions:
+    - field: price_deviation_percent
+      operator: gt
+      value: 10`,
+                        'maker-dai-peg-002': `detection:
+  type: invariant
+  invariant: STABLECOIN_PEG
+  conditions:
+    - field: price_deviation_percent
+      operator: gt
+      value: 2`,
+                        'curve-depeg-002': `detection:
+  type: invariant
+  invariant: STABLECOIN_PEG
+  contracts:
+    - "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"  # 3pool
+    - "0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"  # stETH
+  conditions:
+    - field: token_price_deviation
+      operator: gt
+      value: 5`,
+                        'defi-reentrancy-001': `detection:
+  type: pattern
+  pattern: reentrancy
+  conditions:
+    - field: recursive_calls
+      operator: gt
+      value: 3
+    - field: same_transaction
+      operator: eq
+      value: true`,
+                        'velocity-spike-201': `detection:
+  type: velocity
+  metric: events_per_minute
+  chain: any
+  thresholds:
+    warning: 100
+    critical: 500
+time_window: 1m`,
+                    };
+                    
+                    return yamlTemplates[rule.id] || `detection:
+  type: event
+  event_type: Transfer
+  conditions:
+    - field: amount_usd
+      operator: gt
+      value: 100000`;
+                },
+                
+                objectToYaml(obj, indent) {
+                    let yaml = '';
+                    const spaces = '  '.repeat(indent);
+                    for (const [key, value] of Object.entries(obj)) {
+                        if (typeof value === 'object' && !Array.isArray(value)) {
+                            yaml += `${spaces}${key}:\n${this.objectToYaml(value, indent + 1)}`;
+                        } else if (Array.isArray(value)) {
+                            yaml += `${spaces}${key}:\n`;
+                            value.forEach(item => {
+                                if (typeof item === 'object') {
+                                    yaml += `${spaces}  -\n${this.objectToYaml(item, indent + 2)}`;
+                                } else {
+                                    yaml += `${spaces}  - ${item}\n`;
+                                }
+                            });
+                        } else {
+                            yaml += `${spaces}${key}: ${value}\n`;
+                        }
+                    }
+                    return yaml;
                 },
                 
                 async deleteRule(rule) {
