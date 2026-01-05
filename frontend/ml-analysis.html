@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Contract Analysis | Web3 XDR</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0f1c;
+            --bg-secondary: #111827;
+            --bg-card: #1a2332;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+        }
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 12px;
+        }
+        .risk-critical { color: #ef4444; }
+        .risk-high { color: #f59e0b; }
+        .risk-medium { color: #eab308; }
+        .risk-low { color: #10b981; }
+        .risk-safe { color: #22c55e; }
+        .bg-critical { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
+        .bg-high { background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; }
+        .bg-medium { background: rgba(234, 179, 8, 0.2); border-color: #eab308; }
+        .bg-low { background: rgba(16, 185, 129, 0.2); border-color: #10b981; }
+        .bg-safe { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; }
+        textarea {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: var(--text-primary);
+            font-family: 'Fira Code', monospace;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .threat-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-gray-900 border-b border-gray-800">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <span class="text-2xl">🛡️</span>
+                    <span class="font-bold text-xl">Web3 XDR</span>
+                    <span class="text-gray-500">|</span>
+                    <span class="text-gray-400">AI Contract Analysis</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/frontend/index.html" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-home mr-2"></i>Dashboard
+                    </a>
+                    <a href="/frontend/admin.html" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-cog mr-2"></i>Admin
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold mb-2">
+                <i class="fas fa-brain text-purple-500 mr-3"></i>
+                AI Contract Threat Analysis
+            </h1>
+            <p class="text-gray-400">
+                Analyze smart contract bytecode for potential threats using ML-powered detection
+            </p>
+        </div>
+
+        <!-- ML Status -->
+        <div id="mlStatus" class="card p-4 mb-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="w-3 h-3 rounded-full bg-green-500 pulse"></div>
+                    <span class="text-gray-400">ML System Status:</span>
+                    <span id="statusText" class="font-semibold text-green-400">Loading...</span>
+                </div>
+                <div class="flex items-center space-x-6 text-sm text-gray-400">
+                    <span><i class="fas fa-database mr-2"></i>Known Exploits: <span id="knownExploits">0</span></span>
+                    <span><i class="fas fa-bell mr-2"></i>Alerts: <span id="alertsCount">0</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Input Section -->
+            <div class="card p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-code text-blue-500 mr-2"></i>
+                    Contract Bytecode Input
+                </h2>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Paste contract bytecode (hex)</label>
+                    <textarea 
+                        id="bytecodeInput" 
+                        rows="10" 
+                        class="w-full p-4 rounded-lg text-sm"
+                        placeholder="0x608060405234801561001057600080fd5b50..."
+                    ></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-400 mb-2">Contract Address (optional)</label>
+                    <input 
+                        type="text" 
+                        id="contractAddress"
+                        class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none"
+                        placeholder="0x..."
+                    >
+                </div>
+
+                <div class="flex space-x-4">
+                    <button 
+                        onclick="analyzeContract()" 
+                        class="flex-1 gradient-bg text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 transition"
+                    >
+                        <i class="fas fa-search mr-2"></i>
+                        Analyze Contract
+                    </button>
+                    <button 
+                        onclick="loadSampleExploit()" 
+                        class="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition"
+                    >
+                        <i class="fas fa-flask mr-2"></i>
+                        Load Sample
+                    </button>
+                </div>
+
+                <!-- Quick Samples -->
+                <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Quick Test Samples:</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="loadSample('flash_loan')" class="px-3 py-1 bg-red-900/30 border border-red-500/50 rounded text-red-400 text-sm hover:bg-red-900/50">
+                            Flash Loan
+                        </button>
+                        <button onclick="loadSample('reentrancy')" class="px-3 py-1 bg-orange-900/30 border border-orange-500/50 rounded text-orange-400 text-sm hover:bg-orange-900/50">
+                            Reentrancy
+                        </button>
+                        <button onclick="loadSample('bridge')" class="px-3 py-1 bg-purple-900/30 border border-purple-500/50 rounded text-purple-400 text-sm hover:bg-purple-900/50">
+                            Bridge Exploit
+                        </button>
+                        <button onclick="loadSample('safe')" class="px-3 py-1 bg-green-900/30 border border-green-500/50 rounded text-green-400 text-sm hover:bg-green-900/50">
+                            Safe Contract
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="card p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-shield-alt text-green-500 mr-2"></i>
+                    Analysis Results
+                </h2>
+
+                <div id="resultsContainer" class="text-center py-12 text-gray-500">
+                    <i class="fas fa-microscope text-4xl mb-4"></i>
+                    <p>Enter bytecode and click Analyze to see results</p>
+                </div>
+
+                <div id="analysisResults" class="hidden">
+                    <!-- Threat Category -->
+                    <div id="threatHeader" class="p-4 rounded-lg border mb-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-sm text-gray-400">Threat Category</span>
+                                <h3 id="threatCategory" class="text-2xl font-bold">-</h3>
+                            </div>
+                            <div id="threatBadge" class="threat-badge">
+                                -
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metrics -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-gray-800 rounded-lg p-4">
+                            <span class="text-sm text-gray-400">Risk Score</span>
+                            <div class="flex items-center mt-1">
+                                <span id="riskScore" class="text-3xl font-bold">-</span>
+                                <span class="text-gray-500 ml-1">/100</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
+                                <div id="riskBar" class="h-2 rounded-full bg-red-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-800 rounded-lg p-4">
+                            <span class="text-sm text-gray-400">Confidence</span>
+                            <div class="flex items-center mt-1">
+                                <span id="confidence" class="text-3xl font-bold">-</span>
+                                <span class="text-gray-500 ml-1">%</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
+                                <div id="confidenceBar" class="h-2 rounded-full bg-blue-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Risk Factors -->
+                    <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                        <span class="text-sm text-gray-400">Risk Factors</span>
+                        <ul id="riskFactors" class="mt-2 space-y-2">
+                        </ul>
+                    </div>
+
+                    <!-- Recommendation -->
+                    <div id="recommendationBox" class="rounded-lg p-4 border">
+                        <span class="text-sm text-gray-400">Recommendation</span>
+                        <p id="recommendation" class="mt-1 font-medium"></p>
+                    </div>
+
+                    <!-- Analysis Time -->
+                    <div class="mt-4 text-center text-sm text-gray-500">
+                        Analysis completed in <span id="analysisTime">-</span>ms
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Database Section -->
+        <div class="card p-6 mt-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold">
+                    <i class="fas fa-database text-yellow-500 mr-2"></i>
+                    Historical Attack Database
+                </h2>
+                <div id="attackStats" class="text-sm text-gray-400">
+                    Loading...
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="attacksGrid">
+                <!-- Attacks will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Recent Alerts Section -->
+        <div class="card p-6 mt-6">
+            <h2 class="text-xl font-bold mb-6">
+                <i class="fas fa-bell text-red-500 mr-2"></i>
+                Recent ML Alerts
+            </h2>
+            <div id="alertsList" class="space-y-3">
+                <p class="text-gray-500 text-center py-8">No alerts yet</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        
+        // Sample bytecodes for testing
+        const sampleBytecodes = {
+            flash_loan: '608060405263c3924ed6000000000000000000f1f1f155555555000000000000000000000000000000000000000000000000000000000000000000000000',
+            reentrancy: '608060405234801561001057600080fd5b5060f15460f15460f15455555555000000000000000000000000000000000000000000000000000000',
+            bridge: '6080604052634012f3690000000000000000000040c10f19000000000042966c68f1f1f1000000000000000000000000000000000000000000000000',
+            safe: '608060405234801561001057600080fd5b506040516104a03803806104a083398181016040528101906100329190610000000000000000'
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMLStatus();
+            loadAttackDatabase();
+            loadAlerts();
+        });
+
+        async function loadMLStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/ml/status`);
+                const data = await response.json();
+                
+                document.getElementById('statusText').textContent = data.ml_available ? 'Online' : 'Offline';
+                document.getElementById('statusText').className = data.ml_available ? 'font-semibold text-green-400' : 'font-semibold text-red-400';
+                document.getElementById('knownExploits').textContent = data.known_exploits || 0;
+                document.getElementById('alertsCount').textContent = data.alerts_count || 0;
+            } catch (error) {
+                document.getElementById('statusText').textContent = 'Error';
+                document.getElementById('statusText').className = 'font-semibold text-red-400';
+            }
+        }
+
+        async function analyzeContract() {
+            const bytecode = document.getElementById('bytecodeInput').value.trim();
+            const address = document.getElementById('contractAddress').value.trim();
+            
+            if (!bytecode) {
+                alert('Please enter contract bytecode');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('resultsContainer').innerHTML = `
+                <i class="fas fa-spinner fa-spin text-4xl mb-4 text-blue-500"></i>
+                <p>Analyzing contract...</p>
+            `;
+            document.getElementById('resultsContainer').classList.remove('hidden');
+            document.getElementById('analysisResults').classList.add('hidden');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ml/analyze/contract`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bytecode: bytecode,
+                        contract_address: address || null
+                    })
+                });
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                document.getElementById('resultsContainer').innerHTML = `
+                    <i class="fas fa-exclamation-triangle text-4xl mb-4 text-red-500"></i>
+                    <p>Analysis failed: ${error.message}</p>
+                `;
+            }
+        }
+
+        function displayResults(data) {
+            document.getElementById('resultsContainer').classList.add('hidden');
+            document.getElementById('analysisResults').classList.remove('hidden');
+
+            // Determine severity
+            const category = data.threat_category;
+            const isSafe = category === 'safe';
+            const isCritical = ['flash_loan_exploit', 'reentrancy_exploit', 'bridge_exploit', 'rug_pull'].includes(category);
+            const isHigh = ['oracle_manipulation', 'governance_attack', 'honeypot'].includes(category);
+
+            // Update threat header
+            const threatHeader = document.getElementById('threatHeader');
+            const threatBadge = document.getElementById('threatBadge');
+            
+            if (isSafe) {
+                threatHeader.className = 'p-4 rounded-lg border bg-safe';
+                threatBadge.className = 'threat-badge bg-green-500 text-white';
+                threatBadge.textContent = 'SAFE';
+            } else if (isCritical) {
+                threatHeader.className = 'p-4 rounded-lg border bg-critical';
+                threatBadge.className = 'threat-badge bg-red-500 text-white';
+                threatBadge.textContent = 'CRITICAL';
+            } else if (isHigh) {
+                threatHeader.className = 'p-4 rounded-lg border bg-high';
+                threatBadge.className = 'threat-badge bg-orange-500 text-white';
+                threatBadge.textContent = 'HIGH';
+            } else {
+                threatHeader.className = 'p-4 rounded-lg border bg-medium';
+                threatBadge.className = 'threat-badge bg-yellow-500 text-black';
+                threatBadge.textContent = 'MEDIUM';
+            }
+
+            // Update category
+            document.getElementById('threatCategory').textContent = category.replace(/_/g, ' ').toUpperCase();
+            document.getElementById('threatCategory').className = `text-2xl font-bold ${isSafe ? 'text-green-400' : isCritical ? 'text-red-400' : 'text-yellow-400'}`;
+
+            // Update metrics
+            const riskScore = data.risk_score;
+            document.getElementById('riskScore').textContent = riskScore.toFixed(0);
+            document.getElementById('riskBar').style.width = `${riskScore}%`;
+            document.getElementById('riskBar').className = `h-2 rounded-full ${riskScore > 70 ? 'bg-red-500' : riskScore > 40 ? 'bg-yellow-500' : 'bg-green-500'}`;
+
+            const confidence = data.confidence * 100;
+            document.getElementById('confidence').textContent = confidence.toFixed(0);
+            document.getElementById('confidenceBar').style.width = `${confidence}%`;
+
+            // Update risk factors
+            const riskFactors = document.getElementById('riskFactors');
+            riskFactors.innerHTML = '';
+            if (data.risk_factors && data.risk_factors.length > 0) {
+                data.risk_factors.forEach(factor => {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center text-sm';
+                    li.innerHTML = `<i class="fas fa-exclamation-circle text-yellow-500 mr-2"></i>${factor}`;
+                    riskFactors.appendChild(li);
+                });
+            } else {
+                riskFactors.innerHTML = '<li class="text-gray-500 text-sm">No specific risk factors detected</li>';
+            }
+
+            // Update recommendation
+            const recBox = document.getElementById('recommendationBox');
+            recBox.className = `rounded-lg p-4 border ${isSafe ? 'bg-green-900/20 border-green-500/50' : isCritical ? 'bg-red-900/20 border-red-500/50' : 'bg-yellow-900/20 border-yellow-500/50'}`;
+            document.getElementById('recommendation').textContent = data.recommendation;
+
+            // Update analysis time
+            document.getElementById('analysisTime').textContent = data.analysis_time_ms.toFixed(1);
+        }
+
+        function loadSample(type) {
+            document.getElementById('bytecodeInput').value = sampleBytecodes[type] || '';
+            document.getElementById('contractAddress').value = '';
+        }
+
+        function loadSampleExploit() {
+            loadSample('flash_loan');
+        }
+
+        async function loadAttackDatabase() {
+            try {
+                // Load stats
+                const statsResponse = await fetch(`${API_BASE}/api/ml/attack-database/stats`);
+                const stats = await statsResponse.json();
+                
+                document.getElementById('attackStats').innerHTML = `
+                    <span class="mr-4"><i class="fas fa-bomb mr-1"></i>${stats.total_attacks} Attacks</span>
+                    <span class="text-red-400"><i class="fas fa-dollar-sign mr-1"></i>$${(stats.total_loss_usd / 1e9).toFixed(2)}B Total Loss</span>
+                `;
+
+                // Load attacks
+                const attacksResponse = await fetch(`${API_BASE}/api/ml/attack-database/attacks?limit=6`);
+                const attacksData = await attacksResponse.json();
+
+                const grid = document.getElementById('attacksGrid');
+                grid.innerHTML = '';
+
+                attacksData.attacks.forEach(attack => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition cursor-pointer';
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-bold">${attack.name}</span>
+                            <span class="text-xs px-2 py-1 rounded ${attack.protocol_type === 'bridge' ? 'bg-purple-900/50 text-purple-400' : 'bg-blue-900/50 text-blue-400'}">
+                                ${attack.protocol_type}
+                            </span>
+                        </div>
+                        <div class="text-red-400 font-bold text-lg mb-1">
+                            $${(attack.loss_usd / 1e6).toFixed(0)}M
+                        </div>
+                        <div class="text-gray-500 text-sm mb-2">
+                            ${attack.protocol} | ${attack.date}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            <i class="fas fa-bug mr-1"></i>${attack.attack_type.replace(/_/g, ' ')}
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Failed to load attack database:', error);
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const response = await fetch(`${API_BASE}/api/ml/alerts?limit=5`);
+                const data = await response.json();
+
+                const alertsList = document.getElementById('alertsList');
+                
+                if (data.alerts && data.alerts.length > 0) {
+                    alertsList.innerHTML = '';
+                    data.alerts.forEach(alert => {
+                        const div = document.createElement('div');
+                        div.className = 'bg-gray-800 rounded-lg p-4';
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="font-bold text-red-400">${alert.classification.threat_category.replace(/_/g, ' ').toUpperCase()}</span>
+                                    <p class="text-sm text-gray-400 mt-1">${alert.deployment.contract_address}</p>
+                                </div>
+                                <span class="text-sm text-gray-500">${new Date(alert.alert_time).toLocaleString()}</span>
+                            </div>
+                        `;
+                        alertsList.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load alerts:', error);
+            }
+        }
+    </script>
+</body>
+</html>

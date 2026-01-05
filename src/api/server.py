@@ -20,6 +20,15 @@ from .ai_routes import router as ai_router
 from .tenant_routes import router as tenant_router
 from .simulator_routes import router as simulator_router
 from .guardian_routes import router as guardian_router
+from .parser_routes import router as parser_router
+
+# ML/AI contract analysis routes
+try:
+    from .ml_routes import router as ml_router
+    ML_ROUTES_AVAILABLE = True
+except ImportError:
+    ML_ROUTES_AVAILABLE = False
+    ml_router = None
 
 logger = structlog.get_logger()
 
@@ -75,6 +84,13 @@ def create_app(
     
     # Include guardian/auto-response routes
     app.include_router(guardian_router)
+    
+    # Include parser management routes
+    app.include_router(parser_router)
+    
+    # Include ML/AI contract analysis routes
+    if ML_ROUTES_AVAILABLE and ml_router:
+        app.include_router(ml_router)
     
     # Health check
     @app.get("/health")
