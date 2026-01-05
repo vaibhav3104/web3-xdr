@@ -21,6 +21,7 @@ from .tenant_routes import router as tenant_router
 from .simulator_routes import router as simulator_router
 from .guardian_routes import router as guardian_router
 from .parser_routes import router as parser_router
+from .alert_routes import router as alert_router
 
 # ML/AI contract analysis routes
 try:
@@ -91,6 +92,9 @@ def create_app(
     # Include ML/AI contract analysis routes
     if ML_ROUTES_AVAILABLE and ml_router:
         app.include_router(ml_router)
+    
+    # Include contract threat alert routes
+    app.include_router(alert_router)
     
     # Health check
     @app.get("/health")
