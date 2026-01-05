@@ -19,6 +19,7 @@ from .metrics_routes import router as metrics_router
 from .ai_routes import router as ai_router
 from .tenant_routes import router as tenant_router
 from .simulator_routes import router as simulator_router
+from .guardian_routes import router as guardian_router
 
 logger = structlog.get_logger()
 
@@ -71,6 +72,9 @@ def create_app(
     
     # Include attack simulator routes
     app.include_router(simulator_router, prefix="/api")
+    
+    # Include guardian/auto-response routes
+    app.include_router(guardian_router)
     
     # Health check
     @app.get("/health")
