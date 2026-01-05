@@ -1,4 +1,4 @@
-# Web3 XDR Architecture Deep Dive
+# Sentinel3 Architecture Deep Dive
 
 ## Design Philosophy
 

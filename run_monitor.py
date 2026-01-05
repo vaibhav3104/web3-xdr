@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Web3 XDR - Real-Time Bridge Monitor
+Sentinel3 - Real-Time Bridge Monitor
 
 Starts real-time monitoring of configured chains and bridges.
 """
@@ -283,7 +283,7 @@ async def main():
     """Main entry point."""
     print()
     print("=" * 60)
-    print("🛡️  Web3 XDR - Real-Time Bridge Monitor")
+    print("🛡️  Sentinel3 - Real-Time Bridge Monitor")
     print("=" * 60)
     
     config_path = os.path.join(os.path.dirname(__file__), "config", "chains.yaml")

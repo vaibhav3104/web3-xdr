@@ -1,5 +1,5 @@
 """
-SQLAlchemy Models for Web3 XDR PostgreSQL Database.
+SQLAlchemy Models for Sentinel3 PostgreSQL Database.
 Defines the schema for events, incidents, violations, and analytics.
 """
 

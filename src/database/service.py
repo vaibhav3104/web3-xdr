@@ -1,5 +1,5 @@
 """
-Database Service Layer for Web3 XDR.
+Database Service Layer for Sentinel3.
 Provides high-level async methods for CRUD operations.
 """
 

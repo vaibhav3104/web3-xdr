@@ -1,10 +1,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: web3-xdr
-  namespace: web3-xdr
+  name: sentinel3
+  namespace: sentinel3
   labels:
-    app: web3-xdr
+    app: sentinel3
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -16,7 +16,7 @@ spec:
   tls:
     - hosts:
         - xdr.example.com
-      secretName: web3-xdr-tls
+      secretName: sentinel3-tls
   rules:
     - host: xdr.example.com
       http:
@@ -25,22 +25,22 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: web3-xdr
+                name: sentinel3
                 port:
                   number: 80
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: web3-xdr
-  namespace: web3-xdr
+  name: sentinel3
+  namespace: sentinel3
   labels:
-    app: web3-xdr
+    app: sentinel3
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: web3-xdr
+    name: sentinel3
   minReplicas: 2
   maxReplicas: 10
   metrics:
@@ -77,13 +77,13 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: web3-xdr
-  namespace: web3-xdr
+  name: sentinel3
+  namespace: sentinel3
   labels:
-    app: web3-xdr
+    app: sentinel3
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: web3-xdr
+      app: sentinel3
 

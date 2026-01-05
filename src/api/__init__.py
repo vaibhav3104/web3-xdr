@@ -1,5 +1,5 @@
 """
-REST API for Web3 XDR Dashboard.
+REST API for Sentinel3 Dashboard.
 """
 
 from .server import create_app, run_server

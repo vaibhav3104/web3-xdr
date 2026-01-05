@@ -1,5 +1,5 @@
 """
-Prometheus Metrics for Web3 XDR.
+Prometheus Metrics for Sentinel3.
 """
 
 from .collector import (

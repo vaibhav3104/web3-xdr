@@ -1,5 +1,5 @@
 """
-Authentication models for Web3 XDR.
+Authentication models for Sentinel3.
 """
 
 from typing import Optional, List

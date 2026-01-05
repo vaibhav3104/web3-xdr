@@ -1,12 +1,12 @@
 version: '3.8'
 
-# Grafana + Prometheus Stack for Web3 XDR
+# Grafana + Prometheus Stack for Sentinel3
 # Deploy alongside your Cloud Run service for professional monitoring
 
 services:
   prometheus:
     image: prom/prometheus:v2.47.0
-    container_name: web3-xdr-prometheus
+    container_name: sentinel3-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -20,7 +20,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.2.0
-    container_name: web3-xdr-grafana
+    container_name: sentinel3-grafana
     ports:
       - "3000:3000"
     environment:

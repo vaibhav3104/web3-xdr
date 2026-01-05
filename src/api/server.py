@@ -1,5 +1,5 @@
 """
-FastAPI Server for Web3 XDR Dashboard API.
+FastAPI Server for Sentinel3 Dashboard API.
 """
 
 import os
@@ -38,7 +38,7 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__fi
 
 
 def create_app(
-    title: str = "Web3 XDR API",
+    title: str = "Sentinel3 API",
     version: str = "1.0.0",
     cors_origins: Optional[list] = None
 ) -> FastAPI:
@@ -47,7 +47,7 @@ def create_app(
     """
     app = FastAPI(
         title=title,
-        description="Explainable Web3 XDR - Cross-Chain Bridge Security",
+        description="Explainable Sentinel3 - Cross-Chain Bridge Security",
         version=version,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
@@ -99,7 +99,7 @@ def create_app(
     # Health check
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "service": "web3-xdr"}
+        return {"status": "healthy", "service": "sentinel3"}
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")

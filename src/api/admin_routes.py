@@ -1,5 +1,5 @@
 """
-Admin API Routes for Web3 XDR.
+Admin API Routes for Sentinel3.
 Manage rules, chains, and alerting configuration through the UI.
 """
 

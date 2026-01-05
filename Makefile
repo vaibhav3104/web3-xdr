@@ -1,5 +1,5 @@
 # ============================================================================
-# Web3 XDR - Makefile
+# Sentinel3 - Makefile
 # ============================================================================
 # Quick commands for development and deployment
 # ============================================================================
@@ -8,7 +8,7 @@
 
 # Default target
 help:
-	@echo "🛡️  Web3 XDR - Available Commands"
+	@echo "🛡️  Sentinel3 - Available Commands"
 	@echo "=================================="
 	@echo ""
 	@echo "Development:"
@@ -48,12 +48,12 @@ lint:
 # --------------------------------------------------------------------------
 
 docker-build:
-	docker build -t web3-xdr:latest .
+	docker build -t sentinel3:latest .
 
 docker-up:
 	docker-compose up -d
 	@echo ""
-	@echo "✅ Web3 XDR is running!"
+	@echo "✅ Sentinel3 is running!"
 	@echo ""
 	@echo "📊 Dashboard:     http://localhost:8080/frontend/index.html"
 	@echo "⚙️  Admin Console: http://localhost:8080/frontend/admin.html"

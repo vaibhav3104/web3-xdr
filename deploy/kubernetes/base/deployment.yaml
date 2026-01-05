@@ -1,5 +1,5 @@
 # =============================================================================
-# Web3 XDR - Kubernetes Deployment
+# Sentinel3 - Kubernetes Deployment
 # =============================================================================
 # Deploy with:
 #   kubectl apply -k deploy/kubernetes/overlays/production
@@ -8,16 +8,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web3-xdr
-  namespace: web3-xdr
+  name: sentinel3
+  namespace: sentinel3
   labels:
-    app: web3-xdr
+    app: sentinel3
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: web3-xdr
+      app: sentinel3
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -26,14 +26,14 @@ spec:
   template:
     metadata:
       labels:
-        app: web3-xdr
+        app: sentinel3
         version: v1
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: web3-xdr
+      serviceAccountName: sentinel3
       
       securityContext:
         runAsNonRoot: true
@@ -41,8 +41,8 @@ spec:
         fsGroup: 1000
       
       containers:
-        - name: web3-xdr
-          image: web3-xdr:latest
+        - name: sentinel3
+          image: sentinel3:latest
           imagePullPolicy: IfNotPresent
           
           ports:
@@ -52,9 +52,9 @@ spec:
           
           envFrom:
             - configMapRef:
-                name: web3-xdr-config
+                name: sentinel3-config
             - secretRef:
-                name: web3-xdr-secrets
+                name: sentinel3-secrets
           
           env:
             - name: POD_NAME
@@ -119,10 +119,10 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: web3-xdr-chain-config
+            name: sentinel3-chain-config
         - name: rules
           configMap:
-            name: web3-xdr-rules
+            name: sentinel3-rules
       
       affinity:
         podAntiAffinity:
@@ -131,7 +131,7 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    app: web3-xdr
+                    app: sentinel3
                 topologyKey: kubernetes.io/hostname
       
       topologySpreadConstraints:
@@ -140,15 +140,15 @@ spec:
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app: web3-xdr
+              app: sentinel3
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: web3-xdr
-  namespace: web3-xdr
+  name: sentinel3
+  namespace: sentinel3
   labels:
-    app: web3-xdr
+    app: sentinel3
 spec:
   type: ClusterIP
   ports:
@@ -157,13 +157,13 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    app: web3-xdr
+    app: sentinel3
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: web3-xdr
-  namespace: web3-xdr
+  name: sentinel3
+  namespace: sentinel3
   labels:
-    app: web3-xdr
+    app: sentinel3
 

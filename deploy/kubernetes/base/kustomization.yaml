@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: web3-xdr
+namespace: sentinel3
 
 resources:
   - namespace.yaml
@@ -10,7 +10,7 @@ resources:
   - ingress.yaml
 
 commonLabels:
-  app.kubernetes.io/name: web3-xdr
+  app.kubernetes.io/name: sentinel3
   app.kubernetes.io/component: security
-  app.kubernetes.io/part-of: web3-xdr
+  app.kubernetes.io/part-of: sentinel3
 

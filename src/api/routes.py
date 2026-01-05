@@ -1,5 +1,5 @@
 """
-API Routes for Web3 XDR Dashboard.
+API Routes for Sentinel3 Dashboard.
 Connected to real-time monitor data.
 """
 
@@ -288,3 +288,73 @@ async def list_bridges():
             }
         ]
     }
+
+
+# ============================================================================
+# Storage & Maintenance Routes
+# ============================================================================
+
+@router.get("/storage/stats")
+async def get_storage_stats():
+    """
+    Get storage statistics (PostgreSQL).
+    Shows event counts, oldest/newest events, and breakdown by chain.
+    """
+    try:
+        from ..database.sync_service import get_storage_stats
+        return get_storage_stats()
+    except ImportError:
+        return {"error": "Database module not available", "storage": "in-memory"}
+
+
+@router.post("/maintenance/purge")
+async def purge_old_data(
+    hours: int = Query(24, ge=1, le=720, description="Delete data older than X hours"),
+    confirm: bool = Query(False, description="Must be true to execute purge"),
+):
+    """
+    Purge events and resolved incidents older than specified hours.
+    Default: 24 hours. Maximum: 720 hours (30 days).
+    
+    ⚠️ This action is irreversible! Set confirm=true to execute.
+    
+    Called automatically by Cloud Scheduler every 24 hours.
+    """
+    if not confirm:
+        return {
+            "message": "Dry run - set confirm=true to execute",
+            "would_purge_data_older_than_hours": hours,
+            "warning": "This action is irreversible!"
+        }
+    
+    try:
+        from ..database.sync_service import purge_old_events
+        result = purge_old_events(hours=hours)
+        return {
+            "status": "success",
+            "purge_result": result,
+            "hours_threshold": hours
+        }
+    except ImportError:
+        return {"error": "Database module not available", "status": "failed"}
+    except Exception as e:
+        return {"error": str(e), "status": "failed"}
+
+
+@router.post("/maintenance/init-db")
+async def initialize_database():
+    """
+    Initialize database tables.
+    Safe to call multiple times (uses CREATE IF NOT EXISTS).
+    """
+    try:
+        from ..database.sync_service import ensure_tables_exist
+        success = ensure_tables_exist()
+        return {
+            "status": "success" if success else "failed",
+            "message": "Database tables initialized" if success else "Failed to initialize tables"
+        }
+    except ImportError:
+        return {"error": "Database module not available", "status": "failed"}
+    except Exception as e:
+        return {"error": str(e), "status": "failed"}

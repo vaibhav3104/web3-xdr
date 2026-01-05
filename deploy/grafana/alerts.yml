@@ -1,5 +1,5 @@
 groups:
-  - name: web3-xdr-alerts
+  - name: sentinel3-alerts
     rules:
       # Critical incident detected
       - alert: CriticalIncidentDetected
@@ -23,13 +23,13 @@ groups:
 
       # Service down
       - alert: Web3XDRDown
-        expr: up{job="web3-xdr-production"} == 0
+        expr: up{job="sentinel3-production"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Web3 XDR service is down"
-          description: "The Web3 XDR service has been unreachable for more than 1 minute."
+          summary: "Sentinel3 service is down"
+          description: "The Sentinel3 service has been unreachable for more than 1 minute."
 
       # High error rate
       - alert: HighErrorRate
@@ -38,6 +38,6 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "High error rate in Web3 XDR"
+          summary: "High error rate in Sentinel3"
           description: "Error rate is {{ $value }} errors/sec over the last 5 minutes."
 

@@ -1,6 +1,6 @@
-# ☁️ Cloud Deployment Guide for Web3 XDR
+# ☁️ Cloud Deployment Guide for Sentinel3
 
-This guide covers deploying Web3 XDR to production cloud environments.
+This guide covers deploying Sentinel3 to production cloud environments.
 
 ## 📋 Deployment Options
 
@@ -35,13 +35,13 @@ chmod +x deploy-gcp.sh
 ### Configure Secrets
 ```bash
 # Add your API keys
-echo "your-openai-key" | gcloud secrets versions add web3-xdr-openai-api-key --data-file=-
-echo "your-infura-key" | gcloud secrets versions add web3-xdr-infura-api-key --data-file=-
-echo "your-jwt-secret" | gcloud secrets versions add web3-xdr-jwt-secret --data-file=-
+echo "your-openai-key" | gcloud secrets versions add sentinel3-openai-api-key --data-file=-
+echo "your-infura-key" | gcloud secrets versions add sentinel3-infura-api-key --data-file=-
+echo "your-jwt-secret" | gcloud secrets versions add sentinel3-jwt-secret --data-file=-
 ```
 
 ### Result
-- **URL**: `https://web3-xdr-production-xxxxx.run.app`
+- **URL**: `https://sentinel3-production-xxxxx.run.app`
 - **Auto-scaling**: 1-10 instances
 - **SSL**: Automatic
 
@@ -67,7 +67,7 @@ chmod +x deploy-aws.sh
 ```bash
 # Create secrets
 aws secretsmanager create-secret \
-    --name web3-xdr/production/api-keys \
+    --name sentinel3/production/api-keys \
     --secret-string '{"openai":"sk-xxx","infura":"xxx"}'
 ```
 
@@ -124,7 +124,7 @@ TELEGRAM_CHANNEL_ID=-100xxx
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐      │
-│   │   Client    │────▶│ Load        │────▶│   Web3 XDR  │      │
+│   │   Client    │────▶│ Load        │────▶│   Sentinel3  │      │
 │   │  (Browser)  │     │ Balancer    │     │  Container  │      │
 │   └─────────────┘     └─────────────┘     └──────┬──────┘      │
 │                                                   │              │
@@ -187,7 +187,7 @@ TELEGRAM_CHANNEL_ID=-100xxx
 ### Cloud Run
 ```bash
 # View logs
-gcloud run services logs read web3-xdr-production --region=us-central1
+gcloud run services logs read sentinel3-production --region=us-central1
 
 # Monitor
 open https://console.cloud.google.com/run
@@ -196,7 +196,7 @@ open https://console.cloud.google.com/run
 ### AWS
 ```bash
 # View logs
-aws logs tail /ecs/web3-xdr-production --follow
+aws logs tail /ecs/sentinel3-production --follow
 
 # Monitor
 open https://console.aws.amazon.com/ecs

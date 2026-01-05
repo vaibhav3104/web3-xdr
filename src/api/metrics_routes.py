@@ -1,5 +1,5 @@
 """
-Prometheus Metrics API routes for Web3 XDR.
+Prometheus Metrics API routes for Sentinel3.
 """
 
 from fastapi import APIRouter, Response

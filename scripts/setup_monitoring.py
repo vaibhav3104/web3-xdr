@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Web3 XDR - Setup Real Bridge Monitoring
+Sentinel3 - Setup Real Bridge Monitoring
 
 This script helps you:
 1. Test your RPC connections
@@ -79,7 +79,7 @@ async def get_recent_events(rpc_url: str, contract_address: str, blocks: int = 1
 def print_banner():
     print()
     print("=" * 70)
-    print("🛡️  Web3 XDR - Real Bridge Monitoring Setup")
+    print("🛡️  Sentinel3 - Real Bridge Monitoring Setup")
     print("=" * 70)
     print()
 

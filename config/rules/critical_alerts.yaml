@@ -14,7 +14,7 @@ rules:
       corresponding lock on source chain. This is the primary attack 
       vector used in the Wormhole ($320M) and Ronin ($620M) hacks.
     
-    author: Web3 XDR Team
+    author: Sentinel3 Team
     created: 2024-01-01
     updated: 2024-01-01
     references:

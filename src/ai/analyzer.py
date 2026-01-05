@@ -1,5 +1,5 @@
 """
-AI-Powered Incident Analyzer for Web3 XDR.
+AI-Powered Incident Analyzer for Sentinel3.
 
 Supports multiple LLM backends:
 - OpenAI (GPT-4)

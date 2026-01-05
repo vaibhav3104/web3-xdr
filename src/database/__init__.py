@@ -1,5 +1,5 @@
 """
-Database module for Web3 XDR.
+Database module for Sentinel3.
 Provides PostgreSQL persistence for events, incidents, and violations.
 """
 

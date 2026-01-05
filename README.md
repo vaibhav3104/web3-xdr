@@ -1,4 +1,4 @@
-# Explainable Web3 XDR
+# Explainable Sentinel3
 
 ## Cross-Chain Bridge Attack Detection & Response Platform
 
@@ -124,7 +124,7 @@ python -m examples.wormhole_simulation
 ## 📁 Project Structure
 
 ```
-web3-xdr/
+sentinel3/
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies
 ├── docs/
@@ -193,5 +193,5 @@ MIT License - See LICENSE file
 
 
 ## Deployment Status
-![Deploy](https://github.com/vaibhav3104/web3-xdr/actions/workflows/deploy-gcp.yml/badge.svg)
+![Deploy](https://github.com/vaibhav3104/sentinel3/actions/workflows/deploy-gcp.yml/badge.svg)
 # CI/CD trigger Tue Jan  6 00:09:38 IST 2026

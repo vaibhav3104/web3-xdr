@@ -1,5 +1,5 @@
 """
-AI Analysis API Routes for Web3 XDR.
+AI Analysis API Routes for Sentinel3.
 
 Provides AI-powered incident analysis, explanations, and recommendations.
 """

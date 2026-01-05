@@ -1,7 +1,7 @@
 """
 Wormhole-Style Attack Simulation
 
-This simulation demonstrates how Web3 XDR detects an unbacked mint attack
+This simulation demonstrates how Sentinel3 detects an unbacked mint attack
 similar to the February 2022 Wormhole exploit ($320M loss).
 
 ATTACK SUMMARY:

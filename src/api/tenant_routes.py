@@ -1,5 +1,5 @@
 """
-Multi-tenancy API routes for Web3 XDR.
+Multi-tenancy API routes for Sentinel3.
 Supports multiple organizations with isolated data.
 """
 

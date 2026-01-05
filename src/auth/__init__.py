@@ -1,5 +1,5 @@
 """
-Authentication module for Web3 XDR Admin Console.
+Authentication module for Sentinel3 Admin Console.
 """
 
 from .jwt_handler import JWTHandler, get_current_user, require_auth

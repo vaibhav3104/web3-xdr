@@ -1,5 +1,5 @@
 # ============================================================================
-# Web3 XDR - Event Parsers Configuration
+# Sentinel3 - Event Parsers Configuration
 # ============================================================================
 # This file defines how raw blockchain events are normalized into unified format
 # Edit these parsers to customize event detection and classification

@@ -11,11 +11,11 @@ rule_files:
   - "alerts.yml"
 
 scrape_configs:
-  # Scrape Web3 XDR metrics from Cloud Run
-  - job_name: 'web3-xdr-production'
+  # Scrape Sentinel3 metrics from Cloud Run
+  - job_name: 'sentinel3-production'
     scheme: https
     static_configs:
-      - targets: ['web3-xdr-production-1003459948096.us-central1.run.app']
+      - targets: ['sentinel3-production-1003459948096.us-central1.run.app']
     metrics_path: /metrics
     scrape_interval: 30s
     scrape_timeout: 10s

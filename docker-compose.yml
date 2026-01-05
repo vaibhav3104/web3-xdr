@@ -1,5 +1,5 @@
 # ============================================================================
-# Web3 XDR - Docker Compose Configuration (with PostgreSQL)
+# Sentinel3 - Docker Compose Configuration (with PostgreSQL)
 # ============================================================================
 #
 # Usage:
@@ -20,7 +20,7 @@ services:
   # --------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
-    container_name: web3-xdr-postgres
+    container_name: sentinel3-postgres
     ports:
       - "5432:5432"
     environment:
@@ -46,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: web3-xdr
+    container_name: sentinel3
     ports:
       - "8080:8080"
     volumes:
@@ -99,7 +99,7 @@ services:
   # --------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
-    container_name: web3-xdr-redis
+    container_name: sentinel3-redis
     ports:
       - "6379:6379"
     volumes:
@@ -119,7 +119,7 @@ services:
   # --------------------------------------------------------------------------
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: web3-xdr-pgadmin
+    container_name: sentinel3-pgadmin
     ports:
       - "5050:80"
     environment:
@@ -141,7 +141,7 @@ services:
   # --------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:latest
-    container_name: web3-xdr-prometheus
+    container_name: sentinel3-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -162,7 +162,7 @@ services:
   # --------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:latest
-    container_name: web3-xdr-grafana
+    container_name: sentinel3-grafana
     ports:
       - "3000:3000"
     environment:
@@ -196,12 +196,12 @@ networks:
 # Volumes (persistent data)
 volumes:
   postgres-data:
-    name: web3-xdr-postgres-data
+    name: sentinel3-postgres-data
   redis-data:
-    name: web3-xdr-redis-data
+    name: sentinel3-redis-data
   pgadmin-data:
-    name: web3-xdr-pgadmin-data
+    name: sentinel3-pgadmin-data
   prometheus-data:
-    name: web3-xdr-prometheus-data
+    name: sentinel3-prometheus-data
   grafana-data:
-    name: web3-xdr-grafana-data
+    name: sentinel3-grafana-data

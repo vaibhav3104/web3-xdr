@@ -1,4 +1,4 @@
-# Web3 XDR Alert Rules
+# Sentinel3 Alert Rules
 
 Alert rules are defined in YAML format, similar to Sigma rules for traditional SIEM.
 

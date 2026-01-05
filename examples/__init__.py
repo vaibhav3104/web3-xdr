@@ -1,4 +1,4 @@
 """
-Example simulations for Web3 XDR.
+Example simulations for Sentinel3.
 """
 

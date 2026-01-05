@@ -1,5 +1,5 @@
 """
-Web3 XDR - Main Entry Point
+Sentinel3 - Main Entry Point
 
 Explainable Cross-Chain Bridge Attack Detection & Response
 """
@@ -46,7 +46,7 @@ logger = structlog.get_logger()
 
 class Web3XDR:
     """
-    Main Web3 XDR Application.
+    Main Sentinel3 Application.
     
     Orchestrates all components:
     - Telemetry collection
@@ -217,7 +217,7 @@ async def main():
     """Main entry point."""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Web3 XDR - Cross-Chain Security")
+    parser = argparse.ArgumentParser(description="Sentinel3 - Cross-Chain Security")
     parser.add_argument("--config", "-c", help="Path to config file")
     parser.add_argument("--simulate", "-s", action="store_true", help="Run attack simulation")
     args = parser.parse_args()

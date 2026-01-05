@@ -1,8 +1,8 @@
-# Prometheus Alert Rules for Web3 XDR
+# Prometheus Alert Rules for Sentinel3
 # ====================================
 
 groups:
-  - name: web3-xdr-critical
+  - name: sentinel3-critical
     rules:
       # Critical incident detected
       - alert: CriticalIncidentDetected
@@ -12,7 +12,7 @@ groups:
           severity: critical
         annotations:
           summary: "Critical security incident detected"
-          description: "Web3 XDR detected a critical incident on {{ $labels.chain }}"
+          description: "Sentinel3 detected a critical incident on {{ $labels.chain }}"
 
       # Chain disconnected
       - alert: ChainDisconnected
@@ -24,7 +24,7 @@ groups:
           summary: "Blockchain connection lost"
           description: "Lost connection to {{ $labels.chain }}"
 
-  - name: web3-xdr-warning
+  - name: sentinel3-warning
     rules:
       # High incident rate
       - alert: HighIncidentRate
@@ -66,7 +66,7 @@ groups:
           summary: "Alert delivery failures"
           description: "Multiple alert delivery failures in the last 15 minutes"
 
-  - name: web3-xdr-info
+  - name: sentinel3-info
     rules:
       # Application restarted
       - alert: ApplicationRestarted
@@ -75,7 +75,7 @@ groups:
         labels:
           severity: info
         annotations:
-          summary: "Web3 XDR restarted"
+          summary: "Sentinel3 restarted"
           description: "Application uptime is less than 5 minutes"
 
       # No events received

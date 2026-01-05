@@ -1,8 +1,8 @@
-# Web3 XDR Threat Model
+# Sentinel3 Threat Model
 
 ## Overview
 
-This document details the threat model for the Explainable Web3 XDR system, covering attack vectors, detection mechanisms, and response strategies.
+This document details the threat model for the Explainable Sentinel3 system, covering attack vectors, detection mechanisms, and response strategies.
 
 ## Core Assumption
 

@@ -1,11 +1,11 @@
-# Prometheus Configuration for Web3 XDR
+# Prometheus Configuration for Sentinel3
 # =====================================
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    monitor: 'web3-xdr-monitor'
+    monitor: 'sentinel3-monitor'
 
 # Alertmanager configuration (optional)
 alerting:
@@ -25,14 +25,14 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # Web3 XDR Application
-  - job_name: 'web3-xdr'
+  # Sentinel3 Application
+  - job_name: 'sentinel3'
     metrics_path: '/metrics'
     scrape_interval: 10s
     static_configs:
-      - targets: ['web3-xdr:80']
+      - targets: ['sentinel3:80']
         labels:
-          app: 'web3-xdr'
+          app: 'sentinel3'
           environment: 'production'
     
     # For Kubernetes service discovery
@@ -40,11 +40,11 @@ scrape_configs:
     #   - role: pod
     #     namespaces:
     #       names:
-    #         - web3-xdr
+    #         - sentinel3
     # relabel_configs:
     #   - source_labels: [__meta_kubernetes_pod_label_app]
     #     action: keep
-    #     regex: web3-xdr
+    #     regex: sentinel3
 
   # Node Exporter (if deployed)
   - job_name: 'node'

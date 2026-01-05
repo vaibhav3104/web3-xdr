@@ -1,5 +1,5 @@
 """
-Prometheus Metrics Collector for Web3 XDR.
+Prometheus Metrics Collector for Sentinel3.
 
 Provides comprehensive metrics for monitoring:
 - Event processing
@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 class XDRMetrics:
     """
-    Centralized metrics collector for Web3 XDR.
+    Centralized metrics collector for Sentinel3.
     """
     
     def __init__(self, namespace: str = "web3_xdr"):

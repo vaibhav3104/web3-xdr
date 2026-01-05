@@ -1,5 +1,5 @@
 # ============================================================================
-# Web3 XDR - Production Dockerfile
+# Sentinel3 - Production Dockerfile
 # ============================================================================
 
 FROM python:3.11-slim
@@ -13,9 +13,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including PostgreSQL client)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for caching

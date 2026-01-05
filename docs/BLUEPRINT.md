@@ -1,4 +1,4 @@
-# Sentinel3 - Web3 XDR Platform
+# Sentinel3 - Sentinel3 Platform
 ## Complete System Blueprint & Technical Documentation
 
 ---
@@ -743,7 +743,7 @@ class WebhookAlerter:
 
 ## Base URL
 ```
-Production: https://web3-xdr-production-xxx.run.app/api
+Production: https://sentinel3-production-xxx.run.app/api
 Local: http://localhost:8080/api
 ```
 
@@ -1084,7 +1084,7 @@ groups:
 # Appendix A: File Structure
 
 ```
-web3-xdr/
+sentinel3/
 ├── src/
 │   ├── api/
 │   │   ├── server.py          # FastAPI app
@@ -1161,7 +1161,7 @@ web3-xdr/
 
 ```bash
 # Local Development
-cd web3-xdr
+cd sentinel3
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Web3 XDR - Real-Time Multi-Chain Bridge Monitor
+Sentinel3 - Real-Time Multi-Chain Bridge Monitor
 ================================================
 Monitors EVM, Cosmos, Aptos, Sui, Near, and Solana chains.
 Uses YAML-based alert rules and supports PostgreSQL persistence.
@@ -28,7 +28,7 @@ from src.shared_state import monitor_state, LiveEvent, LiveIncident
 from src.rules import RuleEngine, load_rules
 
 # Check if PostgreSQL is enabled
-POSTGRES_ENABLED = os.getenv("POSTGRES_ENABLED", "false").lower() == "true"
+POSTGRES_ENABLED = os.getenv("POSTGRES_ENABLED", "true").lower() == "true"
 
 
 def load_config():
@@ -59,7 +59,7 @@ def print_banner():
     """Print startup banner."""
     print()
     print("=" * 70)
-    print("🛡️  Web3 XDR - Multi-Chain Bridge Monitor")
+    print("🛡️  Sentinel3 - Multi-Chain Bridge Monitor")
     print("    EVM | Cosmos | Aptos | Sui | Near | Solana")
     print("=" * 70)
     if POSTGRES_ENABLED:
@@ -69,28 +69,45 @@ def print_banner():
     print()
 
 
-async def init_database():
-    """Initialize PostgreSQL database if enabled."""
+def init_database_sync():
+    """Initialize PostgreSQL database synchronously using psycopg2."""
     if not POSTGRES_ENABLED:
         print("⚡ Running in-memory mode (POSTGRES_ENABLED=false)")
         return False
     
     try:
-        from src.database import DatabaseManager
+        from src.database.sync_service import ensure_tables_exist, get_sync_connection
         
         print("🔌 Connecting to PostgreSQL...")
-        await DatabaseManager.initialize()
-        await DatabaseManager.create_tables()
         
-        # Also initialize in shared state
-        await monitor_state.init_database()
+        # Test connection
+        conn = get_sync_connection()
+        if conn:
+            conn.close()
+            print("   Connection successful!")
+        else:
+            print("   ⚠️ Connection test failed")
+            return False
         
-        print("✅ PostgreSQL connected and tables created")
-        return True
+        # Create tables
+        if ensure_tables_exist():
+            print("✅ PostgreSQL connected and tables created")
+            # Mark shared_state as DB initialized
+            monitor_state._db_initialized = True
+            return True
+        else:
+            print("   ⚠️ Table creation failed")
+            return False
+            
     except Exception as e:
         print(f"⚠️  PostgreSQL connection failed: {e}")
         print("   Continuing in-memory mode...")
         return False
+
+
+async def init_database():
+    """Initialize PostgreSQL database if enabled (async wrapper)."""
+    return init_database_sync()
 
 
 # Event signatures - known bridge and token events
@@ -896,11 +913,9 @@ def monitor():
     """Main monitoring function with multi-chain support."""
     print_banner()
     
-    # Initialize database if enabled
+    # Initialize database if enabled (use sync version)
     if POSTGRES_ENABLED:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        db_connected = loop.run_until_complete(init_database())
+        db_connected = init_database_sync()
         if db_connected:
             print()
     

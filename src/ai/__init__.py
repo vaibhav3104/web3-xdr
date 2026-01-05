@@ -1,5 +1,5 @@
 """
-AI Module for Web3 XDR
+AI Module for Sentinel3
 Contract threat detection using ML and rule-based analysis
 """
 

@@ -1,5 +1,5 @@
 """
-Authentication API routes for Web3 XDR.
+Authentication API routes for Sentinel3.
 """
 
 from typing import List

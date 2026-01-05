@@ -1,5 +1,5 @@
 """
-JWT Token Handler for Web3 XDR Authentication.
+JWT Token Handler for Sentinel3 Authentication.
 """
 
 import os

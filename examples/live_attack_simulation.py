@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🔥 LIVE ATTACK SIMULATION for Web3 XDR
+🔥 LIVE ATTACK SIMULATION for Sentinel3
 ======================================
 
 This script simulates realistic cross-chain bridge attacks to demonstrate

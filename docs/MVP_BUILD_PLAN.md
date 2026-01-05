@@ -1,4 +1,4 @@
-# Web3 XDR MVP Build Plan
+# Sentinel3 MVP Build Plan
 
 ## 30-60-90 Day Implementation Plan
 

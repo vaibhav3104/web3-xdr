@@ -1,5 +1,5 @@
 """
-Core data models for Web3 XDR.
+Core data models for Sentinel3.
 """
 
 from .events import SecurityEvent, EventType

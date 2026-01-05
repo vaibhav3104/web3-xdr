@@ -1,9 +1,9 @@
-# Web3 XDR - CI/CD Pipeline
+# Sentinel3 - CI/CD Pipeline
 # =============================================================================
 # Deploys directly to GCP Cloud Run
 # =============================================================================
 
-name: Deploy Web3 XDR
+name: Deploy Sentinel3
 
 on:
   push:

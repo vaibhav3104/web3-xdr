@@ -1,4 +1,4 @@
-# 🚀 Web3 XDR - Cloud Deployment Guide
+# 🚀 Sentinel3 - Cloud Deployment Guide
 
 ## Quick Start
 
@@ -47,20 +47,20 @@ terraform apply -var-file="production.tfvars"
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ECR_URL>
 
 # Build and push
-docker build -t web3-xdr .
-docker tag web3-xdr:latest <ECR_URL>/web3-xdr:latest
-docker push <ECR_URL>/web3-xdr:latest
+docker build -t sentinel3 .
+docker tag sentinel3:latest <ECR_URL>/sentinel3:latest
+docker push <ECR_URL>/sentinel3:latest
 
 # Force new deployment
-aws ecs update-service --cluster web3-xdr-cluster --service web3-xdr --force-new-deployment
+aws ecs update-service --cluster sentinel3-cluster --service sentinel3 --force-new-deployment
 ```
 
 ### Step 4: Configure Secrets
 
 ```bash
 # Store secrets in AWS Secrets Manager
-aws secretsmanager create-secret --name web3-xdr/rpc --secret-string '{"infura_key":"YOUR_KEY"}'
-aws secretsmanager create-secret --name web3-xdr/alerts --secret-string '{"telegram_token":"","slack_webhook":""}'
+aws secretsmanager create-secret --name sentinel3/rpc --secret-string '{"infura_key":"YOUR_KEY"}'
+aws secretsmanager create-secret --name sentinel3/alerts --secret-string '{"telegram_token":"","slack_webhook":""}'
 ```
 
 ### Access Your Dashboard
@@ -102,13 +102,13 @@ terraform apply -var-file="production.tfvars"
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
 # Build and push
-docker build -t web3-xdr .
-docker tag web3-xdr us-central1-docker.pkg.dev/PROJECT_ID/web3-xdr/web3-xdr:latest
-docker push us-central1-docker.pkg.dev/PROJECT_ID/web3-xdr/web3-xdr:latest
+docker build -t sentinel3 .
+docker tag sentinel3 us-central1-docker.pkg.dev/PROJECT_ID/sentinel3/sentinel3:latest
+docker push us-central1-docker.pkg.dev/PROJECT_ID/sentinel3/sentinel3:latest
 
 # Deploy to Cloud Run
-gcloud run deploy web3-xdr \
-  --image us-central1-docker.pkg.dev/PROJECT_ID/web3-xdr/web3-xdr:latest \
+gcloud run deploy sentinel3 \
+  --image us-central1-docker.pkg.dev/PROJECT_ID/sentinel3/sentinel3:latest \
   --region us-central1 \
   --allow-unauthenticated
 ```
@@ -130,11 +130,11 @@ https://<SERVICE_URL>/frontend/index.html
 
 ```bash
 # Create namespace
-kubectl create namespace web3-xdr
+kubectl create namespace sentinel3
 
 # Create secrets (edit values first!)
-kubectl create secret generic web3-xdr-secrets \
-  --namespace web3-xdr \
+kubectl create secret generic sentinel3-secrets \
+  --namespace sentinel3 \
   --from-literal=POSTGRES_HOST=your-db-host \
   --from-literal=POSTGRES_USER=xdr_admin \
   --from-literal=POSTGRES_PASSWORD=your-password \
@@ -148,15 +148,15 @@ kubectl create secret generic web3-xdr-secrets \
 kubectl apply -k deploy/kubernetes/overlays/production
 
 # Check status
-kubectl get pods -n web3-xdr
-kubectl get services -n web3-xdr
+kubectl get pods -n sentinel3
+kubectl get services -n sentinel3
 ```
 
 ### Step 3: Configure Ingress
 
 ```bash
 # Update ingress with your domain
-kubectl edit ingress web3-xdr -n web3-xdr
+kubectl edit ingress sentinel3 -n sentinel3
 ```
 
 ---
@@ -183,17 +183,17 @@ Before going to production:
 
 ```bash
 # View logs
-aws logs tail /ecs/web3-xdr --follow
+aws logs tail /ecs/sentinel3 --follow
 
 # Create dashboard
-aws cloudwatch put-dashboard --dashboard-name web3-xdr --dashboard-body file://monitoring/cloudwatch-dashboard.json
+aws cloudwatch put-dashboard --dashboard-name sentinel3 --dashboard-body file://monitoring/cloudwatch-dashboard.json
 ```
 
 ### GCP Cloud Monitoring
 
 ```bash
 # View logs
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=web3-xdr" --limit 100
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=sentinel3" --limit 100
 ```
 
 ### Kubernetes (Prometheus + Grafana)
@@ -225,13 +225,13 @@ kubectl port-forward svc/grafana 3000:3000 -n monitoring
 
 ```bash
 # AWS
-aws ecs describe-tasks --cluster web3-xdr-cluster --tasks <TASK_ID>
+aws ecs describe-tasks --cluster sentinel3-cluster --tasks <TASK_ID>
 
 # GCP
-gcloud run services logs read web3-xdr --region us-central1
+gcloud run services logs read sentinel3 --region us-central1
 
 # Kubernetes
-kubectl logs -n web3-xdr deployment/web3-xdr
+kubectl logs -n sentinel3 deployment/sentinel3
 ```
 
 ### Database connection issues

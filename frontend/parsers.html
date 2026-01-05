@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parser Management | Sentinel3</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --border-color: #2a2a3a;
+            --text-primary: #f0f0f0;
+            --text-secondary: #a0a0b0;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --severity-low: #4ade80;
+            --severity-medium: #facc15;
+            --severity-high: #f97316;
+            --severity-critical: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Navigation */
+        .navbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-brand h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-header h2 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-header p {
+            color: var(--text-secondary);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .stat-card .label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-top: 0.25rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab.active {
+            color: var(--accent-cyan);
+            background: var(--bg-tertiary);
+            border-bottom: 2px solid var(--accent-cyan);
+        }
+
+        /* Parser Table */
+        .parser-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-header h3 {
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--severity-critical);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        /* Parser Grid */
+        .parser-grid {
+            display: grid;
+            gap: 1px;
+            background: var(--border-color);
+        }
+
+        .parser-row {
+            display: grid;
+            grid-template-columns: 1fr 120px 100px 100px 150px 100px;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .parser-row:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .parser-row.header {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+
+        .parser-name {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .parser-name .name {
+            font-weight: 500;
+        }
+
+        .parser-name .signature {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+
+        .parser-name .description {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-flex;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .badge-low { background: rgba(74, 222, 128, 0.2); color: var(--severity-low); }
+        .badge-medium { background: rgba(250, 204, 21, 0.2); color: var(--severity-medium); }
+        .badge-high { background: rgba(249, 115, 22, 0.2); color: var(--severity-high); }
+        .badge-critical { background: rgba(239, 68, 68, 0.2); color: var(--severity-critical); }
+
+        .badge-token { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+        .badge-bridge { background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); }
+        .badge-governance { background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); }
+        .badge-defi { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h3 {
+            font-size: 1.1rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        /* Filters */
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-group label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .filter-group select {
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: none;
+            z-index: 1001;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success {
+            border-color: var(--severity-low);
+        }
+
+        .toast.error {
+            border-color: var(--severity-critical);
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .parser-row {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+            .parser-row.header {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span style="font-size: 1.5rem;">🛡️</span>
+            <h1>Sentinel3</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/frontend/index.html">Dashboard</a>
+            <a href="/frontend/logs.html">Log Explorer</a>
+            <a href="/frontend/admin.html">Admin</a>
+            <a href="/frontend/parsers.html" class="active">Parsers</a>
+            <a href="/frontend/guardian.html">Guardian</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="page-header">
+            <h2>🔄 Event Parser Management</h2>
+            <p>Configure how raw blockchain events are normalized into unified security events</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats">
+            <div class="stat-card">
+                <div class="label">EVM Parsers</div>
+                <div class="value" id="evm-count">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Cosmos Parsers</div>
+                <div class="value" id="cosmos-count">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">By Category</div>
+                <div class="value" id="category-count">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Last Updated</div>
+                <div class="value" id="last-updated" style="font-size: 1rem;">-</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="evm">EVM Events</button>
+            <button class="tab" data-tab="cosmos">Cosmos Events</button>
+            <button class="tab" data-tab="move">Move (Aptos/Sui)</button>
+            <button class="tab" data-tab="near">Near</button>
+            <button class="tab" data-tab="severity">Severity Levels</button>
+        </div>
+
+        <!-- EVM Tab -->
+        <div id="evm-tab" class="tab-content">
+            <div class="parser-section">
+                <div class="section-header">
+                    <h3>📝 EVM Event Signatures</h3>
+                    <div>
+                        <button class="btn btn-secondary" onclick="reloadParsers()">
+                            🔄 Reload
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddEvmModal()">
+                            + Add Parser
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="filters" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+                    <div class="filter-group">
+                        <label>Severity:</label>
+                        <select id="filter-severity" onchange="filterParsers()">
+                            <option value="">All</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Category:</label>
+                        <select id="filter-category" onchange="filterParsers()">
+                            <option value="">All</option>
+                            <option value="token">Token</option>
+                            <option value="bridge">Bridge</option>
+                            <option value="governance">Governance</option>
+                            <option value="defi">DeFi</option>
+                        </select>
+                    </div>
+                    <div class="search-box">
+                        <input type="text" id="search-input" placeholder="Search by name or signature..." oninput="filterParsers()">
+                    </div>
+                </div>
+
+                <div class="parser-grid" id="evm-parsers">
+                    <div class="parser-row header">
+                        <div>Event</div>
+                        <div>Category</div>
+                        <div>Severity</div>
+                        <div>Protocol</div>
+                        <div>Est. USD</div>
+                        <div>Actions</div>
+                    </div>
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Cosmos Tab -->
+        <div id="cosmos-tab" class="tab-content" style="display: none;">
+            <div class="parser-section">
+                <div class="section-header">
+                    <h3>⚛️ Cosmos Event Types</h3>
+                    <button class="btn btn-primary" onclick="showAddCosmosModal()">
+                        + Add Parser
+                    </button>
+                </div>
+                <div class="parser-grid" id="cosmos-parsers">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Move Tab -->
+        <div id="move-tab" class="tab-content" style="display: none;">
+            <div class="parser-section">
+                <div class="section-header">
+                    <h3>🔷 Move-based Chains (Aptos/Sui)</h3>
+                </div>
+                <div style="padding: 1.5rem;">
+                    <h4 style="margin-bottom: 1rem;">Bridge Functions to Detect:</h4>
+                    <div class="code-block" id="move-functions">Loading...</div>
+                    
+                    <h4 style="margin: 1.5rem 0 1rem;">Severity Patterns:</h4>
+                    <div class="code-block" id="move-patterns">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Near Tab -->
+        <div id="near-tab" class="tab-content" style="display: none;">
+            <div class="parser-section">
+                <div class="section-header">
+                    <h3>🌈 Near Protocol Events</h3>
+                </div>
+                <div style="padding: 1.5rem;">
+                    <h4 style="margin-bottom: 1rem;">Action Types:</h4>
+                    <div class="code-block" id="near-actions">Loading...</div>
+                    
+                    <h4 style="margin: 1.5rem 0 1rem;">Bridge Contracts:</h4>
+                    <div class="code-block" id="near-bridges">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Severity Tab -->
+        <div id="severity-tab" class="tab-content" style="display: none;">
+            <div class="parser-section">
+                <div class="section-header">
+                    <h3>📊 Severity Level Definitions</h3>
+                </div>
+                <div id="severity-levels" style="padding: 1.5rem;">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add/Edit EVM Modal -->
+    <div class="modal-overlay" id="evm-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="evm-modal-title">Add EVM Parser</h3>
+                <button class="modal-close" onclick="closeEvmModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Event Signature (0x...)</label>
+                    <input type="text" id="evm-signature" placeholder="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Event Name</label>
+                        <input type="text" id="evm-name" placeholder="Transfer">
+                    </div>
+                    <div class="form-group">
+                        <label>Protocol (optional)</label>
+                        <input type="text" id="evm-protocol" placeholder="wormhole">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="evm-description" placeholder="ERC20 Token Transfer">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Severity</label>
+                        <select id="evm-severity">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="evm-category">
+                            <option value="token">Token</option>
+                            <option value="bridge">Bridge</option>
+                            <option value="governance">Governance</option>
+                            <option value="defi">DeFi</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Estimated USD Threshold</label>
+                    <input type="number" id="evm-usd" placeholder="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label>ABI Signature (optional)</label>
+                    <textarea id="evm-abi" placeholder="Transfer(address indexed from, address indexed to, uint256 value)"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeEvmModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveEvmParser()">Save Parser</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API_BASE = '/api/parsers';
+        let allEvmParsers = [];
+        let editingSignature = null;
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+                
+                tab.classList.add('active');
+                document.getElementById(`${tab.dataset.tab}-tab`).style.display = 'block';
+            });
+        });
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API_BASE}/stats`);
+                const data = await res.json();
+                
+                document.getElementById('evm-count').textContent = data.total_evm_parsers || 0;
+                document.getElementById('cosmos-count').textContent = data.total_cosmos_parsers || 0;
+                document.getElementById('category-count').textContent = Object.keys(data.evm_by_category || {}).length;
+                document.getElementById('last-updated').textContent = data.last_updated || 'Unknown';
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+
+        // Load EVM parsers
+        async function loadEvmParsers() {
+            try {
+                const res = await fetch(`${API_BASE}/evm`);
+                const data = await res.json();
+                allEvmParsers = data.parsers || [];
+                renderEvmParsers(allEvmParsers);
+            } catch (e) {
+                console.error('Failed to load EVM parsers:', e);
+            }
+        }
+
+        function renderEvmParsers(parsers) {
+            const container = document.getElementById('evm-parsers');
+            
+            let html = `
+                <div class="parser-row header">
+                    <div>Event</div>
+                    <div>Category</div>
+                    <div>Severity</div>
+                    <div>Protocol</div>
+                    <div>Est. USD</div>
+                    <div>Actions</div>
+                </div>
+            `;
+            
+            if (parsers.length === 0) {
+                html += `
+                    <div class="empty-state">
+                        <div class="icon">📝</div>
+                        <p>No parsers found</p>
+                    </div>
+                `;
+            } else {
+                parsers.forEach(p => {
+                    html += `
+                        <div class="parser-row">
+                            <div class="parser-name">
+                                <div class="name">${p.name}</div>
+                                <div class="signature">${p.signature.substring(0, 20)}...</div>
+                                <div class="description">${p.description || ''}</div>
+                            </div>
+                            <div><span class="badge badge-${p.category}">${p.category}</span></div>
+                            <div><span class="badge badge-${p.severity}">${p.severity}</span></div>
+                            <div>${p.protocol || '-'}</div>
+                            <div>$${(p.estimated_usd || 0).toLocaleString()}</div>
+                            <div class="actions">
+                                <button class="btn btn-secondary btn-sm" onclick="editEvmParser('${p.signature}')">✏️</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteEvmParser('${p.signature}')">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+        }
+
+        function filterParsers() {
+            const severity = document.getElementById('filter-severity').value;
+            const category = document.getElementById('filter-category').value;
+            const search = document.getElementById('search-input').value.toLowerCase();
+            
+            let filtered = allEvmParsers;
+            
+            if (severity) {
+                filtered = filtered.filter(p => p.severity === severity);
+            }
+            if (category) {
+                filtered = filtered.filter(p => p.category === category);
+            }
+            if (search) {
+                filtered = filtered.filter(p => 
+                    p.name.toLowerCase().includes(search) ||
+                    p.signature.toLowerCase().includes(search) ||
+                    (p.description || '').toLowerCase().includes(search)
+                );
+            }
+            
+            renderEvmParsers(filtered);
+        }
+
+        // Load Cosmos parsers
+        async function loadCosmosParsers() {
+            try {
+                const res = await fetch(`${API_BASE}/cosmos`);
+                const data = await res.json();
+                
+                const container = document.getElementById('cosmos-parsers');
+                let html = `
+                    <div class="parser-row header">
+                        <div>Event Type</div>
+                        <div>Name</div>
+                        <div>Severity</div>
+                        <div>Category</div>
+                        <div></div>
+                        <div>Actions</div>
+                    </div>
+                `;
+                
+                (data.parsers || []).forEach(p => {
+                    html += `
+                        <div class="parser-row">
+                            <div><code>${p.type}</code></div>
+                            <div>${p.name}</div>
+                            <div><span class="badge badge-${p.severity}">${p.severity}</span></div>
+                            <div><span class="badge badge-${p.category}">${p.category}</span></div>
+                            <div></div>
+                            <div class="actions">
+                                <button class="btn btn-secondary btn-sm">✏️</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load Cosmos parsers:', e);
+            }
+        }
+
+        // Load Move parsers
+        async function loadMoveParsers() {
+            try {
+                const res = await fetch(`${API_BASE}/move`);
+                const data = await res.json();
+                
+                document.getElementById('move-functions').textContent = 
+                    JSON.stringify(data.bridge_functions || [], null, 2);
+                document.getElementById('move-patterns').textContent = 
+                    JSON.stringify(data.severity_patterns || [], null, 2);
+            } catch (e) {
+                console.error('Failed to load Move parsers:', e);
+            }
+        }
+
+        // Load Near parsers
+        async function loadNearParsers() {
+            try {
+                const res = await fetch(`${API_BASE}/near`);
+                const data = await res.json();
+                
+                document.getElementById('near-actions').textContent = 
+                    JSON.stringify(data.action_types || [], null, 2);
+                document.getElementById('near-bridges').textContent = 
+                    JSON.stringify(data.bridge_contracts || [], null, 2);
+            } catch (e) {
+                console.error('Failed to load Near parsers:', e);
+            }
+        }
+
+        // Load severity levels
+        async function loadSeverityLevels() {
+            try {
+                const res = await fetch(`${API_BASE}/severity`);
+                const data = await res.json();
+                
+                let html = '';
+                for (const [level, info] of Object.entries(data)) {
+                    html += `
+                        <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                            <div style="width: 20px; height: 20px; border-radius: 50%; background: ${info.color};"></div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; text-transform: uppercase;">${level}</div>
+                                <div style="color: var(--text-secondary); font-size: 0.9rem;">${info.description}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.8rem; color: var(--text-secondary);">Response</div>
+                                <div>${info.response}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('severity-levels').innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load severity levels:', e);
+            }
+        }
+
+        // Modal functions
+        function showAddEvmModal() {
+            editingSignature = null;
+            document.getElementById('evm-modal-title').textContent = 'Add EVM Parser';
+            document.getElementById('evm-signature').value = '';
+            document.getElementById('evm-signature').disabled = false;
+            document.getElementById('evm-name').value = '';
+            document.getElementById('evm-description').value = '';
+            document.getElementById('evm-severity').value = 'low';
+            document.getElementById('evm-category').value = 'token';
+            document.getElementById('evm-protocol').value = '';
+            document.getElementById('evm-usd').value = '0';
+            document.getElementById('evm-abi').value = '';
+            document.getElementById('evm-modal').classList.add('active');
+        }
+
+        function editEvmParser(signature) {
+            const parser = allEvmParsers.find(p => p.signature === signature);
+            if (!parser) return;
+            
+            editingSignature = signature;
+            document.getElementById('evm-modal-title').textContent = 'Edit EVM Parser';
+            document.getElementById('evm-signature').value = parser.signature;
+            document.getElementById('evm-signature').disabled = true;
+            document.getElementById('evm-name').value = parser.name;
+            document.getElementById('evm-description').value = parser.description || '';
+            document.getElementById('evm-severity').value = parser.severity;
+            document.getElementById('evm-category').value = parser.category;
+            document.getElementById('evm-protocol').value = parser.protocol || '';
+            document.getElementById('evm-usd').value = parser.estimated_usd || 0;
+            document.getElementById('evm-abi').value = parser.abi || '';
+            document.getElementById('evm-modal').classList.add('active');
+        }
+
+        function closeEvmModal() {
+            document.getElementById('evm-modal').classList.remove('active');
+        }
+
+        async function saveEvmParser() {
+            const parser = {
+                signature: document.getElementById('evm-signature').value,
+                name: document.getElementById('evm-name').value,
+                description: document.getElementById('evm-description').value,
+                severity: document.getElementById('evm-severity').value,
+                category: document.getElementById('evm-category').value,
+                protocol: document.getElementById('evm-protocol').value || null,
+                estimated_usd: parseInt(document.getElementById('evm-usd').value) || 0,
+                abi: document.getElementById('evm-abi').value || null
+            };
+            
+            if (!parser.signature || !parser.name) {
+                showToast('Signature and name are required', 'error');
+                return;
+            }
+            
+            try {
+                const method = editingSignature ? 'PUT' : 'POST';
+                const url = editingSignature 
+                    ? `${API_BASE}/evm/${editingSignature}`
+                    : `${API_BASE}/evm`;
+                
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parser)
+                });
+                
+                if (res.ok) {
+                    showToast('Parser saved successfully', 'success');
+                    closeEvmModal();
+                    loadEvmParsers();
+                    loadStats();
+                } else {
+                    const err = await res.json();
+                    showToast(err.detail || 'Failed to save', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to save parser', 'error');
+            }
+        }
+
+        async function deleteEvmParser(signature) {
+            if (!confirm('Are you sure you want to delete this parser?')) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/evm/${signature}`, {
+                    method: 'DELETE'
+                });
+                
+                if (res.ok) {
+                    showToast('Parser deleted', 'success');
+                    loadEvmParsers();
+                    loadStats();
+                } else {
+                    showToast('Failed to delete', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to delete parser', 'error');
+            }
+        }
+
+        async function reloadParsers() {
+            try {
+                const res = await fetch(`${API_BASE}/reload`, { method: 'POST' });
+                if (res.ok) {
+                    showToast('Parsers reloaded', 'success');
+                    loadAll();
+                }
+            } catch (e) {
+                showToast('Failed to reload', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function loadAll() {
+            loadStats();
+            loadEvmParsers();
+            loadCosmosParsers();
+            loadMoveParsers();
+            loadNearParsers();
+            loadSeverityLevels();
+        }
+
+        // Initialize
+        loadAll();
+    </script>
+</body>
+</html>
+

@@ -1,11 +1,11 @@
-# Prometheus Kubernetes Deployment for Web3 XDR
+# Prometheus Kubernetes Deployment for Sentinel3
 # ==============================================
 
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: web3-xdr
+  namespace: sentinel3
 data:
   prometheus.yml: |
     global:
@@ -20,17 +20,17 @@ data:
         static_configs:
           - targets: ['localhost:9090']
 
-      - job_name: 'web3-xdr'
+      - job_name: 'sentinel3'
         metrics_path: '/metrics'
         scrape_interval: 10s
         static_configs:
-          - targets: ['web3-xdr.web3-xdr.svc.cluster.local:80']
+          - targets: ['sentinel3.sentinel3.svc.cluster.local:80']
             labels:
-              app: 'web3-xdr'
+              app: 'sentinel3'
 
   alerts.yml: |
     groups:
-      - name: web3-xdr-alerts
+      - name: sentinel3-alerts
         rules:
           - alert: CriticalIncidentDetected
             expr: increase(web3_xdr_incidents_total{severity="critical"}[5m]) > 0
@@ -53,7 +53,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  namespace: web3-xdr
+  namespace: sentinel3
   labels:
     app: prometheus
 spec:
@@ -122,7 +122,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
-  namespace: web3-xdr
+  namespace: sentinel3
   labels:
     app: prometheus
 spec:

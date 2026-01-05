@@ -594,8 +594,8 @@
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Web3 XDR Security Dashboard",
-  "uid": "web3-xdr-main",
+  "title": "Sentinel3 Security Dashboard",
+  "uid": "sentinel3-main",
   "version": 1
 }
 
