@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Explorer - Web3 XDR</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f2e;
+            --bg-hover: #252b3d;
+            --bg-input: #0f1419;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --border-color: #1e293b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Navigation */
+        .nav {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--accent-cyan);
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        /* Search Section */
+        .search-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .search-header h2 {
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.875rem 1rem 0.875rem 2.75rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Filters Row */
+        .filters-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .filter-select, .filter-input {
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+        }
+
+        .time-inputs {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .time-input {
+            width: 180px;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-cyan);
+            color: var(--bg-primary);
+        }
+
+        .btn-primary:hover {
+            background: #0891b2;
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+        }
+
+        /* Quick Time Buttons */
+        .quick-time-btns {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .quick-time-btn {
+            padding: 0.375rem 0.75rem;
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-time-btn:hover, .quick-time-btn.active {
+            background: var(--accent-cyan);
+            color: var(--bg-primary);
+            border-color: var(--accent-cyan);
+        }
+
+        /* Results Stats */
+        .results-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .stats-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+        }
+
+        /* Log Table */
+        .log-table-wrapper {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .log-table th {
+            background: var(--bg-secondary);
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            cursor: pointer;
+        }
+
+        .log-table th:hover {
+            color: var(--text-primary);
+        }
+
+        .log-table th .sort-icon {
+            margin-left: 0.25rem;
+            opacity: 0.5;
+        }
+
+        .log-table td {
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        .log-table tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .log-table tr.expanded {
+            background: var(--bg-secondary);
+        }
+
+        /* Timestamp */
+        .timestamp {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        /* Severity Badges */
+        .severity {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity.critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+        }
+
+        .severity.high {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--accent-yellow);
+        }
+
+        .severity.medium {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-blue);
+        }
+
+        .severity.low {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+        }
+
+        /* Chain Badge */
+        .chain-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .chain-badge.ethereum { border-left: 3px solid #627eea; }
+        .chain-badge.polygon { border-left: 3px solid #8247e5; }
+        .chain-badge.arbitrum { border-left: 3px solid #28a0f0; }
+        .chain-badge.cosmos { border-left: 3px solid #2e3148; }
+        .chain-badge.aptos { border-left: 3px solid #4cc9f0; }
+        .chain-badge.near { border-left: 3px solid #00c08b; }
+
+        /* Event Type */
+        .event-type {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--accent-purple);
+        }
+
+        /* Address */
+        .address {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .address:hover {
+            color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        /* TX Hash */
+        .tx-hash {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent-blue);
+            cursor: pointer;
+        }
+
+        .tx-hash:hover {
+            text-decoration: underline;
+        }
+
+        /* Expand Button */
+        .expand-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .expand-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        /* Expanded Row */
+        .expanded-content {
+            display: none;
+            background: var(--bg-input);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .expanded-content.show {
+            display: table-row;
+        }
+
+        .expanded-content td {
+            padding: 1rem;
+        }
+
+        .raw-data {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .raw-data pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .json-key {
+            color: var(--accent-cyan);
+        }
+
+        .json-string {
+            color: var(--accent-green);
+        }
+
+        .json-number {
+            color: var(--accent-yellow);
+        }
+
+        .json-boolean {
+            color: var(--accent-purple);
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .pagination-info {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .pagination-btns {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .page-btn {
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-btn.active {
+            background: var(--accent-cyan);
+            color: var(--bg-primary);
+            border-color: var(--accent-cyan);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Field Tags */
+        .field-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .field-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .field-tag .key {
+            color: var(--text-muted);
+        }
+
+        .field-tag .value {
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Live indicator */
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.9); }
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .filters-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filter-group {
+                width: 100%;
+            }
+            
+            .quick-time-btns {
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="index.html" class="nav-brand">
+            <span>🛡️</span>
+            <span>Sentinel3 XDR</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">Dashboard</a>
+            <a href="logs.html" class="active">Log Explorer</a>
+            <a href="admin.html">Rules</a>
+            <a href="guardian.html">Guardian</a>
+            <a href="analytics.html">Analytics</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Search Section -->
+        <div class="search-section">
+            <div class="search-header">
+                <h2>🔍 Log Explorer</h2>
+                <div class="live-indicator" id="liveIndicator">
+                    <span class="live-dot"></span>
+                    <span>Live</span>
+                </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="search-row">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" class="search-input" id="searchQuery" 
+                           placeholder="Search logs... (e.g., event_type:Transfer chain:ethereum severity:high)">
+                </div>
+                <button class="btn btn-primary" onclick="searchLogs()">
+                    Search
+                </button>
+                <button class="btn btn-secondary" onclick="clearSearch()">
+                    Clear
+                </button>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters-row">
+                <div class="filter-group">
+                    <span class="filter-label">Chain:</span>
+                    <select class="filter-select" id="chainFilter">
+                        <option value="">All Chains</option>
+                        <option value="ethereum">Ethereum</option>
+                        <option value="polygon">Polygon</option>
+                        <option value="arbitrum">Arbitrum</option>
+                        <option value="optimism">Optimism</option>
+                        <option value="bsc">BSC</option>
+                        <option value="avalanche">Avalanche</option>
+                        <option value="cosmos">Cosmos</option>
+                        <option value="osmosis">Osmosis</option>
+                        <option value="aptos">Aptos</option>
+                        <option value="sui">Sui</option>
+                        <option value="near">Near</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <span class="filter-label">Severity:</span>
+                    <select class="filter-select" id="severityFilter">
+                        <option value="">All</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <span class="filter-label">Event Type:</span>
+                    <select class="filter-select" id="eventTypeFilter">
+                        <option value="">All Types</option>
+                        <option value="Transfer">Transfer</option>
+                        <option value="Deposit">Deposit</option>
+                        <option value="Withdrawal">Withdrawal</option>
+                        <option value="LogMessagePublished">LogMessagePublished</option>
+                        <option value="TransferRedeemed">TransferRedeemed</option>
+                        <option value="Approval">Approval</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <span class="filter-label">Time Range:</span>
+                    <div class="time-inputs">
+                        <input type="datetime-local" class="filter-input time-input" id="startTime">
+                        <span style="color: var(--text-muted);">to</span>
+                        <input type="datetime-local" class="filter-input time-input" id="endTime">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Time Buttons -->
+            <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div class="quick-time-btns">
+                    <button class="quick-time-btn active" onclick="setTimeRange('15m')">Last 15m</button>
+                    <button class="quick-time-btn" onclick="setTimeRange('1h')">Last 1h</button>
+                    <button class="quick-time-btn" onclick="setTimeRange('6h')">Last 6h</button>
+                    <button class="quick-time-btn" onclick="setTimeRange('24h')">Last 24h</button>
+                    <button class="quick-time-btn" onclick="setTimeRange('7d')">Last 7d</button>
+                    <button class="quick-time-btn" onclick="setTimeRange('custom')">Custom</button>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">
+                        <input type="checkbox" id="autoRefresh" checked> Auto-refresh
+                    </label>
+                    <select class="filter-select" id="refreshInterval" style="width: 80px;">
+                        <option value="5">5s</option>
+                        <option value="10" selected>10s</option>
+                        <option value="30">30s</option>
+                        <option value="60">60s</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Stats -->
+        <div class="results-stats">
+            <div class="stats-left">
+                <div class="stat-item">
+                    <span class="stat-value" id="totalEvents">0</span>
+                    <span class="stat-label">events</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="criticalCount" style="color: var(--accent-red);">0</span>
+                    <span class="stat-label">critical</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="highCount" style="color: var(--accent-yellow);">0</span>
+                    <span class="stat-label">high</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="queryTime">0</span>
+                    <span class="stat-label">ms</span>
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-secondary" onclick="exportLogs()">
+                    📥 Export CSV
+                </button>
+            </div>
+        </div>
+
+        <!-- Log Table -->
+        <div class="log-table-wrapper">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th style="width: 30px;"></th>
+                        <th onclick="sortBy('timestamp')">Timestamp <span class="sort-icon">↕</span></th>
+                        <th onclick="sortBy('severity')">Severity <span class="sort-icon">↕</span></th>
+                        <th onclick="sortBy('chain')">Chain <span class="sort-icon">↕</span></th>
+                        <th onclick="sortBy('event_type')">Event Type <span class="sort-icon">↕</span></th>
+                        <th>Contract</th>
+                        <th>TX Hash</th>
+                        <th onclick="sortBy('block')">Block <span class="sort-icon">↕</span></th>
+                    </tr>
+                </thead>
+                <tbody id="logTableBody">
+                    <tr>
+                        <td colspan="8">
+                            <div class="loading">
+                                <div class="loading-spinner"></div>
+                                <p>Loading events...</p>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <div class="pagination">
+                <div class="pagination-info">
+                    Showing <span id="showingStart">0</span>-<span id="showingEnd">0</span> of <span id="totalCount">0</span> events
+                </div>
+                <div class="pagination-btns">
+                    <button class="page-btn" id="prevBtn" onclick="prevPage()" disabled>← Previous</button>
+                    <button class="page-btn active">1</button>
+                    <button class="page-btn" id="nextBtn" onclick="nextPage()">Next →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        let allEvents = [];
+        let filteredEvents = [];
+        let currentPage = 1;
+        let pageSize = 50;
+        let sortField = 'timestamp';
+        let sortOrder = 'desc';
+        let refreshTimer = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setDefaultTimeRange();
+            loadEvents();
+            setupAutoRefresh();
+
+            // Search on Enter
+            document.getElementById('searchQuery').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') searchLogs();
+            });
+
+            // Filter changes
+            ['chainFilter', 'severityFilter', 'eventTypeFilter'].forEach(id => {
+                document.getElementById(id).addEventListener('change', searchLogs);
+            });
+        });
+
+        // Set default time range (last 15 minutes)
+        function setDefaultTimeRange() {
+            const now = new Date();
+            const start = new Date(now.getTime() - 15 * 60 * 1000);
+            
+            document.getElementById('endTime').value = formatDateTimeLocal(now);
+            document.getElementById('startTime').value = formatDateTimeLocal(start);
+        }
+
+        function formatDateTimeLocal(date) {
+            return date.toISOString().slice(0, 16);
+        }
+
+        // Set time range from quick buttons
+        function setTimeRange(range) {
+            document.querySelectorAll('.quick-time-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const now = new Date();
+            let start;
+
+            switch(range) {
+                case '15m': start = new Date(now.getTime() - 15 * 60 * 1000); break;
+                case '1h': start = new Date(now.getTime() - 60 * 60 * 1000); break;
+                case '6h': start = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+                case '24h': start = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+                case '7d': start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+                case 'custom': return; // Don't change inputs
+            }
+
+            document.getElementById('endTime').value = formatDateTimeLocal(now);
+            document.getElementById('startTime').value = formatDateTimeLocal(start);
+            
+            searchLogs();
+        }
+
+        // Setup auto-refresh
+        function setupAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+            const intervalSelect = document.getElementById('refreshInterval');
+
+            function updateRefresh() {
+                if (refreshTimer) clearInterval(refreshTimer);
+                
+                if (checkbox.checked) {
+                    const interval = parseInt(intervalSelect.value) * 1000;
+                    refreshTimer = setInterval(loadEvents, interval);
+                    document.getElementById('liveIndicator').style.display = 'flex';
+                } else {
+                    document.getElementById('liveIndicator').style.display = 'none';
+                }
+            }
+
+            checkbox.addEventListener('change', updateRefresh);
+            intervalSelect.addEventListener('change', updateRefresh);
+            updateRefresh();
+        }
+
+        // Load events from API
+        async function loadEvents() {
+            const startTime = performance.now();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/events?limit=1000`);
+                const data = await response.json();
+
+                allEvents = data.events || [];
+                
+                const queryTime = Math.round(performance.now() - startTime);
+                document.getElementById('queryTime').textContent = queryTime;
+
+                applyFilters();
+                
+            } catch (error) {
+                console.error('Failed to load events:', error);
+                document.getElementById('logTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div class="icon">❌</div>
+                                <h3>Failed to load events</h3>
+                                <p>${error.message}</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Search logs
+        function searchLogs() {
+            currentPage = 1;
+            applyFilters();
+        }
+
+        // Clear search
+        function clearSearch() {
+            document.getElementById('searchQuery').value = '';
+            document.getElementById('chainFilter').value = '';
+            document.getElementById('severityFilter').value = '';
+            document.getElementById('eventTypeFilter').value = '';
+            setDefaultTimeRange();
+            currentPage = 1;
+            applyFilters();
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const query = document.getElementById('searchQuery').value.toLowerCase();
+            const chainFilter = document.getElementById('chainFilter').value;
+            const severityFilter = document.getElementById('severityFilter').value;
+            const eventTypeFilter = document.getElementById('eventTypeFilter').value;
+            const startTime = new Date(document.getElementById('startTime').value);
+            const endTime = new Date(document.getElementById('endTime').value);
+
+            filteredEvents = allEvents.filter(event => {
+                // Time filter
+                const eventTime = new Date(event.timestamp);
+                if (eventTime < startTime || eventTime > endTime) return false;
+
+                // Chain filter
+                if (chainFilter && event.chain !== chainFilter) return false;
+
+                // Severity filter
+                if (severityFilter && event.severity !== severityFilter) return false;
+
+                // Event type filter
+                if (eventTypeFilter && event.event_type !== eventTypeFilter) return false;
+
+                // Query search
+                if (query) {
+                    const searchableText = JSON.stringify(event).toLowerCase();
+                    
+                    // Handle field:value syntax
+                    if (query.includes(':')) {
+                        const parts = query.split(/\s+/);
+                        for (const part of parts) {
+                            if (part.includes(':')) {
+                                const [field, value] = part.split(':');
+                                if (event[field] && !event[field].toString().toLowerCase().includes(value)) {
+                                    return false;
+                                }
+                            } else if (!searchableText.includes(part)) {
+                                return false;
+                            }
+                        }
+                    } else if (!searchableText.includes(query)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            // Sort
+            sortEvents();
+            
+            // Update stats
+            updateStats();
+            
+            // Render
+            renderTable();
+        }
+
+        // Sort events
+        function sortEvents() {
+            filteredEvents.sort((a, b) => {
+                let aVal = a[sortField];
+                let bVal = b[sortField];
+
+                if (sortField === 'timestamp') {
+                    aVal = new Date(aVal);
+                    bVal = new Date(bVal);
+                } else if (sortField === 'block') {
+                    aVal = parseInt(aVal) || 0;
+                    bVal = parseInt(bVal) || 0;
+                }
+
+                if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        // Sort by column
+        function sortBy(field) {
+            if (sortField === field) {
+                sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortField = field;
+                sortOrder = 'desc';
+            }
+            sortEvents();
+            renderTable();
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('totalEvents').textContent = filteredEvents.length;
+            document.getElementById('criticalCount').textContent = 
+                filteredEvents.filter(e => e.severity === 'critical').length;
+            document.getElementById('highCount').textContent = 
+                filteredEvents.filter(e => e.severity === 'high').length;
+        }
+
+        // Render table
+        function renderTable() {
+            const tbody = document.getElementById('logTableBody');
+            const start = (currentPage - 1) * pageSize;
+            const end = Math.min(start + pageSize, filteredEvents.length);
+            const pageEvents = filteredEvents.slice(start, end);
+
+            if (pageEvents.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div class="icon">📭</div>
+                                <h3>No events found</h3>
+                                <p>Try adjusting your filters or time range</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                updatePagination(0, 0, 0);
+                return;
+            }
+
+            tbody.innerHTML = pageEvents.map((event, idx) => `
+                <tr class="log-row" data-idx="${start + idx}">
+                    <td>
+                        <button class="expand-btn" onclick="toggleExpand(${start + idx})">▶</button>
+                    </td>
+                    <td>
+                        <span class="timestamp">${formatTimestamp(event.timestamp)}</span>
+                    </td>
+                    <td>
+                        <span class="severity ${event.severity}">${event.severity}</span>
+                    </td>
+                    <td>
+                        <span class="chain-badge ${event.chain}">${getChainIcon(event.chain)} ${event.chain}</span>
+                    </td>
+                    <td>
+                        <span class="event-type">${event.event_type}</span>
+                    </td>
+                    <td>
+                        <span class="address" title="${event.contract}" onclick="copyToClipboard('${event.contract}')">
+                            ${truncateAddress(event.contract)}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="tx-hash" onclick="openTxExplorer('${event.chain}', '${event.tx_hash}')">
+                            ${truncateHash(event.tx_hash)}
+                        </span>
+                    </td>
+                    <td>
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+                            ${event.block ? event.block.toLocaleString() : '-'}
+                        </span>
+                    </td>
+                </tr>
+                <tr class="expanded-content" id="expanded-${start + idx}">
+                    <td colspan="8">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem;">📋 Event Details</h4>
+                                <div class="field-tags">
+                                    <div class="field-tag">
+                                        <span class="key">ID:</span>
+                                        <span class="value">${event.id}</span>
+                                    </div>
+                                    <div class="field-tag">
+                                        <span class="key">Chain Type:</span>
+                                        <span class="value">${event.data?.chain_type || 'evm'}</span>
+                                    </div>
+                                    ${event.data?.amount_usd ? `
+                                    <div class="field-tag">
+                                        <span class="key">Amount:</span>
+                                        <span class="value">$${event.data.amount_usd.toLocaleString()}</span>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem;">🔧 Raw Data</h4>
+                                <div class="raw-data">
+                                    <pre>${syntaxHighlight(JSON.stringify(event.data || {}, null, 2))}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+
+            updatePagination(start + 1, end, filteredEvents.length);
+        }
+
+        // Toggle expand row
+        function toggleExpand(idx) {
+            const expandedRow = document.getElementById(`expanded-${idx}`);
+            const btn = document.querySelector(`tr[data-idx="${idx}"] .expand-btn`);
+            
+            if (expandedRow.classList.contains('show')) {
+                expandedRow.classList.remove('show');
+                btn.textContent = '▶';
+            } else {
+                // Close all others
+                document.querySelectorAll('.expanded-content.show').forEach(el => {
+                    el.classList.remove('show');
+                });
+                document.querySelectorAll('.expand-btn').forEach(el => {
+                    el.textContent = '▶';
+                });
+                
+                expandedRow.classList.add('show');
+                btn.textContent = '▼';
+            }
+        }
+
+        // Update pagination
+        function updatePagination(start, end, total) {
+            document.getElementById('showingStart').textContent = start;
+            document.getElementById('showingEnd').textContent = end;
+            document.getElementById('totalCount').textContent = total;
+
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = end >= total;
+        }
+
+        // Pagination
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage * pageSize < filteredEvents.length) {
+                currentPage++;
+                renderTable();
+            }
+        }
+
+        // Helper functions
+        function formatTimestamp(ts) {
+            const date = new Date(ts);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+
+        function truncateAddress(addr) {
+            if (!addr) return '-';
+            if (addr.length <= 15) return addr;
+            return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
+        }
+
+        function truncateHash(hash) {
+            if (!hash) return '-';
+            if (hash.length <= 15) return hash;
+            return `${hash.slice(0, 10)}...${hash.slice(-6)}`;
+        }
+
+        function getChainIcon(chain) {
+            const icons = {
+                ethereum: '⟠',
+                polygon: '⬡',
+                arbitrum: '🔵',
+                optimism: '🔴',
+                bsc: '🟡',
+                avalanche: '🔺',
+                cosmos: '⚛️',
+                osmosis: '🧪',
+                aptos: '🅰️',
+                sui: '💧',
+                near: '🌈'
+            };
+            return icons[chain] || '🔗';
+        }
+
+        function syntaxHighlight(json) {
+            if (!json) return '';
+            return json
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+                .replace(/: "([^"]+)"/g, ': <span class="json-string">"$1"</span>')
+                .replace(/: (\d+)/g, ': <span class="json-number">$1</span>')
+                .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text);
+            // Could show toast notification
+        }
+
+        function openTxExplorer(chain, hash) {
+            const explorers = {
+                ethereum: `https://etherscan.io/tx/${hash}`,
+                polygon: `https://polygonscan.com/tx/${hash}`,
+                arbitrum: `https://arbiscan.io/tx/${hash}`,
+                optimism: `https://optimistic.etherscan.io/tx/${hash}`,
+                bsc: `https://bscscan.com/tx/${hash}`,
+                avalanche: `https://snowtrace.io/tx/${hash}`,
+                near: `https://explorer.near.org/transactions/${hash}`,
+                aptos: `https://explorer.aptoslabs.com/txn/${hash}`,
+                sui: `https://suiexplorer.com/txblock/${hash}`
+            };
+            
+            const url = explorers[chain];
+            if (url) window.open(url, '_blank');
+        }
+
+        // Export to CSV
+        function exportLogs() {
+            const headers = ['Timestamp', 'Severity', 'Chain', 'Event Type', 'Contract', 'TX Hash', 'Block'];
+            const rows = filteredEvents.map(e => [
+                e.timestamp,
+                e.severity,
+                e.chain,
+                e.event_type,
+                e.contract,
+                e.tx_hash,
+                e.block
+            ]);
+
+            const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `xdr-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+        }
+    </script>
+</body>
+</html>
+

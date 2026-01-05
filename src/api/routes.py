@@ -42,6 +42,19 @@ class EventSummary(BaseModel):
     timestamp: datetime
 
 
+class EventDetail(BaseModel):
+    """Full event details for log explorer."""
+    id: str
+    chain: str
+    event_type: str
+    tx_hash: str
+    block: int
+    contract: str
+    severity: str
+    timestamp: datetime
+    data: dict = {}
+
+
 class StatsResponse(BaseModel):
     """Statistics response."""
     total_events: int
@@ -106,39 +119,79 @@ async def list_incidents(
     return all_incidents[:limit]
 
 
-@router.get("/events", response_model=List[EventSummary])
+@router.get("/events")
 async def list_events(
     chain_id: Optional[str] = Query(None, description="Filter by chain"),
     event_type: Optional[str] = Query(None, description="Filter by event type"),
-    limit: int = Query(100, le=500, description="Max results"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    start_time: Optional[str] = Query(None, description="Start time ISO format"),
+    end_time: Optional[str] = Query(None, description="End time ISO format"),
+    search: Optional[str] = Query(None, description="Search query"),
+    limit: int = Query(500, le=1000, description="Max results"),
 ):
     """
-    List recent security events from real-time monitoring.
+    List security events with full details for log explorer.
+    Supports filtering by chain, event type, severity, and time range.
     """
     from ..shared_state import monitor_state
     
-    events = monitor_state.get_events(limit=500)
+    events = monitor_state.get_events(limit=1000)
     
+    # Apply filters
     if chain_id:
         events = [e for e in events if e.chain == chain_id]
     
     if event_type:
         events = [e for e in events if e.event_type == event_type]
     
+    if severity:
+        events = [e for e in events if e.severity == severity]
+    
+    if start_time:
+        try:
+            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            events = [e for e in events if e.timestamp >= start_dt]
+        except:
+            pass
+    
+    if end_time:
+        try:
+            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            events = [e for e in events if e.timestamp <= end_dt]
+        except:
+            pass
+    
+    if search:
+        search_lower = search.lower()
+        events = [
+            e for e in events 
+            if search_lower in e.id.lower() 
+            or search_lower in e.chain.lower()
+            or search_lower in e.event_type.lower()
+            or search_lower in e.tx_hash.lower()
+            or search_lower in e.contract.lower()
+        ]
+    
     events = events[:limit]
     
-    return [
-        EventSummary(
-            event_id=e.id,
-            chain_id=e.chain,
-            block_number=e.block,
-            tx_hash=e.tx_hash,
-            event_type=e.event_type,
-            severity=e.severity,
-            timestamp=e.timestamp,
-        )
-        for e in events
-    ]
+    # Return full event details
+    return {
+        "total": len(events),
+        "events": [
+            {
+                "id": e.id,
+                "chain": e.chain,
+                "event_type": e.event_type,
+                "tx_hash": e.tx_hash,
+                "block": e.block,
+                "contract": e.contract,
+                "severity": e.severity,
+                "timestamp": e.timestamp.isoformat(),
+                "data": e.data or {}
+            }
+            for e in events
+        ]
+    }
 
 
 @router.get("/stats")
