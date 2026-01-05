@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guardian System - Web3 XDR</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f2e;
+            --bg-hover: #252b3d;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --border-color: #1e293b;
+            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-shield: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Navigation */
+        .nav {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .nav-brand .shield {
+            font-size: 1.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--accent-green);
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header h1 .icon {
+            font-size: 2rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-badge.active {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .status-badge.inactive {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-badge.active .status-dot {
+            background: var(--accent-green);
+        }
+
+        .status-badge.inactive .status-dot {
+            background: var(--accent-red);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .stat-card .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Grid Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            background: var(--bg-secondary);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h3 {
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Pending Actions */
+        .pending-action {
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-yellow);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .pending-action:last-child {
+            margin-bottom: 0;
+        }
+
+        .pending-action .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+
+        .pending-action .title {
+            font-weight: 600;
+            color: var(--accent-yellow);
+        }
+
+        .pending-action .severity {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .pending-action .severity.critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+        }
+
+        .pending-action .details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .pending-action .details p {
+            margin-bottom: 0.25rem;
+        }
+
+        .pending-action .actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* Protocol List */
+        .protocol-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+        }
+
+        .protocol-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .protocol-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .protocol-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-shield);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .protocol-name {
+            font-weight: 600;
+        }
+
+        .protocol-chain {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .protocol-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .auto-pause-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+        }
+
+        /* Response History */
+        .history-item {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            border-left: 3px solid var(--border-color);
+        }
+
+        .history-item.success {
+            border-left-color: var(--accent-green);
+        }
+
+        .history-item.failed {
+            border-left-color: var(--accent-red);
+        }
+
+        .history-item.pending {
+            border-left-color: var(--accent-yellow);
+        }
+
+        .history-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .history-item.success .history-icon {
+            background: rgba(16, 185, 129, 0.2);
+        }
+
+        .history-item.failed .history-icon {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .history-details {
+            flex: 1;
+        }
+
+        .history-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .history-meta {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-approve {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-approve:hover {
+            background: #059669;
+        }
+
+        .btn-reject {
+            background: transparent;
+            border: 1px solid var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        .btn-reject:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .btn-primary {
+            background: var(--gradient-shield);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        /* Register Protocol Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 1.25rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--accent-green);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Full Width Section */
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Emergency Button */
+        .emergency-section {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .emergency-info h3 {
+            color: var(--accent-red);
+            margin-bottom: 0.25rem;
+        }
+
+        .emergency-info p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="index.html" class="nav-brand">
+            <span class="shield">🛡️</span>
+            <span>Sentinel3 XDR</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">Dashboard</a>
+            <a href="admin.html">Rules</a>
+            <a href="guardian.html" class="active">Guardian</a>
+            <a href="simulator.html">Simulator</a>
+            <a href="analytics.html">Analytics</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <span class="icon">🛡️</span>
+                Guardian System
+            </h1>
+            <div id="guardianStatus" class="status-badge inactive">
+                <span class="status-dot"></span>
+                <span>Checking...</span>
+            </div>
+        </div>
+
+        <!-- Emergency Section -->
+        <div class="emergency-section">
+            <div class="emergency-info">
+                <h3>⚠️ Emergency Controls</h3>
+                <p>Manually pause a registered protocol in case of emergency</p>
+            </div>
+            <button class="btn btn-danger" onclick="showEmergencyPause()">
+                🚨 Emergency Pause
+            </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="icon">🏛️</div>
+                <div class="value" id="protocolCount">0</div>
+                <div class="label">Protected Protocols</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">⏳</div>
+                <div class="value" id="pendingCount">0</div>
+                <div class="label">Pending Approvals</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">✅</div>
+                <div class="value" id="successCount">0</div>
+                <div class="label">Successful Pauses</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">📊</div>
+                <div class="value" id="totalResponses">0</div>
+                <div class="label">Total Responses</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Pending Approvals -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>⏳ Pending Approvals</h3>
+                    <span id="pendingBadge" class="auto-pause-badge" style="display: none;">0 pending</span>
+                </div>
+                <div class="card-body" id="pendingList">
+                    <div class="empty-state">
+                        <div class="icon">✅</div>
+                        <p>No pending approvals</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Registered Protocols -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>🏛️ Protected Protocols</h3>
+                    <button class="btn btn-primary" onclick="showRegisterModal()">
+                        + Add Protocol
+                    </button>
+                </div>
+                <div class="card-body" id="protocolList">
+                    <div class="empty-state">
+                        <div class="icon">🏛️</div>
+                        <p>No protocols registered</p>
+                        <button class="btn btn-primary" style="margin-top: 1rem;" onclick="showRegisterModal()">
+                            Register First Protocol
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Response History -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <h3>📜 Response History</h3>
+                    <button class="btn btn-secondary" onclick="loadHistory()">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div class="card-body" id="historyList">
+                    <div class="empty-state">
+                        <div class="icon">📜</div>
+                        <p>No response actions yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Register Protocol Modal -->
+    <div class="modal-overlay" id="registerModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🏛️ Register Protocol</h3>
+                <button class="modal-close" onclick="closeModal('registerModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Protocol ID</label>
+                    <input type="text" id="protocolId" placeholder="e.g., wormhole">
+                </div>
+                <div class="form-group">
+                    <label>Protocol Name</label>
+                    <input type="text" id="protocolName" placeholder="e.g., Wormhole Bridge">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Chain</label>
+                        <select id="chainId">
+                            <option value="ethereum">Ethereum</option>
+                            <option value="polygon">Polygon</option>
+                            <option value="arbitrum">Arbitrum</option>
+                            <option value="optimism">Optimism</option>
+                            <option value="bsc">BSC</option>
+                            <option value="avalanche">Avalanche</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Approval Threshold (USD)</label>
+                        <input type="number" id="threshold" value="1000000">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Main Contract Address</label>
+                    <input type="text" id="mainContract" placeholder="0x...">
+                </div>
+                <div class="form-group">
+                    <label>Pause Contract (if different)</label>
+                    <input type="text" id="pauseContract" placeholder="0x... (optional)">
+                </div>
+                <div class="form-group">
+                    <label>Multisig Address (optional)</label>
+                    <input type="text" id="multisigAddress" placeholder="0x...">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="autoPauseCritical" checked>
+                            <label for="autoPauseCritical">Auto-pause on Critical</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="autoPauseHigh">
+                            <label for="autoPauseHigh">Auto-pause on High</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('registerModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="registerProtocol()">Register Protocol</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emergency Pause Modal -->
+    <div class="modal-overlay" id="emergencyModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🚨 Emergency Pause</h3>
+                <button class="modal-close" onclick="closeModal('emergencyModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Select Protocol</label>
+                    <select id="emergencyProtocol">
+                        <option value="">-- Select Protocol --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Reason</label>
+                    <input type="text" id="emergencyReason" placeholder="Describe the emergency...">
+                </div>
+                <div class="form-group">
+                    <label>Your Name/ID</label>
+                    <input type="text" id="emergencyInitiator" placeholder="e.g., security_admin">
+                </div>
+                <div style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <p style="color: var(--accent-red); font-size: 0.9rem;">
+                        ⚠️ <strong>Warning:</strong> This will immediately pause the selected protocol's contracts. 
+                        Only use in genuine emergencies.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('emergencyModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="executeEmergencyPause()">🚨 Execute Pause</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let protocols = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGuardianStatus();
+            loadPendingApprovals();
+            loadProtocols();
+            loadHistory();
+
+            // Refresh every 10 seconds
+            setInterval(() => {
+                loadGuardianStatus();
+                loadPendingApprovals();
+            }, 10000);
+        });
+
+        // Load Guardian Status
+        async function loadGuardianStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/status`);
+                const data = await response.json();
+
+                const statusEl = document.getElementById('guardianStatus');
+                if (data.status === 'active') {
+                    statusEl.className = 'status-badge active';
+                    statusEl.innerHTML = '<span class="status-dot"></span><span>Active</span>';
+                } else {
+                    statusEl.className = 'status-badge inactive';
+                    statusEl.innerHTML = '<span class="status-dot"></span><span>Not Initialized</span>';
+                }
+
+                // Update stats
+                document.getElementById('protocolCount').textContent = data.stats.registered_protocols;
+                document.getElementById('pendingCount').textContent = data.stats.pending_approvals;
+                document.getElementById('successCount').textContent = data.stats.successful_pauses;
+                document.getElementById('totalResponses').textContent = data.stats.total_responses;
+
+                // Store protocols
+                protocols = data.registered_protocols || [];
+                renderProtocols();
+
+            } catch (error) {
+                console.error('Failed to load guardian status:', error);
+            }
+        }
+
+        // Load Pending Approvals
+        async function loadPendingApprovals() {
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/pending`);
+                const data = await response.json();
+
+                const container = document.getElementById('pendingList');
+                const badge = document.getElementById('pendingBadge');
+
+                if (data.count === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">✅</div>
+                            <p>No pending approvals</p>
+                        </div>
+                    `;
+                    badge.style.display = 'none';
+                } else {
+                    badge.style.display = 'inline';
+                    badge.textContent = `${data.count} pending`;
+
+                    container.innerHTML = data.pending_actions.map(action => `
+                        <div class="pending-action">
+                            <div class="header">
+                                <div>
+                                    <div class="title">⏳ ${action.action.replace('_', ' ').toUpperCase()}</div>
+                                    <div style="font-size: 0.8rem; color: var(--text-muted);">ID: ${action.id}</div>
+                                </div>
+                                <span class="severity critical">CRITICAL</span>
+                            </div>
+                            <div class="details">
+                                <p><strong>Protocol:</strong> ${action.protocol}</p>
+                                <p><strong>Chain:</strong> ${action.chain}</p>
+                                <p><strong>Contract:</strong> ${action.contract.substring(0, 20)}...</p>
+                                <p><strong>Est. Loss:</strong> $${(action.metadata.estimated_loss_usd || 0).toLocaleString()}</p>
+                            </div>
+                            <div class="actions">
+                                <button class="btn btn-approve" onclick="approveAction('${action.id}')">
+                                    ✅ Approve Pause
+                                </button>
+                                <button class="btn btn-reject" onclick="rejectAction('${action.id}')">
+                                    ❌ Reject
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Failed to load pending approvals:', error);
+            }
+        }
+
+        // Render Protocols
+        function renderProtocols() {
+            const container = document.getElementById('protocolList');
+
+            if (protocols.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">🏛️</div>
+                        <p>No protocols registered</p>
+                        <button class="btn btn-primary" style="margin-top: 1rem;" onclick="showRegisterModal()">
+                            Register First Protocol
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = protocols.map(p => `
+                <div class="protocol-item">
+                    <div class="protocol-info">
+                        <div class="protocol-icon">🛡️</div>
+                        <div>
+                            <div class="protocol-name">${p.name}</div>
+                            <div class="protocol-chain">${p.chain} • ${p.contract.substring(0, 15)}...</div>
+                        </div>
+                    </div>
+                    <div class="protocol-status">
+                        ${p.auto_pause_critical ? '<span class="auto-pause-badge">Auto-Pause</span>' : ''}
+                        <button class="btn btn-secondary" onclick="removeProtocol('${p.id}')">Remove</button>
+                    </div>
+                </div>
+            `).join('');
+
+            // Update emergency modal select
+            const emergencySelect = document.getElementById('emergencyProtocol');
+            emergencySelect.innerHTML = '<option value="">-- Select Protocol --</option>' +
+                protocols.map(p => `<option value="${p.id}">${p.name} (${p.chain})</option>`).join('');
+        }
+
+        // Load Protocols (called separately for initial load)
+        async function loadProtocols() {
+            await loadGuardianStatus();
+        }
+
+        // Load History
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/history?limit=20`);
+                const data = await response.json();
+
+                const container = document.getElementById('historyList');
+
+                if (data.count === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">📜</div>
+                            <p>No response actions yet</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = data.responses.map(r => `
+                    <div class="history-item ${r.status}">
+                        <div class="history-icon">
+                            ${r.status === 'success' ? '✅' : r.status === 'failed' ? '❌' : '⏳'}
+                        </div>
+                        <div class="history-details">
+                            <div class="history-title">${r.action.replace('_', ' ').toUpperCase()} - ${r.protocol}</div>
+                            <div class="history-meta">
+                                Chain: ${r.chain} • Contract: ${r.contract.substring(0, 15)}...
+                                ${r.tx_hash ? `• TX: ${r.tx_hash.substring(0, 15)}...` : ''}
+                            </div>
+                            <div class="history-time">
+                                ${new Date(r.initiated_at).toLocaleString()}
+                                ${r.error ? `• Error: ${r.error}` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+
+        // Approve Action
+        async function approveAction(responseId) {
+            const approver = prompt('Enter your name/ID to approve:');
+            if (!approver) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        response_id: responseId,
+                        approved_by: approver
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ Approved! Status: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}`);
+                    loadPendingApprovals();
+                    loadHistory();
+                    loadGuardianStatus();
+                } else {
+                    alert('❌ Failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+            }
+        }
+
+        // Reject Action
+        async function rejectAction(responseId) {
+            const rejector = prompt('Enter your name/ID:');
+            if (!rejector) return;
+
+            const reason = prompt('Enter rejection reason:');
+            if (!reason) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        response_id: responseId,
+                        rejected_by: rejector,
+                        reason: reason
+                    })
+                });
+
+                if (response.ok) {
+                    alert('✅ Action rejected');
+                    loadPendingApprovals();
+                    loadHistory();
+                } else {
+                    const data = await response.json();
+                    alert('❌ Failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+            }
+        }
+
+        // Show Register Modal
+        function showRegisterModal() {
+            document.getElementById('registerModal').classList.add('active');
+        }
+
+        // Show Emergency Pause Modal
+        function showEmergencyPause() {
+            if (protocols.length === 0) {
+                alert('No protocols registered. Register a protocol first.');
+                return;
+            }
+            document.getElementById('emergencyModal').classList.add('active');
+        }
+
+        // Close Modal
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        // Register Protocol
+        async function registerProtocol() {
+            const data = {
+                protocol_id: document.getElementById('protocolId').value,
+                protocol_name: document.getElementById('protocolName').value,
+                chain_id: document.getElementById('chainId').value,
+                main_contract: document.getElementById('mainContract').value,
+                pause_contract: document.getElementById('pauseContract').value || null,
+                multisig_address: document.getElementById('multisigAddress').value || null,
+                auto_pause_on_critical: document.getElementById('autoPauseCritical').checked,
+                auto_pause_on_high: document.getElementById('autoPauseHigh').checked,
+                require_approval_threshold_usd: parseFloat(document.getElementById('threshold').value)
+            };
+
+            if (!data.protocol_id || !data.protocol_name || !data.main_contract) {
+                alert('Please fill in required fields');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/protocols/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    alert('✅ Protocol registered successfully!');
+                    closeModal('registerModal');
+                    loadGuardianStatus();
+                } else {
+                    const err = await response.json();
+                    alert('❌ Failed: ' + (err.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+            }
+        }
+
+        // Remove Protocol
+        async function removeProtocol(protocolId) {
+            if (!confirm(`Remove protocol ${protocolId}?`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/protocols/${protocolId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('✅ Protocol removed');
+                    loadGuardianStatus();
+                } else {
+                    const err = await response.json();
+                    alert('❌ Failed: ' + (err.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+            }
+        }
+
+        // Execute Emergency Pause
+        async function executeEmergencyPause() {
+            const protocolId = document.getElementById('emergencyProtocol').value;
+            const reason = document.getElementById('emergencyReason').value;
+            const initiator = document.getElementById('emergencyInitiator').value;
+
+            if (!protocolId || !reason || !initiator) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            if (!confirm('⚠️ Are you sure you want to PAUSE this protocol? This is an emergency action.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/guardian/manual-pause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        protocol_id: protocolId,
+                        reason: reason,
+                        initiated_by: initiator
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ Emergency pause initiated!\nStatus: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}\n${data.error ? 'Note: ' + data.error : ''}`);
+                    closeModal('emergencyModal');
+                    loadHistory();
+                    loadGuardianStatus();
+                } else {
+                    alert('❌ Failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
+
