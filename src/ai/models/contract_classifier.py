@@ -12,9 +12,7 @@ from pathlib import Path
 import numpy as np
 
 # Import our feature extractor
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
-from ai.data.bytecode_extractor import BytecodeExtractor, BytecodeFeatures, features_to_vector
+from ..data.bytecode_extractor import BytecodeExtractor, BytecodeFeatures, features_to_vector
 
 class ThreatCategory(Enum):
     """Classification categories for contracts"""

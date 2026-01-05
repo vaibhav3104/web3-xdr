@@ -10,15 +10,11 @@ from datetime import datetime
 import json
 
 # Import AI modules
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
-
 try:
-    from ai.models.contract_classifier import ContractThreatClassifier, ThreatCategory
-    from ai.inference.contract_monitor import SimulatedDeploymentMonitor, ThreatAlert
-    from ai.data.bytecode_extractor import BytecodeExtractor
-    from ai.data.attack_database import (
+    from ..ai.models.contract_classifier import ContractThreatClassifier, ThreatCategory
+    from ..ai.inference.contract_monitor import SimulatedDeploymentMonitor, ThreatAlert
+    from ..ai.data.bytecode_extractor import BytecodeExtractor
+    from ..ai.data.attack_database import (
         get_all_attacks, 
         get_statistics,
         get_bridge_attacks,

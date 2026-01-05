@@ -23,15 +23,13 @@ except ImportError:
     ML_AVAILABLE = False
     print("Warning: scikit-learn not installed. ML training disabled.")
 
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
-from ai.data.attack_database import (
+from ..data.attack_database import (
     HISTORICAL_ATTACKS, 
     get_bridge_attacks, 
     get_defi_attacks,
     AttackType
 )
-from ai.data.bytecode_extractor import BytecodeExtractor, features_to_vector
+from ..data.bytecode_extractor import BytecodeExtractor, features_to_vector
 
 @dataclass
 class TrainingConfig:

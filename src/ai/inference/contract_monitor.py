@@ -17,9 +17,7 @@ except ImportError:
     WEB3_AVAILABLE = False
     print("Warning: web3.py not installed")
 
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
-from ai.models.contract_classifier import ContractThreatClassifier, ClassificationResult, ThreatCategory
+from ..models.contract_classifier import ContractThreatClassifier, ClassificationResult, ThreatCategory
 
 @dataclass
 class DeploymentEvent:
