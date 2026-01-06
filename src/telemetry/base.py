@@ -5,7 +5,7 @@ Base Chain Listener - Abstract base for all blockchain listeners.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import AsyncIterator, Callable, Dict, List, Optional, Set
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Set, Any
 import asyncio
 import structlog
 
@@ -72,11 +72,11 @@ class ChainListener(ABC):
         self.chain_id = config.chain_id
         self.is_running = False
         self.last_processed_block: int = 0
-        self.event_handlers: List[Callable[[SecurityEvent], asyncio.coroutine]] = []
+        self.event_handlers: List[Callable[[SecurityEvent], Awaitable[Any]]] = []
         self._processed_tx_hashes: Set[str] = set()  # Dedup within window
         self._lock = asyncio.Lock()
     
-    def add_event_handler(self, handler: Callable[[SecurityEvent], asyncio.coroutine]):
+    def add_event_handler(self, handler: Callable[[SecurityEvent], Awaitable[Any]]):
         """Add a handler to be called for each security event."""
         self.event_handlers.append(handler)
     
