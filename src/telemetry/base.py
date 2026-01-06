@@ -29,6 +29,7 @@ class ListenerConfig:
     bridge_contracts: List[str] = field(default_factory=list)
     token_contracts: List[str] = field(default_factory=list)
     governance_contracts: List[str] = field(default_factory=list)
+    defi_contracts: List[str] = field(default_factory=list)
     
     # Polling configuration (for chains without WebSocket)
     poll_interval_seconds: float = 1.0

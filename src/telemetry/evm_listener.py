@@ -20,6 +20,7 @@ from .contract_alerts import (
     ContractThreatAlert, ContractAlertStore, 
     ThreatLevel, AlertStatus, contract_alert_store
 )
+from .event_signatures import get_event_info, identify_event_type, get_protocol_name, get_event_severity
 from ..models.events import SecurityEvent, EventType, Severity
 
 # Try to import ML classifier (may not be available in all environments)
@@ -343,6 +344,7 @@ class EVMListener(ChainListener):
     ) -> List[SecurityEvent]:
         """
         Parse a raw EVM log into SecurityEvent(s).
+        Uses comprehensive event signature lookup for classification.
         """
         events = []
         
@@ -350,21 +352,153 @@ class EVMListener(ChainListener):
             return events
         
         topic0 = log.topics[0].hex() if hasattr(log.topics[0], 'hex') else log.topics[0]
+        if not topic0.startswith("0x"):
+            topic0 = "0x" + topic0
+        
         contract_address = log.address.lower() if hasattr(log, 'address') else log.get('address', '').lower()
         
-        # Check for ERC20 Transfer
-        if topic0 == TRANSFER_TOPIC or topic0 == TRANSFER_TOPIC.lower():
+        # Get event info from our comprehensive signature database
+        event_info = get_event_info(topic0)
+        event_type = event_info.get("type", EventType.UNKNOWN)
+        event_name = event_info.get("name", "Unknown")
+        protocol = event_info.get("protocol", "unknown")
+        event_severity = event_info.get("severity", "low")
+        
+        # Map severity string to Severity enum
+        severity_map = {
+            "low": Severity.LOW,
+            "medium": Severity.MEDIUM,
+            "high": Severity.HIGH,
+            "critical": Severity.CRITICAL
+        }
+        severity = severity_map.get(event_severity, Severity.INFO)
+        
+        # Special handling for ERC20 Transfer (most common)
+        if topic0.lower() == TRANSFER_TOPIC.lower():
             event = await self._parse_transfer(log, block_timestamp)
             if event:
                 events.append(event)
+            return events
         
-        # Check for bridge-specific events
-        elif contract_address in [c.lower() for c in self.config.bridge_contracts]:
+        # Parse known event types
+        if event_type != EventType.UNKNOWN:
+            event = await self._parse_known_event(
+                log, block_timestamp, event_type, event_name, protocol, severity
+            )
+            if event:
+                events.append(event)
+            return events
+        
+        # Check for bridge-specific events (fallback for unknown signatures)
+        if contract_address in [c.lower() for c in self.config.bridge_contracts]:
             event = await self._parse_bridge_event(log, block_timestamp)
+            if event:
+                events.append(event)
+            return events
+        
+        # For DeFi contracts, create a generic event with the contract info
+        defi_contracts = getattr(self.config, 'defi_contracts', [])
+        if contract_address in [c.lower() for c in defi_contracts]:
+            event = await self._parse_defi_event(log, block_timestamp, event_name, protocol)
             if event:
                 events.append(event)
         
         return events
+    
+    async def _parse_known_event(
+        self,
+        log: dict,
+        block_timestamp: datetime,
+        event_type: EventType,
+        event_name: str,
+        protocol: str,
+        severity: Severity
+    ) -> Optional[SecurityEvent]:
+        """
+        Parse a known event type using our signature database.
+        """
+        try:
+            contract_address = log.address.lower() if hasattr(log.address, 'lower') else str(log.address).lower()
+            tx_hash = log.transactionHash.hex() if hasattr(log.transactionHash, 'hex') else str(log.transactionHash)
+            
+            # Extract addresses from topics if available
+            source_address = ""
+            dest_address = ""
+            
+            if len(log.topics) >= 2:
+                source_address = "0x" + log.topics[1].hex()[-40:] if hasattr(log.topics[1], 'hex') else ""
+            if len(log.topics) >= 3:
+                dest_address = "0x" + log.topics[2].hex()[-40:] if hasattr(log.topics[2], 'hex') else ""
+            
+            # Try to extract amount from data
+            amount = Decimal("0")
+            if log.data and len(log.data) >= 32:
+                try:
+                    data_hex = log.data.hex() if hasattr(log.data, 'hex') else str(log.data)
+                    if data_hex.startswith("0x"):
+                        data_hex = data_hex[2:]
+                    if len(data_hex) >= 64:
+                        amount = Decimal(int(data_hex[:64], 16)) / Decimal(10**18)
+                except:
+                    pass
+            
+            return SecurityEvent(
+                chain_id=self.chain_id,
+                block_number=log.blockNumber,
+                block_timestamp=block_timestamp,
+                tx_hash=tx_hash,
+                log_index=log.logIndex if hasattr(log, 'logIndex') else 0,
+                event_type=event_type,
+                severity=severity,
+                source_address=source_address,
+                dest_address=dest_address,
+                contract_address=contract_address,
+                amount=amount,
+                bridge_id=protocol if protocol != "unknown" else None,
+                raw_event={
+                    "event_name": event_name,
+                    "protocol": protocol,
+                    "topics": [t.hex() if hasattr(t, 'hex') else str(t) for t in log.topics],
+                    "data": log.data.hex() if hasattr(log.data, 'hex') else str(log.data)
+                }
+            )
+        except Exception as e:
+            logger.warning("known_event_parse_error", error=str(e), event_name=event_name)
+            return None
+    
+    async def _parse_defi_event(
+        self,
+        log: dict,
+        block_timestamp: datetime,
+        event_name: str,
+        protocol: str
+    ) -> Optional[SecurityEvent]:
+        """
+        Parse a DeFi protocol event.
+        """
+        try:
+            contract_address = log.address.lower() if hasattr(log.address, 'lower') else str(log.address).lower()
+            tx_hash = log.transactionHash.hex() if hasattr(log.transactionHash, 'hex') else str(log.transactionHash)
+            
+            return SecurityEvent(
+                chain_id=self.chain_id,
+                block_number=log.blockNumber,
+                block_timestamp=block_timestamp,
+                tx_hash=tx_hash,
+                log_index=log.logIndex if hasattr(log, 'logIndex') else 0,
+                event_type=EventType.UNKNOWN,
+                severity=Severity.LOW,
+                contract_address=contract_address,
+                raw_event={
+                    "event_name": event_name,
+                    "protocol": protocol,
+                    "type": "defi_event",
+                    "topics": [t.hex() if hasattr(t, 'hex') else str(t) for t in log.topics]
+                }
+            )
+        except Exception as e:
+            logger.warning("defi_event_parse_error", error=str(e))
+            return None
     
     async def _parse_transfer(
         self,
