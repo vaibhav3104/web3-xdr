@@ -3,7 +3,7 @@ Invariant Engine - Orchestrates invariant evaluation.
 """
 
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional
+from typing import Awaitable, Any, Callable, Dict, List, Optional
 import asyncio
 import structlog
 
@@ -28,7 +28,7 @@ class InvariantEngine:
     def __init__(self, context: Optional[InvariantContext] = None):
         self.context = context or InvariantContext()
         self.invariants: List[Invariant] = []
-        self.result_handlers: List[Callable[[InvariantResult], asyncio.coroutine]] = []
+        self.result_handlers: List[Callable[[InvariantResult], Awaitable[Any]]] = []
         
         self._is_running = False
         self._background_task: Optional[asyncio.Task] = None
@@ -89,7 +89,7 @@ class InvariantEngine:
     
     def add_result_handler(
         self,
-        handler: Callable[[InvariantResult], asyncio.coroutine]
+        handler: Callable[[InvariantResult], Awaitable[Any]]
     ):
         """Add a handler for invariant violations."""
         self.result_handlers.append(handler)

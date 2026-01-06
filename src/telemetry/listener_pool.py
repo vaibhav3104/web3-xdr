@@ -9,7 +9,7 @@ Supports:
 - Near Protocol
 """
 
-from typing import Callable, Dict, List, Optional
+from typing import Awaitable, Any, Callable, Dict, List, Optional
 import asyncio
 import structlog
 
@@ -36,7 +36,7 @@ class ListenerPool:
     
     def __init__(self):
         self.listeners: Dict[str, ChainListener] = {}
-        self._event_handlers: List[Callable[[SecurityEvent], asyncio.coroutine]] = []
+        self._event_handlers: List[Callable[[SecurityEvent], Awaitable[Any]]] = []
         self._tasks: Dict[str, asyncio.Task] = {}
         self._is_running = False
     
@@ -108,7 +108,7 @@ class ListenerPool:
             listener_type=chain_type
         )
     
-    def add_event_handler(self, handler: Callable[[SecurityEvent], asyncio.coroutine]):
+    def add_event_handler(self, handler: Callable[[SecurityEvent], Awaitable[Any]]):
         """
         Add a handler for all chain events.
         """

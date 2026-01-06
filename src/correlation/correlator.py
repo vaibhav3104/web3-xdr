@@ -3,7 +3,7 @@ XDR Correlator - Main correlation engine.
 """
 
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional, Set
+from typing import Awaitable, Any, Callable, Dict, List, Optional, Set
 import asyncio
 import structlog
 
@@ -39,7 +39,7 @@ class XDRCorrelator:
         
         # Incident management
         self.active_incidents: Dict[str, Incident] = {}
-        self.incident_handlers: List[Callable[[Incident], asyncio.coroutine]] = []
+        self.incident_handlers: List[Callable[[Incident], Awaitable[Any]]] = []
         
         # Pending violations for aggregation
         self._pending_violations: List[InvariantResult] = []
@@ -60,7 +60,7 @@ class XDRCorrelator:
     
     def add_incident_handler(
         self,
-        handler: Callable[[Incident], asyncio.coroutine]
+        handler: Callable[[Incident], Awaitable[Any]]
     ):
         """Add a handler for new incidents."""
         self.incident_handlers.append(handler)
