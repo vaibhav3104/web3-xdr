@@ -273,6 +273,71 @@
             </div>
         </div>
 
+        <!-- Live Contract Detection Section -->
+        <div class="card p-6 mt-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold">
+                    <i class="fas fa-satellite-dish text-green-500 mr-2"></i>
+                    Live Contract Detection
+                </h2>
+                <div class="flex items-center space-x-4">
+                    <span id="detectionStatus" class="flex items-center text-sm">
+                        <span class="w-2 h-2 rounded-full bg-green-500 mr-2 pulse"></span>
+                        Monitoring...
+                    </span>
+                    <button onclick="refreshContractAlerts()" class="px-3 py-1 bg-blue-600 rounded text-sm hover:bg-blue-500">
+                        <i class="fas fa-sync-alt mr-1"></i>Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                    <div id="totalAnalyzed" class="text-2xl font-bold text-blue-400">0</div>
+                    <div class="text-xs text-gray-500">Analyzed</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                    <div id="totalThreats" class="text-2xl font-bold text-red-400">0</div>
+                    <div class="text-xs text-gray-500">Threats</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                    <div id="activeAlerts" class="text-2xl font-bold text-yellow-400">0</div>
+                    <div class="text-xs text-gray-500">Active</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                    <div id="last24h" class="text-2xl font-bold text-green-400">0</div>
+                    <div class="text-xs text-gray-500">Last 24h</div>
+                </div>
+            </div>
+
+            <!-- Alerts Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="text-gray-400 border-b border-gray-700">
+                        <tr>
+                            <th class="text-left py-3 px-2">Time</th>
+                            <th class="text-left py-3 px-2">Chain</th>
+                            <th class="text-left py-3 px-2">Contract</th>
+                            <th class="text-left py-3 px-2">Threat</th>
+                            <th class="text-left py-3 px-2">Confidence</th>
+                            <th class="text-left py-3 px-2">Status</th>
+                            <th class="text-left py-3 px-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contractAlertsList">
+                        <tr>
+                            <td colspan="7" class="text-center py-8 text-gray-500">
+                                <i class="fas fa-satellite-dish text-3xl mb-2 opacity-50"></i>
+                                <p>Waiting for contract deployments...</p>
+                                <p class="text-xs mt-1">New contracts will appear here as they're deployed and analyzed</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Recent Alerts Section -->
         <div class="card p-6 mt-6">
             <h2 class="text-xl font-bold mb-6">
@@ -301,6 +366,14 @@
             loadMLStatus();
             loadAttackDatabase();
             loadAlerts();
+            loadContractAlerts();
+            loadContractStats();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                loadContractAlerts();
+                loadContractStats();
+            }, 30000);
         });
 
         async function loadMLStatus() {
@@ -504,6 +577,266 @@
                 }
             } catch (error) {
                 console.error('Failed to load alerts:', error);
+            }
+        }
+
+        // Contract threat detection functions
+        async function loadContractStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/contracts/stats`);
+                if (!response.ok) throw new Error('Failed to load stats');
+                const stats = await response.json();
+                
+                document.getElementById('totalAnalyzed').textContent = stats.total_contracts_analyzed || 0;
+                document.getElementById('totalThreats').textContent = stats.total_threats_detected || 0;
+                document.getElementById('activeAlerts').textContent = stats.active_alerts || 0;
+                document.getElementById('last24h').textContent = stats.alerts_last_24h || 0;
+            } catch (error) {
+                console.error('Failed to load contract stats:', error);
+            }
+        }
+
+        async function loadContractAlerts() {
+            try {
+                const response = await fetch(`${API_BASE}/api/contracts/alerts?limit=20`);
+                if (!response.ok) throw new Error('Failed to load alerts');
+                const alerts = await response.json();
+                
+                const tbody = document.getElementById('contractAlertsList');
+                
+                if (alerts.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center py-8 text-gray-500">
+                                <i class="fas fa-satellite-dish text-3xl mb-2 opacity-50"></i>
+                                <p>Waiting for contract deployments...</p>
+                                <p class="text-xs mt-1">New contracts will appear here as they're deployed and analyzed</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                tbody.innerHTML = alerts.map(alert => {
+                    const threatColor = getThreatColor(alert.threat_level);
+                    const statusColor = getStatusColor(alert.status);
+                    
+                    return `
+                        <tr class="border-b border-gray-800 hover:bg-gray-800/50">
+                            <td class="py-3 px-2 text-gray-400 text-xs">
+                                ${formatTime(alert.timestamp)}
+                            </td>
+                            <td class="py-3 px-2">
+                                <span class="px-2 py-1 bg-purple-900/50 text-purple-400 rounded text-xs">
+                                    ${alert.chain_id}
+                                </span>
+                            </td>
+                            <td class="py-3 px-2 font-mono text-xs">
+                                <a href="https://etherscan.io/address/${alert.contract_address}" target="_blank" 
+                                   class="text-blue-400 hover:underline">
+                                    ${truncateAddress(alert.contract_address)}
+                                </a>
+                            </td>
+                            <td class="py-3 px-2">
+                                <span class="px-2 py-1 ${threatColor} rounded text-xs font-semibold">
+                                    ${formatThreat(alert.threat_category)}
+                                </span>
+                            </td>
+                            <td class="py-3 px-2">
+                                <div class="flex items-center">
+                                    <div class="w-16 bg-gray-700 rounded-full h-2 mr-2">
+                                        <div class="h-2 rounded-full ${threatColor.includes('red') ? 'bg-red-500' : threatColor.includes('yellow') ? 'bg-yellow-500' : 'bg-green-500'}" 
+                                             style="width: ${alert.confidence * 100}%"></div>
+                                    </div>
+                                    <span class="text-xs text-gray-400">${(alert.confidence * 100).toFixed(0)}%</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-2">
+                                <span class="px-2 py-1 ${statusColor} rounded text-xs">
+                                    ${alert.status}
+                                </span>
+                            </td>
+                            <td class="py-3 px-2">
+                                <button onclick="viewAlertDetails('${alert.alert_id}')" 
+                                        class="text-blue-400 hover:text-blue-300 text-xs">
+                                    <i class="fas fa-eye mr-1"></i>Details
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('Failed to load contract alerts:', error);
+            }
+        }
+
+        function refreshContractAlerts() {
+            loadContractAlerts();
+            loadContractStats();
+        }
+
+        function getThreatColor(level) {
+            const colors = {
+                'critical': 'bg-red-900/50 text-red-400',
+                'high': 'bg-orange-900/50 text-orange-400',
+                'medium': 'bg-yellow-900/50 text-yellow-400',
+                'low': 'bg-blue-900/50 text-blue-400',
+                'safe': 'bg-green-900/50 text-green-400'
+            };
+            return colors[level] || 'bg-gray-900/50 text-gray-400';
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'active': 'bg-red-900/50 text-red-400',
+                'investigating': 'bg-yellow-900/50 text-yellow-400',
+                'resolved': 'bg-green-900/50 text-green-400',
+                'false_positive': 'bg-gray-900/50 text-gray-400'
+            };
+            return colors[status] || 'bg-gray-900/50 text-gray-400';
+        }
+
+        function formatThreat(category) {
+            return category.replace(/_/g, ' ').split(' ')
+                .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(' ');
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZoneName: 'short'
+            });
+        }
+
+        function truncateAddress(addr) {
+            if (!addr) return 'N/A';
+            return addr.slice(0, 10) + '...' + addr.slice(-8);
+        }
+
+        async function viewAlertDetails(alertId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/contracts/alerts/${alertId}`);
+                if (!response.ok) throw new Error('Failed to load alert');
+                const alert = await response.json();
+                
+                // Show modal with alert details
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50';
+                modal.innerHTML = `
+                    <div class="bg-gray-900 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold">
+                                <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
+                                Contract Threat Alert
+                            </h3>
+                            <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-white">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-gray-800 rounded p-3">
+                                    <span class="text-xs text-gray-500">Chain</span>
+                                    <p class="font-bold text-purple-400">${alert.chain_id}</p>
+                                </div>
+                                <div class="bg-gray-800 rounded p-3">
+                                    <span class="text-xs text-gray-500">Block</span>
+                                    <p class="font-bold">#${alert.block_number}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-gray-800 rounded p-3">
+                                <span class="text-xs text-gray-500">Contract Address</span>
+                                <p class="font-mono text-sm text-blue-400 break-all">${alert.contract_address}</p>
+                            </div>
+                            
+                            <div class="bg-gray-800 rounded p-3">
+                                <span class="text-xs text-gray-500">Deployer</span>
+                                <p class="font-mono text-sm text-orange-400 break-all">${alert.deployer_address}</p>
+                            </div>
+                            
+                            <div class="bg-gray-800 rounded p-3">
+                                <span class="text-xs text-gray-500">Transaction</span>
+                                <p class="font-mono text-sm break-all">${alert.tx_hash}</p>
+                            </div>
+                            
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="bg-red-900/30 border border-red-500/50 rounded p-3">
+                                    <span class="text-xs text-gray-500">Threat</span>
+                                    <p class="font-bold text-red-400">${formatThreat(alert.threat_category)}</p>
+                                </div>
+                                <div class="bg-gray-800 rounded p-3">
+                                    <span class="text-xs text-gray-500">Confidence</span>
+                                    <p class="font-bold">${(alert.confidence * 100).toFixed(1)}%</p>
+                                </div>
+                                <div class="bg-gray-800 rounded p-3">
+                                    <span class="text-xs text-gray-500">Risk Score</span>
+                                    <p class="font-bold">${alert.risk_score.toFixed(0)}/100</p>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-gray-800 rounded p-3">
+                                <span class="text-xs text-gray-500">Risk Factors</span>
+                                <ul class="mt-2 space-y-1">
+                                    ${alert.risk_factors.map(f => `<li class="text-sm text-yellow-400"><i class="fas fa-exclamation-circle mr-2"></i>${f}</li>`).join('')}
+                                </ul>
+                            </div>
+                            
+                            <div class="bg-red-900/20 border border-red-500/50 rounded p-3">
+                                <span class="text-xs text-gray-500">Recommendation</span>
+                                <p class="mt-1 text-red-300">${alert.recommendation}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex space-x-3 mt-6">
+                            <button onclick="updateAlertStatus('${alert.alert_id}', 'investigating')" 
+                                    class="flex-1 bg-yellow-600 text-white py-2 rounded hover:bg-yellow-500">
+                                <i class="fas fa-search mr-2"></i>Investigate
+                            </button>
+                            <button onclick="updateAlertStatus('${alert.alert_id}', 'resolved')" 
+                                    class="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-500">
+                                <i class="fas fa-check mr-2"></i>Resolve
+                            </button>
+                            <button onclick="updateAlertStatus('${alert.alert_id}', 'false_positive')" 
+                                    class="flex-1 bg-gray-600 text-white py-2 rounded hover:bg-gray-500">
+                                <i class="fas fa-times mr-2"></i>False Positive
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                
+            } catch (error) {
+                alert('Failed to load alert details: ' + error.message);
+            }
+        }
+
+        async function updateAlertStatus(alertId, status) {
+            try {
+                const response = await fetch(`${API_BASE}/api/contracts/alerts/${alertId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: status })
+                });
+                
+                if (!response.ok) throw new Error('Failed to update');
+                
+                // Close modal and refresh
+                document.querySelector('.fixed')?.remove();
+                loadContractAlerts();
+                loadContractStats();
+                
+            } catch (error) {
+                alert('Failed to update alert: ' + error.message);
             }
         }
     </script>

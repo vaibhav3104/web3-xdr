@@ -1,5 +1,6 @@
 """
 EVM Chain Listener - For Ethereum, Polygon, Arbitrum, etc.
+With contract deployment detection and ML-based threat analysis.
 """
 
 from datetime import datetime
@@ -7,6 +8,7 @@ from decimal import Decimal
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 import asyncio
 import json
+import hashlib
 import structlog
 
 from web3 import AsyncWeb3, AsyncHTTPProvider
@@ -14,7 +16,20 @@ from web3.exceptions import BlockNotFound
 from eth_abi import decode
 
 from .base import ChainListener, ListenerConfig, BlockMetadata
+from .contract_alerts import (
+    ContractThreatAlert, ContractAlertStore, 
+    ThreatLevel, AlertStatus, contract_alert_store
+)
 from ..models.events import SecurityEvent, EventType, Severity
+
+# Try to import ML classifier (may not be available in all environments)
+try:
+    from ..ai.models.contract_classifier import ContractThreatClassifier, ThreatCategory
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    ContractThreatClassifier = None
+    ThreatCategory = None
 
 logger = structlog.get_logger()
 
@@ -46,6 +61,7 @@ class EVMListener(ChainListener):
     Listener for EVM-compatible chains.
     
     Supports Ethereum, Polygon, Arbitrum, Optimism, BSC, etc.
+    Includes contract deployment detection and ML-based threat analysis.
     """
     
     def __init__(self, config: ListenerConfig):
@@ -58,6 +74,19 @@ class EVMListener(ChainListener):
         
         # Token decimals cache
         self._token_decimals: Dict[str, int] = {}
+        
+        # Contract deployment detection
+        self.analyze_deployments = True  # Enable by default
+        self._classifier: Optional[ContractThreatClassifier] = None
+        self._analyzed_contracts: set = set()  # Track analyzed contracts
+        
+        # Initialize ML classifier if available
+        if ML_AVAILABLE:
+            try:
+                self._classifier = ContractThreatClassifier()
+                logger.info("ml_classifier_initialized", chain=self.chain_id)
+            except Exception as e:
+                logger.warning("ml_classifier_init_failed", chain=self.chain_id, error=str(e))
     
     async def connect(self):
         """Connect to EVM node."""
@@ -85,6 +114,7 @@ class EVMListener(ChainListener):
     async def process_block(self, block_number: int) -> BlockMetadata:
         """
         Process a single block and extract security events.
+        Also detects and analyzes new contract deployments.
         """
         try:
             block = await self.w3.eth.get_block(block_number, full_transactions=True)
@@ -102,7 +132,19 @@ class EVMListener(ChainListener):
         block_timestamp = datetime.utcfromtimestamp(block.timestamp)
         events_count = 0
         
-        # Get all logs for contracts we care about
+        # =====================================================
+        # CONTRACT DEPLOYMENT DETECTION
+        # =====================================================
+        if self.analyze_deployments:
+            for tx in block.transactions:
+                # Contract deployment = tx.to is None
+                tx_to = tx.get('to') if isinstance(tx, dict) else getattr(tx, 'to', None)
+                if tx_to is None:
+                    await self._analyze_contract_deployment(tx, block_timestamp, block_number)
+        
+        # =====================================================
+        # LOG PROCESSING (existing code)
+        # =====================================================
         monitored_contracts = (
             self.config.bridge_contracts + 
             self.config.token_contracts +
@@ -138,6 +180,162 @@ class EVMListener(ChainListener):
             events_extracted=events_count
         )
     
+    async def _analyze_contract_deployment(
+        self,
+        tx: dict,
+        block_timestamp: datetime,
+        block_number: int
+    ):
+        """
+        Analyze a newly deployed contract for potential threats.
+        
+        This is called for every transaction where tx.to is None (contract creation).
+        """
+        try:
+            # Get transaction hash
+            tx_hash = tx.get('hash') if isinstance(tx, dict) else getattr(tx, 'hash', None)
+            if tx_hash is None:
+                return
+            
+            tx_hash_hex = tx_hash.hex() if hasattr(tx_hash, 'hex') else str(tx_hash)
+            
+            # Skip if already analyzed
+            if tx_hash_hex in self._analyzed_contracts:
+                return
+            self._analyzed_contracts.add(tx_hash_hex)
+            
+            # Get transaction receipt to find deployed contract address
+            receipt = await self.w3.eth.get_transaction_receipt(tx_hash_hex)
+            if not receipt or not receipt.get('contractAddress'):
+                return
+            
+            contract_address = receipt['contractAddress']
+            deployer = tx.get('from') if isinstance(tx, dict) else getattr(tx, 'from', '')
+            deployer = deployer if isinstance(deployer, str) else deployer.hex() if hasattr(deployer, 'hex') else str(deployer)
+            
+            logger.info(
+                "contract_deployed_detected",
+                chain=self.chain_id,
+                contract=contract_address,
+                deployer=deployer,
+                block=block_number
+            )
+            
+            # Fetch bytecode
+            bytecode = await self.w3.eth.get_code(contract_address)
+            bytecode_hex = bytecode.hex() if hasattr(bytecode, 'hex') else str(bytecode)
+            
+            # Skip tiny bytecode (likely not a real contract)
+            if len(bytecode_hex) <= 10:
+                logger.debug("skipping_tiny_bytecode", contract=contract_address, size=len(bytecode_hex))
+                return
+            
+            # Calculate bytecode hash
+            bytecode_hash = hashlib.sha256(bytecode_hex.encode()).hexdigest()[:16]
+            
+            # Record that we analyzed this contract
+            contract_alert_store.record_analysis(self.chain_id, False)
+            
+            # If ML classifier is available, analyze
+            if self._classifier:
+                result = self._classifier.classify(bytecode_hex, contract_address)
+                
+                # Map ThreatCategory to ThreatLevel
+                threat_level = ThreatLevel.SAFE
+                if result.threat_category.value != "safe":
+                    if result.confidence > 0.8:
+                        threat_level = ThreatLevel.CRITICAL
+                    elif result.confidence > 0.6:
+                        threat_level = ThreatLevel.HIGH
+                    elif result.confidence > 0.4:
+                        threat_level = ThreatLevel.MEDIUM
+                    else:
+                        threat_level = ThreatLevel.LOW
+                
+                # Only create alert if not safe
+                if result.threat_category.value != "safe":
+                    alert = ContractThreatAlert(
+                        chain_id=self.chain_id,
+                        contract_address=contract_address,
+                        deployer_address=deployer,
+                        tx_hash=tx_hash_hex,
+                        block_number=block_number,
+                        timestamp=block_timestamp,
+                        threat_category=result.threat_category.value,
+                        threat_level=threat_level,
+                        confidence=result.confidence,
+                        risk_score=result.risk_score,
+                        risk_factors=result.risk_factors,
+                        similar_exploits=result.similar_exploits,
+                        recommendation=result.recommendation,
+                        bytecode_size=len(bytecode_hex) // 2,
+                        bytecode_hash=bytecode_hash,
+                        status=AlertStatus.ACTIVE
+                    )
+                    
+                    contract_alert_store.add_alert(alert)
+                    
+                    # Emit as SecurityEvent too
+                    event = SecurityEvent(
+                        chain_id=self.chain_id,
+                        block_number=block_number,
+                        block_timestamp=block_timestamp,
+                        tx_hash=tx_hash_hex,
+                        event_type=EventType.CONTRACT_DEPLOY,
+                        severity=Severity.CRITICAL if threat_level in [ThreatLevel.CRITICAL, ThreatLevel.HIGH] else Severity.HIGH,
+                        source_address=deployer,
+                        contract_address=contract_address,
+                        raw_event={
+                            "type": "contract_deployment",
+                            "threat_category": result.threat_category.value,
+                            "confidence": result.confidence,
+                            "risk_score": result.risk_score,
+                            "alert_id": alert.alert_id
+                        }
+                    )
+                    await self.emit_event(event)
+                    
+                    logger.warning(
+                        "malicious_contract_detected",
+                        chain=self.chain_id,
+                        contract=contract_address,
+                        threat=result.threat_category.value,
+                        confidence=result.confidence,
+                        alert_id=alert.alert_id
+                    )
+                else:
+                    logger.info(
+                        "contract_analyzed_safe",
+                        chain=self.chain_id,
+                        contract=contract_address,
+                        confidence=result.confidence
+                    )
+            else:
+                # No ML classifier - just emit a contract deployment event
+                event = SecurityEvent(
+                    chain_id=self.chain_id,
+                    block_number=block_number,
+                    block_timestamp=block_timestamp,
+                    tx_hash=tx_hash_hex,
+                    event_type=EventType.CONTRACT_DEPLOY,
+                    severity=Severity.MEDIUM,
+                    source_address=deployer,
+                    contract_address=contract_address,
+                    raw_event={
+                        "type": "contract_deployment",
+                        "bytecode_size": len(bytecode_hex) // 2,
+                        "bytecode_hash": bytecode_hash
+                    }
+                )
+                await self.emit_event(event)
+                
+        except Exception as e:
+            logger.error(
+                "contract_deployment_analysis_error",
+                chain=self.chain_id,
+                error=str(e)
+            )
+
     async def _parse_log(
         self,
         log: dict,

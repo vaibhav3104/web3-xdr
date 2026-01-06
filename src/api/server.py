@@ -1,5 +1,5 @@
 """
-FastAPI Server for Sentinel3 Dashboard API.
+FastAPI Server for Web3 XDR Dashboard API.
 """
 
 import os
@@ -22,6 +22,7 @@ from .simulator_routes import router as simulator_router
 from .guardian_routes import router as guardian_router
 from .parser_routes import router as parser_router
 from .alert_routes import router as alert_router
+from .contract_routes import router as contract_router
 
 # ML/AI contract analysis routes
 try:
@@ -38,7 +39,7 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__fi
 
 
 def create_app(
-    title: str = "Sentinel3 API",
+    title: str = "Web3 XDR API",
     version: str = "1.0.0",
     cors_origins: Optional[list] = None
 ) -> FastAPI:
@@ -47,7 +48,7 @@ def create_app(
     """
     app = FastAPI(
         title=title,
-        description="Explainable Sentinel3 - Cross-Chain Bridge Security",
+        description="Explainable Web3 XDR - Cross-Chain Bridge Security",
         version=version,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
@@ -96,10 +97,13 @@ def create_app(
     # Include contract threat alert routes
     app.include_router(alert_router)
     
+    # Include contract deployment detection routes
+    app.include_router(contract_router, prefix="/api")
+    
     # Health check
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "service": "sentinel3"}
+        return {"status": "healthy", "service": "web3-xdr"}
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")
