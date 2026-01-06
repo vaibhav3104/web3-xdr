@@ -425,6 +425,20 @@ class EVMMonitor:
         self.last_block = 0
         self.connected = False
         
+        # Contract deployment detection
+        self._classifier = None
+        self._init_classifier()
+        
+    def _init_classifier(self):
+        """Initialize the ML contract classifier."""
+        try:
+            from src.ai.models.contract_classifier import ContractThreatClassifier
+            self._classifier = ContractThreatClassifier()
+            print(f"   ✅ ML Classifier initialized for {self.chain_id}")
+        except Exception as e:
+            print(f"   ⚠️ ML Classifier not available: {e}")
+            self._classifier = None
+    
     def connect(self) -> bool:
         """Connect to EVM chain."""
         from web3 import Web3
@@ -440,7 +454,7 @@ class EVMMonitor:
         return False
     
     def scan_events(self) -> List[LiveEvent]:
-        """Scan for new events."""
+        """Scan for new events and contract deployments."""
         from web3 import Web3
         
         events = []
@@ -454,6 +468,7 @@ class EVMMonitor:
             
             from_block = self.last_block + 1
             
+            # Scan for bridge contract events
             for contract_addr in self.bridge_contracts:
                 try:
                     logs = self.w3.eth.get_logs({
@@ -485,6 +500,10 @@ class EVMMonitor:
                 except Exception:
                     pass
             
+            # Scan for contract deployments (to=null transactions)
+            contract_events = self._scan_contract_deployments(from_block, current_block)
+            events.extend(contract_events)
+            
             blocks_scanned = current_block - self.last_block
             self.last_block = current_block
             monitor_state.add_blocks_scanned(blocks_scanned)
@@ -493,6 +512,165 @@ class EVMMonitor:
             pass
         
         return events
+    
+    def _scan_contract_deployments(self, from_block: int, to_block: int) -> List[LiveEvent]:
+        """Scan blocks for contract deployments and analyze them."""
+        import hashlib
+        from src.telemetry.contract_alerts import (
+            ContractThreatAlert, ThreatLevel, AlertStatus, contract_alert_store
+        )
+        
+        events = []
+        
+        # Only scan last block to avoid too many RPC calls
+        try:
+            block = self.w3.eth.get_block(to_block, full_transactions=True)
+            
+            for tx in block.transactions:
+                # Contract deployment = tx with to=None
+                if tx.to is None:
+                    try:
+                        # Get receipt to find deployed contract address
+                        receipt = self.w3.eth.get_transaction_receipt(tx.hash)
+                        contract_address = receipt.contractAddress
+                        
+                        if contract_address:
+                            # Get bytecode
+                            bytecode = self.w3.eth.get_code(contract_address)
+                            bytecode_hex = bytecode.hex() if bytecode else ""
+                            
+                            if len(bytecode_hex) > 10:  # Has actual code
+                                # Analyze with ML classifier
+                                threat_info = self._analyze_contract(
+                                    bytecode_hex, 
+                                    contract_address, 
+                                    tx.hash.hex(),
+                                    tx["from"],
+                                    to_block,
+                                    block.timestamp
+                                )
+                                
+                                # Create event
+                                severity = "low"
+                                event_type = "ContractDeploy:Safe"
+                                
+                                if threat_info:
+                                    if threat_info["threat_level"] in ["critical", "high"]:
+                                        severity = "critical"
+                                        event_type = f"ContractDeploy:{threat_info['category']}"
+                                        print(f"\n🚨 MALICIOUS CONTRACT DETECTED!")
+                                        print(f"   Chain: {self.chain_id}")
+                                        print(f"   Contract: {contract_address}")
+                                        print(f"   Threat: {threat_info['category']}")
+                                        print(f"   Confidence: {threat_info['confidence']:.0%}")
+                                    elif threat_info["threat_level"] == "medium":
+                                        severity = "medium"
+                                        event_type = f"ContractDeploy:Suspicious"
+                                
+                                event = LiveEvent(
+                                    id=f"evt-contract-{uuid.uuid4().hex[:12]}",
+                                    chain=self.chain_id,
+                                    event_type=event_type,
+                                    tx_hash=tx.hash.hex(),
+                                    block=to_block,
+                                    contract=contract_address,
+                                    severity=severity,
+                                    data={
+                                        "type": "contract_deployment",
+                                        "deployer": tx["from"],
+                                        "bytecode_size": len(bytecode_hex) // 2,
+                                        "threat_info": threat_info,
+                                        "chain_type": "evm",
+                                    }
+                                )
+                                events.append(event)
+                                
+                    except Exception as e:
+                        pass
+                        
+        except Exception as e:
+            pass
+        
+        return events
+    
+    def _analyze_contract(
+        self, 
+        bytecode: str, 
+        address: str, 
+        tx_hash: str,
+        deployer: str,
+        block: int,
+        timestamp
+    ) -> dict:
+        """Analyze contract bytecode with ML classifier."""
+        import hashlib
+        from datetime import datetime
+        from src.telemetry.contract_alerts import (
+            ContractThreatAlert, ThreatLevel, AlertStatus, contract_alert_store
+        )
+        
+        if not self._classifier:
+            return None
+        
+        try:
+            result = self._classifier.classify(bytecode, address)
+            
+            # Only create alert if not safe
+            if result.threat_category.value != "safe":
+                # Map to threat level
+                threat_level = ThreatLevel.SAFE
+                if result.confidence > 0.8:
+                    threat_level = ThreatLevel.CRITICAL
+                elif result.confidence > 0.6:
+                    threat_level = ThreatLevel.HIGH
+                elif result.confidence > 0.4:
+                    threat_level = ThreatLevel.MEDIUM
+                else:
+                    threat_level = ThreatLevel.LOW
+                
+                # Create alert
+                alert = ContractThreatAlert(
+                    chain_id=self.chain_id,
+                    contract_address=address,
+                    deployer_address=deployer,
+                    tx_hash=tx_hash,
+                    block_number=block,
+                    timestamp=datetime.fromtimestamp(timestamp) if isinstance(timestamp, int) else datetime.utcnow(),
+                    threat_category=result.threat_category.value,
+                    threat_level=threat_level,
+                    confidence=result.confidence,
+                    risk_score=result.risk_score,
+                    risk_factors=result.risk_factors,
+                    similar_exploits=result.similar_exploits,
+                    recommendation=result.recommendation,
+                    bytecode_size=len(bytecode) // 2,
+                    bytecode_hash=hashlib.sha256(bytecode.encode()).hexdigest()[:16],
+                    status=AlertStatus.ACTIVE
+                )
+                
+                contract_alert_store.add_alert(alert)
+                
+                return {
+                    "category": result.threat_category.value,
+                    "threat_level": threat_level.value,
+                    "confidence": result.confidence,
+                    "risk_score": result.risk_score,
+                    "risk_factors": result.risk_factors,
+                    "recommendation": result.recommendation,
+                    "alert_id": alert.alert_id
+                }
+            
+            return {
+                "category": "safe",
+                "threat_level": "safe",
+                "confidence": result.confidence,
+                "risk_score": result.risk_score,
+                "risk_factors": [],
+                "recommendation": "Contract appears safe"
+            }
+            
+        except Exception as e:
+            return None
 
 
 class CosmosMonitor:
