@@ -27,7 +27,7 @@ import structlog
 import aiohttp
 
 from .base import ChainListener, ListenerConfig
-from ..models.events import SecurityEvent, EventType, EventSeverity
+from ..models.events import SecurityEvent, EventType, Severity
 
 logger = structlog.get_logger(__name__)
 
@@ -309,7 +309,7 @@ class NearListener(ChainListener):
                     event_id=f"near_{tx_hash}_bridge_call",
                     chain_id=self.config.chain_id,
                     event_type=EventType.BRIDGE_CALL,
-                    severity=EventSeverity.MEDIUM,
+                    severity=Severity.MEDIUM,
                     timestamp=datetime.now(timezone.utc),
                     transaction_hash=tx_hash,
                     block_number=height,
@@ -332,7 +332,7 @@ class NearListener(ChainListener):
                     event_id=f"near_{tx_hash}_suspicious",
                     chain_id=self.config.chain_id,
                     event_type=EventType.SUSPICIOUS_CALL,
-                    severity=EventSeverity.HIGH,
+                    severity=Severity.HIGH,
                     timestamp=datetime.now(timezone.utc),
                     transaction_hash=tx_hash,
                     block_number=height,
@@ -359,7 +359,7 @@ class NearListener(ChainListener):
                     event_id=f"near_{tx_hash}_key_{key_action.lower()}",
                     chain_id=self.config.chain_id,
                     event_type=EventType.ACCESS_CONTROL_CHANGE,
-                    severity=EventSeverity.CRITICAL,
+                    severity=Severity.CRITICAL,
                     timestamp=datetime.now(timezone.utc),
                     transaction_hash=tx_hash,
                     block_number=height,
@@ -382,7 +382,7 @@ class NearListener(ChainListener):
                 event_id=f"near_{tx_hash}_deploy",
                 chain_id=self.config.chain_id,
                 event_type=EventType.CONTRACT_DEPLOYED,
-                severity=EventSeverity.MEDIUM,
+                severity=Severity.MEDIUM,
                 timestamp=datetime.now(timezone.utc),
                 transaction_hash=tx_hash,
                 block_number=height,
@@ -422,7 +422,7 @@ class NearListener(ChainListener):
                         event_id=f"near_{tx_hash}_{receipt.get('id', '')}",
                         chain_id=self.config.chain_id,
                         event_type=EventType.BRIDGE_EVENT,
-                        severity=EventSeverity.LOW,
+                        severity=Severity.LOW,
                         timestamp=datetime.now(timezone.utc),
                         transaction_hash=tx_hash,
                         block_number=height,
@@ -437,21 +437,21 @@ class NearListener(ChainListener):
                     
         return events
         
-    def _calculate_severity(self, amount_near: float, is_bridge: bool) -> EventSeverity:
+    def _calculate_severity(self, amount_near: float, is_bridge: bool) -> Severity:
         """Calculate severity based on amount and context"""
         if is_bridge:
             if amount_near > 1_000_000:
-                return EventSeverity.CRITICAL
+                return Severity.CRITICAL
             elif amount_near > 100_000:
-                return EventSeverity.HIGH
+                return Severity.HIGH
             elif amount_near > 10_000:
-                return EventSeverity.MEDIUM
+                return Severity.MEDIUM
         else:
             if amount_near > 10_000_000:
-                return EventSeverity.CRITICAL
+                return Severity.CRITICAL
             elif amount_near > 1_000_000:
-                return EventSeverity.HIGH
-        return EventSeverity.LOW
+                return Severity.HIGH
+        return Severity.LOW
         
     async def get_account(self, account_id: str) -> Optional[Dict]:
         """Get account details"""

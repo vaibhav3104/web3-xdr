@@ -25,7 +25,7 @@ import structlog
 import aiohttp
 
 from .base import ChainListener, ListenerConfig
-from ..models.events import SecurityEvent, EventType, EventSeverity
+from ..models.events import SecurityEvent, EventType, Severity
 
 logger = structlog.get_logger(__name__)
 
@@ -260,7 +260,7 @@ class AptosListener(ChainListener):
                     event_id=f"aptos_{tx_hash}_suspicious",
                     chain_id=self.config.chain_id,
                     event_type=EventType.SUSPICIOUS_CALL,
-                    severity=EventSeverity.HIGH,
+                    severity=Severity.HIGH,
                     timestamp=datetime.now(timezone.utc),
                     transaction_hash=tx_hash,
                     block_number=int(version),
@@ -288,7 +288,7 @@ class AptosListener(ChainListener):
                     event_id=f"aptos_{tx_hash}_{event.get('sequence_number', 0)}",
                     chain_id=self.config.chain_id,
                     event_type=EventType.TOKEN_TRANSFER,
-                    severity=EventSeverity.LOW,
+                    severity=Severity.LOW,
                     timestamp=datetime.now(timezone.utc),
                     transaction_hash=tx_hash,
                     block_number=int(version),
@@ -363,7 +363,7 @@ class AptosListener(ChainListener):
                             event_id=f"sui_{digest}",
                             chain_id=self.config.chain_id,
                             event_type=EventType.BRIDGE_CALL,
-                            severity=EventSeverity.MEDIUM,
+                            severity=Severity.MEDIUM,
                             timestamp=datetime.now(timezone.utc),
                             transaction_hash=digest,
                             block_number=int(checkpoint) if checkpoint else 0,
@@ -388,7 +388,7 @@ class AptosListener(ChainListener):
                     event_id=f"sui_{digest}_{event.get('id', {}).get('eventSeq', 0)}",
                     chain_id=self.config.chain_id,
                     event_type=EventType.TOKEN_TRANSFER,
-                    severity=EventSeverity.LOW,
+                    severity=Severity.LOW,
                     timestamp=datetime.now(timezone.utc),
                     transaction_hash=digest,
                     block_number=int(checkpoint) if checkpoint else 0,
@@ -414,15 +414,15 @@ class AptosListener(ChainListener):
                     continue
         return 0
         
-    def _calculate_severity(self, value: float) -> EventSeverity:
+    def _calculate_severity(self, value: float) -> Severity:
         """Calculate severity based on value"""
         if value > 10_000_000:
-            return EventSeverity.CRITICAL
+            return Severity.CRITICAL
         elif value > 1_000_000:
-            return EventSeverity.HIGH
+            return Severity.HIGH
         elif value > 100_000:
-            return EventSeverity.MEDIUM
-        return EventSeverity.LOW
+            return Severity.MEDIUM
+        return Severity.LOW
         
     async def get_account_resources(self, address: str) -> Optional[List[Dict]]:
         """Get account resources (for investigation)"""

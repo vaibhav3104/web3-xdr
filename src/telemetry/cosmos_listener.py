@@ -32,7 +32,7 @@ from websockets import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
 from .base import ChainListener, ListenerConfig
-from ..models.events import SecurityEvent, EventType, EventSeverity
+from ..models.events import SecurityEvent, EventType, Severity
 
 logger = structlog.get_logger(__name__)
 
@@ -235,13 +235,13 @@ class CosmosListener(ChainListener):
             
         # Determine severity based on amount
         if amount_float > 10_000_000:  # $10M+
-            severity = EventSeverity.CRITICAL
+            severity = Severity.CRITICAL
         elif amount_float > 1_000_000:  # $1M+
-            severity = EventSeverity.HIGH
+            severity = Severity.HIGH
         elif amount_float > 100_000:  # $100K+
-            severity = EventSeverity.MEDIUM
+            severity = Severity.MEDIUM
         else:
-            severity = EventSeverity.LOW
+            severity = Severity.LOW
             
         return SecurityEvent(
             event_id=f"cosmos_{tx_hash}_{event_type}",
@@ -297,7 +297,7 @@ class CosmosListener(ChainListener):
             event_id=f"cosmos_{tx_hash}_transfer",
             chain_id=self.config.chain_id,
             event_type=EventType.LARGE_TRANSFER,
-            severity=EventSeverity.MEDIUM,
+            severity=Severity.MEDIUM,
             timestamp=datetime.now(timezone.utc),
             transaction_hash=tx_hash,
             block_number=height,
@@ -341,7 +341,7 @@ class CosmosListener(ChainListener):
             event_id=f"cosmos_{tx_hash}_bridge",
             chain_id=self.config.chain_id,
             event_type=EventType.BRIDGE_CALL,
-            severity=EventSeverity.MEDIUM,
+            severity=Severity.MEDIUM,
             timestamp=datetime.now(timezone.utc),
             transaction_hash=tx_hash,
             block_number=height,
