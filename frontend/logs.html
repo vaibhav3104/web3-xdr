@@ -646,7 +646,7 @@
     <nav class="nav">
         <a href="index.html" class="nav-brand">
             <span>🛡️</span>
-            <span>Sentinel3</span>
+            <span>Sentinel3 XDR</span>
         </a>
         <div class="nav-links">
             <a href="index.html">Dashboard</a>
@@ -740,6 +740,7 @@
             <!-- Quick Time Buttons -->
             <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
                 <div class="quick-time-btns">
+                    <button class="quick-time-btn" onclick="setTimeRange('5m')">Last 5m</button>
                     <button class="quick-time-btn active" onclick="setTimeRange('15m')">Last 15m</button>
                     <button class="quick-time-btn" onclick="setTimeRange('1h')">Last 1h</button>
                     <button class="quick-time-btn" onclick="setTimeRange('6h')">Last 6h</button>
@@ -879,6 +880,7 @@
             let start;
 
             switch(range) {
+                case '5m': start = new Date(now.getTime() - 5 * 60 * 1000); break;
                 case '15m': start = new Date(now.getTime() - 15 * 60 * 1000); break;
                 case '1h': start = new Date(now.getTime() - 60 * 60 * 1000); break;
                 case '6h': start = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
