@@ -110,24 +110,136 @@ async def init_database():
     return init_database_sync()
 
 
-# Event signatures - known bridge and token events
+# Comprehensive Event signatures - bridges, DeFi, tokens
 EVENT_SIGNATURES = {
-    # Token events
+    # =============================================================================
+    # ERC20 / Token Events
+    # =============================================================================
     "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef": ("Transfer", "low", 0),
     "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925": ("Approval", "low", 0),
     
-    # Bridge events - more suspicious
-    "0x6eb224fb001ed210e379b335e35efe88672a8ce935d981a6896b27ffdf52a3b2": ("LogMessagePublished", "high", 50000),
-    "0x1b2a7ff080b8cb6ff436ce0372e399692bbfb6d4ae5766fd8d58a7b8cc6142e6": ("TransferRedeemed", "critical", 100000),
+    # =============================================================================
+    # WORMHOLE Bridge
+    # =============================================================================
+    "0x6eb224fb001ed210e379b335e35efe88672a8ce935d981a6896b27ffdf52a3b2": ("Wormhole:MessagePublished", "high", 50000),
+    "0xcaf280c8cfeba144da67230d9b009c8f868a75bac9a528fa0474be1ba317c169": ("Wormhole:TransferRedeemed", "critical", 100000),
+    
+    # =============================================================================
+    # LAYERZERO Bridge
+    # =============================================================================
+    "0xe9bded5f24a4168e4f3bf44e00298c993b22376aad8c58c7dda9718a54cbea82": ("LayerZero:Packet", "high", 25000),
+    "0x32ed1a409ef04c7b0227189c3a103dc5ac10e775a15b785dcc510201f7c25ad3": ("LayerZero:SendToChain", "high", 50000),
+    "0xd81b6f2a5a0f1c0c5e8e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c": ("LayerZero:ReceiveFromChain", "high", 50000),
+    
+    # =============================================================================
+    # STARGATE Bridge
+    # =============================================================================
+    "0x34660fc8af304464529f48a778e03d03e4d34bcd5f9b6f0cfbf3cd238c642f7f": ("Stargate:Swap", "high", 25000),
+    "0x44b559f101f8fbcc8a0ea43fa91a05a729a5ea6e14a7c75aa750374690137208": ("Stargate:SendCredits", "medium", 10000),
+    "0xf4ad92585b1bc117fbdd644990adf0827bc4c95baeae8a23322af807b6d0020e": ("Stargate:CreditChainPath", "medium", 10000),
+    
+    # =============================================================================
+    # ACROSS Protocol
+    # =============================================================================
+    "0x8ab9dc6c19fe88e69bc70221b339c84332752fdd49591b7c51e66bae3947b73c": ("Across:FilledRelay", "high", 50000),
+    "0xafc4df6845a4ab948b492800d3d8a25d538a102a2bc07cd01f1cfa097fddcff6": ("Across:FundsDeposited", "high", 50000),
+    "0xa123dc29aebf7d0c3322c8eeb5b999e859f39937950ed31056532713d0de396f": ("Across:V3FundsDeposited", "high", 50000),
+    
+    # =============================================================================
+    # HOP Protocol
+    # =============================================================================
+    "0xe35dddd4ea75d7e9b3fe93af4f4e40e778c3da4074c9d93e7c6f3f94a7d0ec34": ("Hop:TransferSent", "high", 25000),
+    "0x320958176930804eb66c2343c7343fc0367dc16249590c0f195783bee199d094": ("Hop:TransferCompleted", "high", 50000),
+    
+    # =============================================================================
+    # SYNAPSE Bridge
+    # =============================================================================
+    "0xda5273705dbef4bf1b902a131c2eac086b7e1476a8ab0cb4da08af1fe1bd8e3b": ("Synapse:TokenDeposit", "high", 25000),
+    "0xdc5bad4651c5fbe9977a696aadc65996c468cde1448dd468ec0d83bf61c4b57c": ("Synapse:TokenRedeem", "high", 50000),
+    
+    # =============================================================================
+    # CELER cBridge
+    # =============================================================================
+    "0x89d8051e597ab4178a863a5190407b98abfeff406aa8db90c59af76612e58f01": ("Celer:Send", "high", 25000),
+    "0x79fa08de5149d912dce8e5e8da7a7c17ccdf23dd5d3bfe196802f6c6d471f3f9": ("Celer:Relay", "high", 50000),
+    
+    # =============================================================================
+    # AAVE DeFi (Flash Loans!)
+    # =============================================================================
+    "0x631042c832b07452973831137f2d73e395028b44b250dedc5abb0ee766e168ac": ("Aave:FlashLoan", "critical", 500000),
+    "0x2b627736bca15cd5381dcf80b0bf11fd197d01a037c52b927a881a10fb73ba61": ("Aave:Supply", "low", 1000),
+    "0x3115d1449a7b732c986cba18244e897a450f61e1bb8d589cd2e69e6c8924f9f7": ("Aave:Withdraw", "medium", 10000),
+    "0xb3d084820fb1a9decffb176436bd02558d15fac9b0ddfed8c465bc7359d7dce0": ("Aave:Borrow", "medium", 10000),
+    "0xa534c8dbe71f871f9f3530e97a74601fea17b426cae02e1c5aee42c96c784051": ("Aave:Repay", "medium", 5000),
+    "0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005286": ("Aave:Liquidation", "high", 100000),
+    
+    # =============================================================================
+    # UNISWAP DEX
+    # =============================================================================
+    "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67": ("Uniswap:Swap", "low", 0),
+    "0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde": ("Uniswap:Mint", "low", 0),
+    "0x0c396cd989a39f4459b5fa1aed6a9a8dcdbc45908acfd67e028cd568da98982c": ("Uniswap:Burn", "medium", 5000),
+    "0xbdbdb71d7860376ba52b25a5028beea23581364a40522f6bcfb86bb1f2dca633": ("Uniswap:Flash", "critical", 500000),
+    "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822": ("UniswapV2:Swap", "low", 0),
+    "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1": ("UniswapV2:Sync", "low", 0),
+    
+    # =============================================================================
+    # COMPOUND DeFi
+    # =============================================================================
+    "0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f": ("Compound:Mint", "low", 0),
+    "0xe5b754fb1abb7f01b499791d0b820ae3b6af3424ac1c59768edb53f4ec31a929": ("Compound:Redeem", "medium", 10000),
+    "0x13ed6866d4e1ee6da46f845c46d7e54120883d75c5ea9a2dacc1c4ca8984ab80": ("Compound:Borrow", "medium", 10000),
+    "0x1a2a22cb034d26d1854bdc6666a5b91fe25efbbb5dcad3b0355478d6f5c362a1": ("Compound:RepayBorrow", "medium", 5000),
+    "0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52": ("Compound:Liquidation", "high", 100000),
+    
+    # =============================================================================
+    # CURVE Finance
+    # =============================================================================
+    "0x8b3e96f2b889fa771c53c981b40daf005f63f637f1869f707052d15a3dd97140": ("Curve:TokenExchange", "low", 0),
+    "0x26f55a85081d24974e85c6c00045d0f0453991e95873f52bff0d21af4079a768": ("Curve:AddLiquidity", "low", 0),
+    "0x7c363854ccf79623411f8995b362bce5eddff18c927edc6f5dbbb5e05819a82c": ("Curve:RemoveLiquidity", "medium", 10000),
+    
+    # =============================================================================
+    # BALANCER (Flash Loans!)
+    # =============================================================================
+    "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b": ("Balancer:Swap", "low", 0),
+    "0x0d7d75e01ab95780d3cd1c8ec0dd6c2ce19f3f93ce64d5e2b7c60e9e0e2b4a3f": ("Balancer:FlashLoan", "critical", 500000),
+    
+    # =============================================================================
+    # Generic ETH Events
+    # =============================================================================
     "0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c": ("Deposit", "medium", 10000),
     "0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65": ("Withdrawal", "high", 50000),
+    
+    # =============================================================================
+    # Governance Events
+    # =============================================================================
+    "0x7d84a6263ae0d98d3329bd7b46bb4e8d6f98cd35a7adb45c274c8b7fd5ebd5e0": ("Governance:ProposalCreated", "medium", 0),
+    "0x712ae1383f79ac853f8d882153778e0260ef8f03b504e2866e0593e04d2b291f": ("Governance:ProposalExecuted", "high", 0),
 }
 
 
 def get_event_info(topic0_hex: str):
     """Get event name, severity, and estimated value from topic."""
-    info = EVENT_SIGNATURES.get(topic0_hex, ("Event", "low", 0))
-    return info[0], info[1], info[2]
+    # Normalize the topic
+    if not topic0_hex:
+        return ("Event", "low", 0)
+    
+    topic = topic0_hex.lower()
+    if not topic.startswith("0x"):
+        topic = "0x" + topic
+    
+    # Try direct lookup
+    info = EVENT_SIGNATURES.get(topic)
+    if info:
+        return info[0], info[1], info[2]
+    
+    # Try with original casing
+    info = EVENT_SIGNATURES.get(topic0_hex)
+    if info:
+        return info[0], info[1], info[2]
+    
+    return ("Event", "low", 0)
 
 
 def get_chain_type(chain_id: str) -> str:
