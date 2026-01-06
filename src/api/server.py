@@ -1,5 +1,5 @@
 """
-FastAPI Server for Web3 XDR Dashboard API.
+FastAPI Server for Sentinel3 XDR Dashboard API.
 """
 
 import os
@@ -24,6 +24,22 @@ from .parser_routes import router as parser_router
 from .alert_routes import router as alert_router
 from .contract_routes import router as contract_router
 
+# Customer management and API keys
+try:
+    from .customer_routes import router as customer_router
+    CUSTOMER_ROUTES_AVAILABLE = True
+except ImportError:
+    CUSTOMER_ROUTES_AVAILABLE = False
+    customer_router = None
+
+# Cross-chain correlation routes
+try:
+    from .cross_chain_routes import router as cross_chain_router
+    CROSS_CHAIN_ROUTES_AVAILABLE = True
+except ImportError:
+    CROSS_CHAIN_ROUTES_AVAILABLE = False
+    cross_chain_router = None
+
 # ML/AI contract analysis routes
 try:
     from .ml_routes import router as ml_router
@@ -39,8 +55,8 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__fi
 
 
 def create_app(
-    title: str = "Web3 XDR API",
-    version: str = "1.0.0",
+    title: str = "Sentinel3 API",
+    version: str = "2.0.0",
     cors_origins: Optional[list] = None
 ) -> FastAPI:
     """
@@ -48,7 +64,7 @@ def create_app(
     """
     app = FastAPI(
         title=title,
-        description="Explainable Web3 XDR - Cross-Chain Bridge Security",
+        description="Sentinel3 - Web3 Extended Detection & Response for Bridges and DeFi",
         version=version,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
@@ -100,10 +116,18 @@ def create_app(
     # Include contract deployment detection routes
     app.include_router(contract_router, prefix="/api")
     
+    # Include customer management and API key routes
+    if CUSTOMER_ROUTES_AVAILABLE and customer_router:
+        app.include_router(customer_router, prefix="/api")
+    
+    # Include cross-chain correlation routes
+    if CROSS_CHAIN_ROUTES_AVAILABLE and cross_chain_router:
+        app.include_router(cross_chain_router, prefix="/api")
+    
     # Health check
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "service": "web3-xdr"}
+        return {"status": "healthy", "service": "sentinel3"}
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")

@@ -27,6 +27,19 @@ warnings.filterwarnings("ignore")
 from src.shared_state import monitor_state, LiveEvent, LiveIncident
 from src.rules import RuleEngine, load_rules
 
+# Cross-chain correlation
+try:
+    from src.correlation.cross_chain import (
+        cross_chain_correlator,
+        BridgeEventParser,
+        CrossChainEvent,
+        CrossChainEventType
+    )
+    CROSS_CHAIN_AVAILABLE = True
+except ImportError:
+    CROSS_CHAIN_AVAILABLE = False
+    cross_chain_correlator = None
+
 # Check if PostgreSQL is enabled
 POSTGRES_ENABLED = os.getenv("POSTGRES_ENABLED", "true").lower() == "true"
 
@@ -1281,6 +1294,16 @@ def monitor():
     rule_monitor = YAMLRuleMonitor()
     print("-" * 70)
     
+    # Initialize cross-chain correlation
+    if CROSS_CHAIN_AVAILABLE:
+        print()
+        print("🔗 Cross-Chain Correlation: ENABLED")
+        print("   Monitoring for Lock/Mint parity violations")
+        print("   Bridge protocols: Wormhole, LayerZero, Stargate, Across, Hop, Synapse, Celer")
+    else:
+        print()
+        print("⚠️  Cross-Chain Correlation: Not available")
+    
     # Start dashboard
     print()
     print("🖥️  Starting Dashboard...")
@@ -1334,6 +1357,48 @@ def monitor():
                         incidents = rule_monitor.evaluate_event(event)
                         for incident in incidents:
                             monitor_state.add_incident(incident)
+                        
+                        # Cross-chain correlation for bridge events
+                        if CROSS_CHAIN_AVAILABLE and cross_chain_correlator:
+                            try:
+                                cc_event = BridgeEventParser.parse_event(
+                                    event_data=event.raw_data,
+                                    chain_id=event.chain,
+                                    block_timestamp=datetime.fromisoformat(event.timestamp.replace('Z', '+00:00')) if isinstance(event.timestamp, str) else event.timestamp
+                                )
+                                if cc_event:
+                                    # Run async correlation in sync context
+                                    import asyncio
+                                    try:
+                                        loop = asyncio.get_event_loop()
+                                    except RuntimeError:
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                    
+                                    violation = loop.run_until_complete(
+                                        cross_chain_correlator.process_event(cc_event)
+                                    )
+                                    
+                                    if violation:
+                                        # Create incident from violation
+                                        cc_incident = LiveIncident(
+                                            id=f"cc-{violation.id}",
+                                            severity="critical" if violation.severity == "critical" else "high",
+                                            type=f"Cross-Chain:{violation.violation_type.value}",
+                                            title=f"Cross-Chain Violation: {violation.violation_type.value}",
+                                            description=violation.description,
+                                            timestamp=datetime.now().isoformat(),
+                                            chain=f"{violation.source_chain} → {violation.dest_chain}",
+                                            bridge=violation.bridge_id,
+                                            status="active",
+                                            events=[event.id] if hasattr(event, 'id') else [],
+                                            affected_addresses=[],
+                                            estimated_loss=violation.estimated_loss_usd
+                                        )
+                                        monitor_state.add_incident(cc_incident)
+                                        print(f"🚨 CROSS-CHAIN VIOLATION: {violation.violation_type.value} on {violation.bridge_id}")
+                            except Exception as cc_error:
+                                pass  # Silently continue if correlation fails
                             yaml_incidents += 1
                         
                         # Log high-severity events
