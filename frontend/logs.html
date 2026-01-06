@@ -728,7 +728,7 @@
                 </div>
 
                 <div class="filter-group">
-                    <span class="filter-label">Time Range:</span>
+                    <span class="filter-label">Time Range: <span id="timezoneLabel" style="color: var(--accent-cyan); font-size: 0.75rem;"></span></span>
                     <div class="time-inputs">
                         <input type="datetime-local" class="filter-input time-input" id="startTime">
                         <span style="color: var(--text-muted);">to</span>
@@ -843,6 +843,10 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            // Show timezone
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            document.getElementById('timezoneLabel').textContent = `(${tz})`;
+            
             setDefaultTimeRange();
             loadEvents();
             setupAutoRefresh();
@@ -1206,14 +1210,22 @@
         // Helper functions
         function formatTimestamp(ts) {
             const date = new Date(ts);
-            return date.toLocaleString('en-US', {
+            // Show in local timezone with timezone indicator
+            const localTime = date.toLocaleString('en-US', {
                 month: 'short',
                 day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
-                hour12: false
+                hour12: false,
+                timeZoneName: 'short'
             });
+            return localTime;
+        }
+        
+        // Get timezone name for display
+        function getTimezone() {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone;
         }
 
         function truncateAddress(addr) {
