@@ -91,7 +91,7 @@
                 <span class="text-2xl">🎭</span>
                 <div>
                     <h2 class="font-semibold text-purple-400">Attack Simulation Mode</h2>
-                    <p class="text-sm text-gray-400">Trigger test attacks to see how the XDR detects and responds to threats. All attacks are simulated - no real transactions.</p>
+                    <p class="text-sm text-gray-400">Trigger test attacks to see how Sentinel3 detects and responds to threats. All attacks are simulated - no real transactions.</p>
                 </div>
             </div>
         </div>
@@ -347,10 +347,10 @@
                     this.addLog('attack', 'Phase 2: Submitting to blockchain...');
                     
                     await this.sleep(200);
-                    this.addLog('warning', 'XDR: Anomaly detected in transaction pattern');
+                    this.addLog('warning', 'Sentinel3: Anomaly detected in transaction pattern');
                     
                     await this.sleep(100);
-                    this.addLog('warning', 'XDR: Checking economic invariants...');
+                    this.addLog('warning', 'Sentinel3: Checking economic invariants...');
                     
                     await this.sleep(150);
                     this.addLog('detected', `🚨 ALERT: ${this.selectedAttack.name} DETECTED!`);
