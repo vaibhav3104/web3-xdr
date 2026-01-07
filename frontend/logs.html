@@ -146,6 +146,180 @@
             color: var(--text-muted);
         }
 
+        /* Query Help Button */
+        .query-help-btn {
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            color: var(--accent-cyan);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .query-help-btn:hover {
+            background: var(--bg-secondary);
+        }
+
+        /* Query Syntax Help Modal */
+        .query-help-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+
+        .query-help-modal.show {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .query-help-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            max-width: 900px;
+            width: 100%;
+            margin: 2rem auto;
+        }
+
+        .query-help-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .query-help-header h2 {
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .query-help-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        .query-help-close:hover {
+            color: var(--text-primary);
+        }
+
+        .query-help-body {
+            padding: 1.5rem;
+        }
+
+        .query-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .query-section h3 {
+            font-size: 1rem;
+            color: var(--accent-cyan);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .query-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 0.5rem;
+        }
+
+        .query-item {
+            display: contents;
+        }
+
+        .query-syntax {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-purple);
+            background: var(--bg-input);
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+        }
+
+        .query-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            padding: 0.5rem 0;
+        }
+
+        .query-examples {
+            background: var(--bg-input);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .query-example {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .query-example:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .query-example-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            background: var(--bg-primary);
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .query-example-code:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-cyan);
+        }
+
+        .query-example-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Search Mode Indicator */
+        .search-mode {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        .search-mode .mode-badge {
+            background: var(--accent-purple);
+            color: white;
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
         /* Filters Row */
         .filters-row {
             display: flex;
@@ -657,6 +831,117 @@
         </div>
     </nav>
 
+    <!-- Lucene Query Help Modal -->
+    <div class="query-help-modal" id="queryHelpModal" onclick="hideQueryHelp(event)">
+        <div class="query-help-content" onclick="event.stopPropagation()">
+            <div class="query-help-header">
+                <h2>📖 Lucene Query Syntax</h2>
+                <button class="query-help-close" onclick="hideQueryHelp()">&times;</button>
+            </div>
+            <div class="query-help-body">
+                <div class="query-section">
+                    <h3>🔤 Boolean Operators</h3>
+                    <div class="query-grid">
+                        <div class="query-syntax">AND / &&</div>
+                        <div class="query-desc">Both conditions must match</div>
+                        <div class="query-syntax">OR / ||</div>
+                        <div class="query-desc">Either condition must match</div>
+                        <div class="query-syntax">NOT / !</div>
+                        <div class="query-desc">Negates the condition</div>
+                    </div>
+                </div>
+
+                <div class="query-section">
+                    <h3>🎯 Field Queries</h3>
+                    <div class="query-grid">
+                        <div class="query-syntax">field:value</div>
+                        <div class="query-desc">Exact match on field</div>
+                        <div class="query-syntax">field:"phrase"</div>
+                        <div class="query-desc">Phrase match (contains)</div>
+                        <div class="query-syntax">field:val*</div>
+                        <div class="query-desc">Wildcard (* = any chars, ? = single char)</div>
+                        <div class="query-syntax">field:/regex/</div>
+                        <div class="query-desc">Regular expression match</div>
+                    </div>
+                </div>
+
+                <div class="query-section">
+                    <h3>📊 Range Queries</h3>
+                    <div class="query-grid">
+                        <div class="query-syntax">[min TO max]</div>
+                        <div class="query-desc">Inclusive range (includes min and max)</div>
+                        <div class="query-syntax">{min TO max}</div>
+                        <div class="query-desc">Exclusive range (excludes min and max)</div>
+                        <div class="query-syntax">[min TO *]</div>
+                        <div class="query-desc">Greater than or equal to min</div>
+                        <div class="query-syntax">[* TO max]</div>
+                        <div class="query-desc">Less than or equal to max</div>
+                    </div>
+                </div>
+
+                <div class="query-section">
+                    <h3>📋 Field Aliases</h3>
+                    <div class="query-grid">
+                        <div class="query-syntax">chain</div>
+                        <div class="query-desc">chain_id (e.g., ethereum, polygon)</div>
+                        <div class="query-syntax">type</div>
+                        <div class="query-desc">event_type (e.g., Transfer, Deposit)</div>
+                        <div class="query-syntax">address</div>
+                        <div class="query-desc">contract_address, from_address, to_address</div>
+                        <div class="query-syntax">hash</div>
+                        <div class="query-desc">tx_hash, block_hash</div>
+                        <div class="query-syntax">amount</div>
+                        <div class="query-desc">amount, value fields</div>
+                        <div class="query-syntax">protocol</div>
+                        <div class="query-desc">protocol, bridge_id</div>
+                    </div>
+                </div>
+
+                <div class="query-section">
+                    <h3>✨ Examples (click to use)</h3>
+                    <div class="query-examples">
+                        <div class="query-example">
+                            <div class="query-example-code" onclick="useQueryExample('chain:ethereum AND severity:critical')">
+                                chain:ethereum AND severity:critical
+                            </div>
+                            <div class="query-example-desc">Critical events on Ethereum mainnet</div>
+                        </div>
+                        <div class="query-example">
+                            <div class="query-example-code" onclick="useQueryExample('event_type:Transfer AND amount:[1000 TO *]')">
+                                event_type:Transfer AND amount:[1000 TO *]
+                            </div>
+                            <div class="query-example-desc">Transfer events with amount >= 1000</div>
+                        </div>
+                        <div class="query-example">
+                            <div class="query-example-code" onclick="useQueryExample('(chain:ethereum OR chain:polygon) AND NOT severity:low')">
+                                (chain:ethereum OR chain:polygon) AND NOT severity:low
+                            </div>
+                            <div class="query-example-desc">Non-low severity events on Ethereum or Polygon</div>
+                        </div>
+                        <div class="query-example">
+                            <div class="query-example-code" onclick="useQueryExample('address:0x* AND type:Mint')">
+                                address:0x* AND type:Mint
+                            </div>
+                            <div class="query-example-desc">Mint events for any EVM address</div>
+                        </div>
+                        <div class="query-example">
+                            <div class="query-example-code" onclick="useQueryExample('protocol:&quot;Wormhole&quot; AND severity:[high TO critical]')">
+                                protocol:"Wormhole" AND severity:[high TO critical]
+                            </div>
+                            <div class="query-example-desc">High to critical Wormhole bridge events</div>
+                        </div>
+                        <div class="query-example">
+                            <div class="query-example-code" onclick="useQueryExample('chain:arbitrum AND block:[21000000 TO *]')">
+                                chain:arbitrum AND block:[21000000 TO *]
+                            </div>
+                            <div class="query-example-desc">Arbitrum events from block 21M onwards</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Search Section -->
         <div class="search-section">
@@ -668,12 +953,12 @@
                 </div>
             </div>
 
-            <!-- Search Bar -->
+            <!-- Search Bar with Lucene Support -->
             <div class="search-row">
                 <div class="search-input-wrapper">
                     <span class="search-icon">🔍</span>
                     <input type="text" class="search-input" id="searchQuery" 
-                           placeholder="Search logs... (e.g., event_type:Transfer chain:ethereum severity:high)">
+                           placeholder="Lucene query: chain:ethereum AND severity:critical AND event_type:Transfer">
                 </div>
                 <button class="btn btn-primary" onclick="searchLogs()">
                     Search
@@ -681,6 +966,14 @@
                 <button class="btn btn-secondary" onclick="clearSearch()">
                     Clear
                 </button>
+                <button class="query-help-btn" onclick="showQueryHelp()">
+                    ? Syntax Help
+                </button>
+            </div>
+            <div class="search-mode" id="searchMode">
+                <span>Query Mode:</span>
+                <span class="mode-badge" id="queryModeBadge">LUCENE</span>
+                <span id="queryModeDesc">Advanced field:value queries with AND/OR/NOT operators</span>
             </div>
 
             <!-- Filters -->
@@ -921,18 +1214,52 @@
             updateRefresh();
         }
 
-        // Load events from API
+        // Load events from API with Lucene query support
         async function loadEvents() {
             const startTime = performance.now();
 
             try {
-                const response = await fetch(`${API_BASE}/api/events?limit=1000`);
+                // Build query params
+                const params = new URLSearchParams();
+                params.append('limit', '1000');
+                
+                // Get Lucene query
+                const luceneQuery = document.getElementById('searchQuery').value.trim();
+                if (luceneQuery) {
+                    params.append('query', luceneQuery);
+                    updateQueryMode('LUCENE', 'Server-side Lucene query execution');
+                } else {
+                    updateQueryMode('BASIC', 'Client-side filtering active');
+                }
+                
+                // Add basic filters if no Lucene query
+                const chainFilter = document.getElementById('chainFilter').value;
+                const severityFilter = document.getElementById('severityFilter').value;
+                const eventTypeFilter = document.getElementById('eventTypeFilter').value;
+                const startTimeVal = document.getElementById('startTime').value;
+                const endTimeVal = document.getElementById('endTime').value;
+                
+                if (!luceneQuery) {
+                    if (chainFilter) params.append('chain_id', chainFilter);
+                    if (severityFilter) params.append('severity', severityFilter);
+                    if (eventTypeFilter) params.append('event_type', eventTypeFilter);
+                }
+                
+                if (startTimeVal) params.append('start_time', new Date(startTimeVal).toISOString());
+                if (endTimeVal) params.append('end_time', new Date(endTimeVal).toISOString());
+                
+                const response = await fetch(`${API_BASE}/api/events?${params.toString()}`);
                 const data = await response.json();
 
                 allEvents = data.events || [];
                 
                 const queryTime = Math.round(performance.now() - startTime);
                 document.getElementById('queryTime').textContent = queryTime;
+                
+                // Show query used if available
+                if (data.query_used) {
+                    console.log('Query executed:', data.query_used);
+                }
 
                 applyFilters();
                 
@@ -952,10 +1279,46 @@
             }
         }
 
-        // Search logs
+        // Update query mode indicator
+        function updateQueryMode(mode, desc) {
+            const badge = document.getElementById('queryModeBadge');
+            const descEl = document.getElementById('queryModeDesc');
+            
+            badge.textContent = mode;
+            descEl.textContent = desc;
+            
+            if (mode === 'LUCENE') {
+                badge.style.background = 'var(--accent-purple)';
+            } else {
+                badge.style.background = 'var(--accent-blue)';
+            }
+        }
+
+        // Search logs with Lucene query
         function searchLogs() {
             currentPage = 1;
-            applyFilters();
+            loadEvents(); // Reload from server with query
+        }
+        
+        // Show query help modal
+        function showQueryHelp() {
+            document.getElementById('queryHelpModal').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Hide query help modal
+        function hideQueryHelp(event) {
+            if (!event || event.target === event.currentTarget) {
+                document.getElementById('queryHelpModal').classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        }
+        
+        // Use query example
+        function useQueryExample(query) {
+            document.getElementById('searchQuery').value = query;
+            hideQueryHelp();
+            searchLogs();
         }
 
         // Clear search
@@ -969,49 +1332,26 @@
             applyFilters();
         }
 
-        // Apply filters
+        // Apply filters (client-side for basic filtering after Lucene query)
         function applyFilters() {
-            const query = document.getElementById('searchQuery').value.toLowerCase();
+            const luceneQuery = document.getElementById('searchQuery').value.trim();
             const chainFilter = document.getElementById('chainFilter').value;
             const severityFilter = document.getElementById('severityFilter').value;
             const eventTypeFilter = document.getElementById('eventTypeFilter').value;
             const startTime = new Date(document.getElementById('startTime').value);
             const endTime = new Date(document.getElementById('endTime').value);
 
+            // If Lucene query was used, server already filtered, just apply time and dropdown filters
             filteredEvents = allEvents.filter(event => {
-                // Time filter
+                // Time filter (always apply client-side for precision)
                 const eventTime = new Date(event.timestamp);
                 if (eventTime < startTime || eventTime > endTime) return false;
 
-                // Chain filter
-                if (chainFilter && event.chain !== chainFilter) return false;
-
-                // Severity filter
-                if (severityFilter && event.severity !== severityFilter) return false;
-
-                // Event type filter
-                if (eventTypeFilter && event.event_type !== eventTypeFilter) return false;
-
-                // Query search
-                if (query) {
-                    const searchableText = JSON.stringify(event).toLowerCase();
-                    
-                    // Handle field:value syntax
-                    if (query.includes(':')) {
-                        const parts = query.split(/\s+/);
-                        for (const part of parts) {
-                            if (part.includes(':')) {
-                                const [field, value] = part.split(':');
-                                if (event[field] && !event[field].toString().toLowerCase().includes(value)) {
-                                    return false;
-                                }
-                            } else if (!searchableText.includes(part)) {
-                                return false;
-                            }
-                        }
-                    } else if (!searchableText.includes(query)) {
-                        return false;
-                    }
+                // If no Lucene query, apply dropdown filters
+                if (!luceneQuery) {
+                    if (chainFilter && event.chain !== chainFilter) return false;
+                    if (severityFilter && event.severity !== severityFilter) return false;
+                    if (eventTypeFilter && event.event_type !== eventTypeFilter) return false;
                 }
 
                 return true;

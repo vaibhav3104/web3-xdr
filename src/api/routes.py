@@ -1,5 +1,5 @@
 """
-API Routes for Sentinel3 Dashboard.
+API Routes for Web3 XDR Dashboard.
 Connected to real-time monitor data.
 """
 
@@ -126,18 +126,29 @@ async def list_events(
     severity: Optional[str] = Query(None, description="Filter by severity"),
     start_time: Optional[str] = Query(None, description="Start time ISO format"),
     end_time: Optional[str] = Query(None, description="End time ISO format"),
-    search: Optional[str] = Query(None, description="Search query"),
+    search: Optional[str] = Query(None, description="Simple text search"),
+    query: Optional[str] = Query(None, description="Lucene query (e.g., chain:ethereum AND severity:critical)"),
     limit: int = Query(500, le=1000, description="Max results"),
 ):
     """
     List security events with full details for log explorer.
-    Supports filtering by chain, event type, severity, and time range.
+    
+    Supports:
+    - Basic filters: chain_id, event_type, severity, time range
+    - Simple text search: search parameter
+    - Advanced Lucene queries: query parameter
+    
+    Lucene Query Examples:
+    - chain:ethereum AND severity:critical
+    - event_type:Transfer AND amount:[1000 TO *]
+    - (chain:ethereum OR chain:polygon) AND NOT severity:info
     """
     from ..shared_state import monitor_state
+    from ..query.lucene_parser import execute_lucene_query
     
     events = monitor_state.get_events(limit=1000)
     
-    # Apply filters
+    # Apply basic filters first
     if chain_id:
         events = [e for e in events if e.chain == chain_id]
     
@@ -161,37 +172,72 @@ async def list_events(
         except:
             pass
     
-    if search:
+    # Convert events to dicts for Lucene query
+    event_dicts = [
+        {
+            "id": e.id,
+            "chain": e.chain,
+            "chain_id": e.chain,
+            "event_type": e.event_type,
+            "tx_hash": e.tx_hash,
+            "block": e.block,
+            "block_number": e.block,
+            "contract": e.contract,
+            "contract_address": e.contract,
+            "severity": e.severity,
+            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+            "data": e.data or {},
+            **(e.data or {})  # Flatten data fields for searching
+        }
+        for e in events
+    ]
+    
+    # Apply Lucene query if provided
+    if query and query.strip():
+        event_dicts = execute_lucene_query(query, event_dicts)
+    
+    # Fall back to simple text search
+    elif search:
         search_lower = search.lower()
-        events = [
-            e for e in events 
-            if search_lower in e.id.lower() 
-            or search_lower in e.chain.lower()
-            or search_lower in e.event_type.lower()
-            or search_lower in e.tx_hash.lower()
-            or search_lower in e.contract.lower()
+        event_dicts = [
+            e for e in event_dicts 
+            if any(
+                search_lower in str(v).lower() 
+                for v in e.values() 
+                if v is not None
+            )
         ]
     
-    events = events[:limit]
+    event_dicts = event_dicts[:limit]
     
     # Return full event details
     return {
-        "total": len(events),
+        "total": len(event_dicts),
+        "query_used": query if query else (f"text:{search}" if search else None),
         "events": [
             {
-                "id": e.id,
-                "chain": e.chain,
-                "event_type": e.event_type,
-                "tx_hash": e.tx_hash,
-                "block": e.block,
-                "contract": e.contract,
-                "severity": e.severity,
-                "timestamp": e.timestamp.isoformat(),
-                "data": e.data or {}
+                "id": e.get("id"),
+                "chain": e.get("chain"),
+                "event_type": e.get("event_type"),
+                "tx_hash": e.get("tx_hash"),
+                "block": e.get("block"),
+                "contract": e.get("contract"),
+                "severity": e.get("severity"),
+                "timestamp": e.get("timestamp"),
+                "data": e.get("data", {})
             }
-            for e in events
+            for e in event_dicts
         ]
     }
+
+
+@router.get("/events/query-help")
+async def get_query_help():
+    """
+    Get help documentation for Lucene query syntax.
+    """
+    from ..query.lucene_parser import get_query_syntax_help
+    return get_query_syntax_help()
 
 
 @router.get("/stats")
