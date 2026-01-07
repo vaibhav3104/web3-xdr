@@ -1438,39 +1438,9 @@ def monitor():
                 else:
                     print(f"   ❌ {chain_name} (EVM): Connection failed")
                     
-            elif chain_type == "cosmos" and async_loop:
-                try:
-                    monitor_obj = CosmosMonitor(chain_config)
-                    if async_loop.run_until_complete(monitor_obj.connect()):
-                        cosmos_monitors.append(monitor_obj)
-                        print(f"   ✅ {chain_name} (Cosmos): Height {monitor_obj.last_height:,}")
-                    else:
-                        print(f"   ❌ {chain_name} (Cosmos): Connection failed (check RPC)")
-                except Exception as cosmos_err:
-                    print(f"   ❌ {chain_name} (Cosmos): {str(cosmos_err)[:60]}")
-                    
-            elif chain_type in ["aptos", "sui"] and async_loop:
-                try:
-                    monitor_obj = AptosMonitor(chain_config, chain_type)
-                    if async_loop.run_until_complete(monitor_obj.connect()):
-                        aptos_monitors.append(monitor_obj)
-                        version_label = "Version" if chain_type == "aptos" else "Checkpoint"
-                        print(f"   ✅ {chain_name} ({chain_type.upper()}): {version_label} {monitor_obj.last_version:,}")
-                    else:
-                        print(f"   ❌ {chain_name} ({chain_type.upper()}): Connection failed (check RPC)")
-                except Exception as aptos_err:
-                    print(f"   ❌ {chain_name} ({chain_type.upper()}): {str(aptos_err)[:60]}")
-                    
-            elif chain_type == "near" and async_loop:
-                try:
-                    monitor_obj = NearMonitor(chain_config)
-                    if async_loop.run_until_complete(monitor_obj.connect()):
-                        near_monitors.append(monitor_obj)
-                        print(f"   ✅ {chain_name} (Near): Height {monitor_obj.last_height:,}")
-                    else:
-                        print(f"   ❌ {chain_name} (Near): Connection failed (check RPC)")
-                except Exception as near_err:
-                    print(f"   ❌ {chain_name} (Near): {str(near_err)[:60]}")
+            elif chain_type in ["cosmos", "aptos", "sui", "near"]:
+                # Non-EVM chains will be initialized lazily in background thread
+                print(f"   ⏳ {chain_name} ({chain_type.upper()}): Will connect in background...")
                     
         except Exception as e:
             print(f"   ❌ {chain_name}: {str(e)[:60]}")
@@ -1526,25 +1496,17 @@ def monitor():
     print()
     
     # Start async monitors in background thread
-    # If synchronous init failed, try async init for non-EVM chains
-    async_monitors = cosmos_monitors + aptos_monitors + near_monitors
+    async_monitors = []  # Will be populated by lazy init
     
-    # Collect unconnected non-EVM chain configs for lazy init
+    # Collect all non-EVM chain configs for lazy init
     non_evm_configs = []
     for chain_config in config.get("chains", []):
         chain_type = get_chain_type(chain_config["chain_id"])
         if chain_type in ["cosmos", "aptos", "sui", "near"]:
-            # Check if not already connected
-            chain_id = chain_config["chain_id"]
-            already_connected = any(
-                getattr(m, 'chain_id', '') == chain_id 
-                for m in async_monitors
-            )
-            if not already_connected:
-                non_evm_configs.append((chain_config, chain_type))
+            non_evm_configs.append((chain_config, chain_type))
     
-    if non_evm_configs:
-        print(f"   🔄 {len(non_evm_configs)} non-EVM chains will connect in background...")
+    print()
+    print(f"🌐 {len(non_evm_configs)} non-EVM chains will connect in background thread...")
     
     def run_async():
         loop = asyncio.new_event_loop()
