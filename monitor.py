@@ -1272,11 +1272,63 @@ class NearMonitor:
             await self.session.close()
 
 
+async def run_async_monitors_with_lazy_init(
+    monitors: List, 
+    non_evm_configs: List[tuple], 
+    rule_monitor: YAMLRuleMonitor
+):
+    """Initialize non-EVM monitors lazily and then run them."""
+    import aiohttp
+    
+    # Lazy initialize non-EVM monitors
+    for chain_config, chain_type in non_evm_configs:
+        chain_id = chain_config["chain_id"]
+        chain_name = chain_config["chain_name"]
+        
+        try:
+            if chain_type == "cosmos":
+                monitor = CosmosMonitor(chain_config)
+                if await monitor.connect():
+                    monitors.append(monitor)
+                    print(f"   ✅ {chain_name} (Cosmos): Height {monitor.last_height:,}")
+                else:
+                    print(f"   ❌ {chain_name} (Cosmos): Connection failed")
+                    
+            elif chain_type in ["aptos", "sui"]:
+                monitor = AptosMonitor(chain_config, chain_type)
+                if await monitor.connect():
+                    monitors.append(monitor)
+                    label = "Version" if chain_type == "aptos" else "Checkpoint"
+                    print(f"   ✅ {chain_name} ({chain_type.upper()}): {label} {monitor.last_version:,}")
+                else:
+                    print(f"   ❌ {chain_name} ({chain_type.upper()}): Connection failed")
+                    
+            elif chain_type == "near":
+                monitor = NearMonitor(chain_config)
+                if await monitor.connect():
+                    monitors.append(monitor)
+                    print(f"   ✅ {chain_name} (Near): Height {monitor.last_height:,}")
+                else:
+                    print(f"   ❌ {chain_name} (Near): Connection failed")
+                    
+        except Exception as e:
+            print(f"   ❌ {chain_name}: {str(e)[:50]}")
+    
+    print(f"🌐 Running {len(monitors)} non-EVM monitors...")
+    
+    # Now run the monitors
+    await run_async_monitors(monitors, rule_monitor)
+
+
 async def run_async_monitors(monitors: List, rule_monitor: YAMLRuleMonitor):
     """Run async monitors (Cosmos, Aptos, Near) in parallel."""
     import aiohttp
     
-    print(f"🌐 Starting {len(monitors)} non-EVM monitors...")
+    if not monitors:
+        print("⚠️  No non-EVM monitors to run")
+        return
+    
+    print(f"🌐 Scanning {len(monitors)} non-EVM chains...")
     
     # Track last error time to avoid spam
     last_error_time: Dict[str, datetime] = {}
@@ -1474,16 +1526,35 @@ def monitor():
     print()
     
     # Start async monitors in background thread
+    # If synchronous init failed, try async init for non-EVM chains
     async_monitors = cosmos_monitors + aptos_monitors + near_monitors
     
-    if async_monitors:
-        def run_async():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(run_async_monitors(async_monitors, rule_monitor))
-        
-        async_thread = threading.Thread(target=run_async, daemon=True)
-        async_thread.start()
+    # Collect unconnected non-EVM chain configs for lazy init
+    non_evm_configs = []
+    for chain_config in config.get("chains", []):
+        chain_type = get_chain_type(chain_config["chain_id"])
+        if chain_type in ["cosmos", "aptos", "sui", "near"]:
+            # Check if not already connected
+            chain_id = chain_config["chain_id"]
+            already_connected = any(
+                getattr(m, 'chain_id', '') == chain_id 
+                for m in async_monitors
+            )
+            if not already_connected:
+                non_evm_configs.append((chain_config, chain_type))
+    
+    if non_evm_configs:
+        print(f"   🔄 {len(non_evm_configs)} non-EVM chains will connect in background...")
+    
+    def run_async():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(run_async_monitors_with_lazy_init(
+            async_monitors, non_evm_configs, rule_monitor
+        ))
+    
+    async_thread = threading.Thread(target=run_async, daemon=True)
+    async_thread.start()
     
     scan_count = 0
     yaml_incidents = 0
