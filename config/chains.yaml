@@ -17,10 +17,15 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "ethereum"
     chain_name: "Ethereum Mainnet"
-    # Get free key at: https://app.infura.io/
-    rpc_url: "https://mainnet.infura.io/v3/03fdb904486246d484e877b30186a5e6"
-    # Optional WebSocket for real-time (faster)
-    ws_url: "wss://mainnet.infura.io/ws/v3/03fdb904486246d484e877b30186a5e6"
+    # Using free public RPCs (no API key needed)
+    rpc_url: "https://eth.llamarpc.com"
+    # Fallback RPCs (uncomment if primary fails):
+    # rpc_url: "https://rpc.ankr.com/eth"
+    # rpc_url: "https://ethereum.publicnode.com"
+    # rpc_url: "https://1rpc.io/eth"
+    # Infura (if you have API key):
+    # rpc_url: "https://mainnet.infura.io/v3/YOUR_API_KEY"
+    ws_url: "wss://ethereum.publicnode.com"
     
     # All monitored bridge contracts on Ethereum
     bridge_contracts:
@@ -102,8 +107,13 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "polygon"
     chain_name: "Polygon Mainnet"
-    rpc_url: "https://polygon-mainnet.infura.io/v3/03fdb904486246d484e877b30186a5e6"
-    ws_url: "wss://polygon-mainnet.infura.io/ws/v3/03fdb904486246d484e877b30186a5e6"
+    # Using free public RPCs
+    rpc_url: "https://polygon-rpc.com"
+    # Fallback RPCs:
+    # rpc_url: "https://rpc.ankr.com/polygon"
+    # rpc_url: "https://polygon.llamarpc.com"
+    # rpc_url: "https://1rpc.io/matic"
+    ws_url: "wss://polygon.publicnode.com"
     
     bridge_contracts:
       # LayerZero
@@ -134,7 +144,12 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "arbitrum"
     chain_name: "Arbitrum One"
-    rpc_url: "https://arbitrum-mainnet.infura.io/v3/03fdb904486246d484e877b30186a5e6"
+    # Using free public RPCs
+    rpc_url: "https://arb1.arbitrum.io/rpc"
+    # Fallback RPCs:
+    # rpc_url: "https://rpc.ankr.com/arbitrum"
+    # rpc_url: "https://arbitrum.llamarpc.com"
+    # rpc_url: "https://1rpc.io/arb"
     
     bridge_contracts:
       # Native Arbitrum
