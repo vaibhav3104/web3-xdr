@@ -353,6 +353,59 @@ async def get_storage_stats():
         return {"error": "Database module not available", "storage": "in-memory"}
 
 
+@router.get("/chains/status")
+async def get_chains_status():
+    """
+    Get connection status of all blockchain listeners.
+    Shows EVM and non-EVM chain connection health.
+    """
+    from ..shared_state import monitor_state
+    
+    chain_status = monitor_state.get_chain_status()
+    events_by_chain = monitor_state.stats.get("events_by_chain", {})
+    
+    # Categorize chains
+    evm_chains = []
+    non_evm_chains = []
+    
+    evm_types = ["ethereum", "polygon", "arbitrum", "optimism", "base", "avalanche", "bsc"]
+    non_evm_types = ["cosmos", "osmosis", "injective", "aptos", "sui", "near", "solana"]
+    
+    for chain_id, status in chain_status.items():
+        status["events_count"] = events_by_chain.get(chain_id, 0)
+        
+        if status.get("chain_type") == "evm" or chain_id.lower() in evm_types:
+            evm_chains.append(status)
+        else:
+            non_evm_chains.append(status)
+    
+    # Add any chains with events but not in status tracking
+    for chain_id, count in events_by_chain.items():
+        if chain_id not in chain_status:
+            entry = {
+                "chain_id": chain_id,
+                "chain_type": "evm" if chain_id.lower() in evm_types else "non-evm",
+                "status": "connected",
+                "events_count": count,
+                "last_update": None
+            }
+            if chain_id.lower() in evm_types:
+                evm_chains.append(entry)
+            else:
+                non_evm_chains.append(entry)
+    
+    return {
+        "summary": {
+            "total_chains": len(evm_chains) + len(non_evm_chains),
+            "evm_chains": len(evm_chains),
+            "non_evm_chains": len(non_evm_chains),
+            "chains_with_events": len([c for c in evm_chains + non_evm_chains if c.get("events_count", 0) > 0])
+        },
+        "evm_chains": sorted(evm_chains, key=lambda x: x.get("events_count", 0), reverse=True),
+        "non_evm_chains": sorted(non_evm_chains, key=lambda x: x.get("events_count", 0), reverse=True)
+    }
+
+
 @router.post("/maintenance/purge")
 async def purge_old_data(
     hours: int = Query(24, ge=1, le=720, description="Delete data older than X hours"),

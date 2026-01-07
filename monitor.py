@@ -1191,13 +1191,31 @@ async def run_async_monitors(monitors: List, rule_monitor: YAMLRuleMonitor):
     
     print(f"🌐 Starting {len(monitors)} non-EVM monitors...")
     
+    # Track last error time to avoid spam
+    last_error_time: Dict[str, datetime] = {}
+    scan_count = 0
+    
     while True:
+        scan_count += 1
+        
         for monitor in monitors:
+            chain_id = getattr(monitor, 'chain_id', 'unknown')
+            chain_type = getattr(monitor, 'chain_type', 'non-evm')
+            
             try:
                 events = await monitor.scan_events()
                 
+                # Update chain status as connected
+                last_block = getattr(monitor, 'last_height', 0) or getattr(monitor, 'last_version', 0)
+                monitor_state.update_chain_status(
+                    chain_id=chain_id,
+                    status="connected",
+                    chain_type=chain_type,
+                    last_block=last_block
+                )
+                
                 if events:
-                    print(f"📡 [{monitor.chain_id.upper():10}] Received {len(events)} events")
+                    print(f"📡 [{chain_id.upper():10}] Received {len(events)} events")
                 
                 for event in events:
                     monitor_state.add_event(event)
@@ -1211,12 +1229,29 @@ async def run_async_monitors(monitors: List, rule_monitor: YAMLRuleMonitor):
                     if event.severity in ["critical", "high"]:
                         severity_emoji = "🔴" if event.severity == "critical" else "🟠"
                         print(f"{severity_emoji} [{event.chain.upper():8}] {event.event_type:25} Block: {event.block:,}")
+                
+                # Log periodic status for non-EVM chains (every 20 scans ~1 min)
+                if scan_count % 20 == 0 and not events:
+                    print(f"🔄 [{chain_id.upper():10}] Scanning... Block: {last_block:,}")
                         
             except Exception as e:
-                # Log non-EVM monitoring errors (but don't spam)
-                error_msg = str(e)[:50]
-                if "rate" not in error_msg.lower() and "limit" not in error_msg.lower():
-                    print(f"⚠️  [{monitor.chain_id.upper():10}] Error: {error_msg}")
+                error_msg = str(e)[:80]
+                
+                # Update chain status with error
+                monitor_state.update_chain_status(
+                    chain_id=chain_id,
+                    status="error",
+                    chain_type=chain_type,
+                    error=error_msg
+                )
+                
+                # Rate-limit error logging (once per minute per chain)
+                now = datetime.now()
+                last_err = last_error_time.get(chain_id)
+                if not last_err or (now - last_err).total_seconds() > 60:
+                    if "rate" not in error_msg.lower() and "limit" not in error_msg.lower():
+                        print(f"⚠️  [{chain_id.upper():10}] Error: {error_msg}")
+                    last_error_time[chain_id] = now
         
         await asyncio.sleep(3)
 
@@ -1356,8 +1391,18 @@ def monitor():
         while True:
             # Scan EVM chains synchronously
             for evm_monitor in evm_monitors:
+                chain_id = getattr(evm_monitor, 'chain_id', 'unknown')
+                
                 try:
                     events = evm_monitor.scan_events()
+                    
+                    # Update chain status
+                    monitor_state.update_chain_status(
+                        chain_id=chain_id,
+                        status="connected",
+                        chain_type="evm",
+                        last_block=getattr(evm_monitor, 'last_block', 0)
+                    )
                     
                     for event in events:
                         monitor_state.add_event(event)

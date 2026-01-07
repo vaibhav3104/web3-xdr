@@ -171,6 +171,9 @@ class MonitorState:
             "db_incidents_persisted": 0,
         }
         
+        # Chain connection status tracking
+        self._chain_status: Dict[str, Dict[str, Any]] = {}
+        
         self._event_lock = threading.Lock()
         self._incident_lock = threading.Lock()
         
@@ -435,6 +438,27 @@ class MonitorState:
         stats["db_connected"] = self._db_initialized
         
         return stats
+    
+    def update_chain_status(self, chain_id: str, status: str, chain_type: str = "evm", 
+                           last_block: int = 0, error: Optional[str] = None):
+        """Update the status of a chain listener."""
+        self._chain_status[chain_id] = {
+            "chain_id": chain_id,
+            "chain_type": chain_type,
+            "status": status,  # connected, disconnected, error
+            "last_block": last_block,
+            "last_update": datetime.utcnow().isoformat(),
+            "error": error,
+            "events_count": self.stats.get("events_by_chain", {}).get(chain_id, 0)
+        }
+    
+    def get_chain_status(self) -> Dict[str, Any]:
+        """Get status of all chain listeners."""
+        # Update events count for each chain
+        for chain_id in self._chain_status:
+            self._chain_status[chain_id]["events_count"] = \
+                self.stats.get("events_by_chain", {}).get(chain_id, 0)
+        return dict(self._chain_status)
     
     async def get_stats_from_db(self, time_range_hours: int = 24) -> Dict[str, Any]:
         """Get stats from database for historical analytics."""
