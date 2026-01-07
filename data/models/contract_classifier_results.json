@@ -1,33 +1,21 @@
 {
   "model_name": "contract_classifier",
-  "accuracy": 0.9868421052631579,
-  "precision": 0.9887218045112781,
-  "recall": 0.9868421052631579,
-  "f1_score": 0.9864083285135916,
-  "training_samples": 608,
-  "validation_samples": 76,
-  "test_samples": 76,
+  "accuracy": 0.9753086419753086,
+  "precision": 0.9679012345679013,
+  "recall": 0.9753086419753086,
+  "f1_score": 0.9698216735253773,
+  "training_samples": 640,
+  "validation_samples": 81,
+  "test_samples": 81,
   "cross_val_scores": [
-    0.9672131147540983,
-    0.9672131147540983,
-    0.9672131147540983,
-    0.9752066115702479,
-    0.9586776859504132
+    0.953125,
+    0.984375,
+    0.953125,
+    0.9765625,
+    0.9609375
   ],
   "confusion_matrix": [
     [
-      3,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      1
-    ],
-    [
-      0,
       2,
       0,
       0,
@@ -35,24 +23,14 @@
       0,
       0,
       0,
-      0
-    ],
-    [
-      0,
-      0,
-      2,
-      0,
-      0,
-      0,
-      0,
       0,
       0
     ],
     [
       0,
+      8,
       0,
       0,
-      3,
       0,
       0,
       0,
@@ -60,6 +38,40 @@
       0
     ],
     [
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      4,
+      1,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      8,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
       0,
       0,
       0,
@@ -67,18 +79,6 @@
       4,
       0,
       0,
-      0,
-      0
-    ],
-    [
-      0,
-      0,
-      0,
-      0,
-      0,
-      2,
-      0,
-      0,
       0
     ],
     [
@@ -88,7 +88,7 @@
       0,
       0,
       0,
-      50,
+      51,
       0,
       0
     ],
@@ -100,7 +100,7 @@
       0,
       0,
       0,
-      3,
+      1,
       0
     ],
     [
@@ -108,14 +108,14 @@
       0,
       0,
       0,
+      1,
       0,
       0,
       0,
-      0,
-      6
+      0
     ]
   ],
-  "classification_report": "                     precision    recall  f1-score   support\n\n     unknown_threat       1.00      0.75      0.86         4\noracle_manipulation       1.00      1.00      1.00         2\n reentrancy_exploit       1.00      1.00      1.00         2\n           rug_pull       1.00      1.00      1.00         3\n  governance_attack       1.00      1.00      1.00         4\n flash_loan_exploit       1.00      1.00      1.00         2\n               safe       1.00      1.00      1.00        50\n           honeypot       1.00      1.00      1.00         3\n     bridge_exploit       0.86      1.00      0.92         6\n\n           accuracy                           0.99        76\n          macro avg       0.98      0.97      0.98        76\n       weighted avg       0.99      0.99      0.99        76\n",
-  "training_time_seconds": 0.3163340091705322,
-  "timestamp": "2026-01-05T17:20:33.863593"
+  "classification_report": "                     precision    recall  f1-score   support\n\n reentrancy_exploit       1.00      1.00      1.00         2\n  governance_attack       1.00      1.00      1.00         8\n flash_loan_exploit       1.00      1.00      1.00         1\n     unknown_threat       1.00      0.80      0.89         5\n     bridge_exploit       0.80      1.00      0.89         8\n           rug_pull       1.00      1.00      1.00         4\n               safe       1.00      1.00      1.00        51\n           honeypot       1.00      1.00      1.00         1\noracle_manipulation       0.00      0.00      0.00         1\n\n           accuracy                           0.98        81\n          macro avg       0.87      0.87      0.86        81\n       weighted avg       0.97      0.98      0.97        81\n",
+  "training_time_seconds": 0.3701000213623047,
+  "timestamp": "2026-01-07T10:54:28.371371"
 }

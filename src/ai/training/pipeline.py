@@ -31,6 +31,19 @@ from ..data.attack_database import (
 )
 from ..data.bytecode_extractor import BytecodeExtractor, features_to_vector
 
+# Try to import real bytecode collector
+try:
+    from ..data.bytecode_collector import (
+        BytecodeCollector, 
+        RealBytecodeFeatureExtractor,
+        EXPLOIT_CONTRACTS,
+        SAFE_CONTRACTS,
+        SCAM_CONTRACTS
+    )
+    REAL_BYTECODE_AVAILABLE = True
+except ImportError:
+    REAL_BYTECODE_AVAILABLE = False
+
 @dataclass
 class TrainingConfig:
     """Configuration for training pipeline"""
@@ -82,25 +95,36 @@ class TrainingPipeline:
         self.label_encoder: Dict[str, int] = {}
         self.label_decoder: Dict[int, str] = {}
     
-    def collect_training_data(self) -> int:
+    def collect_training_data(self, use_real_bytecode: bool = True) -> int:
         """
         Collect and prepare training data from various sources
+        
+        Args:
+            use_real_bytecode: Whether to prioritize real bytecode data
         
         Returns:
             Number of samples collected
         """
         print("📊 Collecting training data...")
         
-        # 1. Add historical attack data
+        # 1. Try to load real bytecode data first (highest quality)
+        real_count = 0
+        if use_real_bytecode:
+            real_count = self._add_real_bytecode_data()
+        
+        # 2. Add historical attack data (synthetic features)
         self._add_attack_data()
         
-        # 2. Add synthetic safe contract data
+        # 3. Add synthetic safe contract data
         self._add_safe_contract_data()
         
-        # 3. Add manually labeled data (if available)
+        # 4. Add manually labeled data (if available)
         self._add_labeled_data()
         
-        print(f"✅ Collected {len(self.training_data)} training samples")
+        print(f"\n✅ Collected {len(self.training_data)} total training samples")
+        print(f"   Real bytecode samples: {real_count}")
+        print(f"   Synthetic samples: {len(self.training_data) - real_count}")
+        
         return len(self.training_data)
     
     def _add_attack_data(self):
@@ -265,6 +289,30 @@ class TrainingPipeline:
                         "source": "manual_label"
                     })
     
+    def _add_real_bytecode_data(self):
+        """Load real bytecode training data if available"""
+        # Check for pre-collected real bytecode data
+        real_data_path = Path("./data/bytecode/training_data_real.json")
+        
+        if real_data_path.exists():
+            print("📂 Loading REAL bytecode training data...")
+            with open(real_data_path, 'r') as f:
+                real_data = json.load(f)
+            
+            for item in real_data:
+                self.training_data.append({
+                    "features": item["features"],
+                    "label": item["label"],
+                    "source": f"real_bytecode_{item['source']}",
+                    "address": item.get("address"),
+                    "chain": item.get("chain"),
+                })
+            
+            print(f"   ✅ Loaded {len(real_data)} real bytecode samples")
+            return len(real_data)
+        
+        return 0
+    
     def prepare_data(self) -> tuple:
         """
         Prepare data for training
@@ -376,9 +424,11 @@ class TrainingPipeline:
         f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
         
         # Reports
-        target_names = [self.label_decoder[i] for i in range(len(self.label_decoder))]
-        report = classification_report(y_test, y_pred, target_names=target_names, zero_division=0)
-        cm = confusion_matrix(y_test, y_pred).tolist()
+        # Get only the labels that appear in test set
+        unique_test_labels = sorted(set(y_test) | set(y_pred))
+        target_names = [self.label_decoder[i] for i in unique_test_labels]
+        report = classification_report(y_test, y_pred, labels=unique_test_labels, target_names=target_names, zero_division=0)
+        cm = confusion_matrix(y_test, y_pred, labels=unique_test_labels).tolist()
         
         training_time = time.time() - start_time
         
