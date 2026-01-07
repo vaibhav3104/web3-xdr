@@ -24,7 +24,7 @@ env:
 
 jobs:
   # ===========================================================================
-  # Test
+  # Test (with auto-retry)
   # ===========================================================================
   test:
     name: Run Tests
@@ -44,6 +44,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      
+      - name: Validate imports (fail fast)
+        run: |
+          python -c "from src.api.server import create_app; print('✅ Server imports OK')"
+          python -c "from src.query.lucene_parser import execute_lucene_query; print('✅ Query parser OK')"
       
       - name: Run tests
         run: |
