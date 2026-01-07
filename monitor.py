@@ -1364,6 +1364,14 @@ def monitor():
     print("🔗 Connecting to chains...")
     print("-" * 70)
     
+    # Create a single event loop for all async operations
+    try:
+        async_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(async_loop)
+    except Exception as loop_err:
+        print(f"   ⚠️ Could not create event loop: {loop_err}")
+        async_loop = None
+    
     for chain_config in config.get("chains", []):
         chain_id = chain_config["chain_id"]
         chain_name = chain_config["chain_name"]
@@ -1378,13 +1386,10 @@ def monitor():
                 else:
                     print(f"   ❌ {chain_name} (EVM): Connection failed")
                     
-            elif chain_type == "cosmos":
+            elif chain_type == "cosmos" and async_loop:
                 try:
                     monitor_obj = CosmosMonitor(chain_config)
-                    # Create new event loop for async operations
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    if loop.run_until_complete(monitor_obj.connect()):
+                    if async_loop.run_until_complete(monitor_obj.connect()):
                         cosmos_monitors.append(monitor_obj)
                         print(f"   ✅ {chain_name} (Cosmos): Height {monitor_obj.last_height:,}")
                     else:
@@ -1392,12 +1397,10 @@ def monitor():
                 except Exception as cosmos_err:
                     print(f"   ❌ {chain_name} (Cosmos): {str(cosmos_err)[:60]}")
                     
-            elif chain_type in ["aptos", "sui"]:
+            elif chain_type in ["aptos", "sui"] and async_loop:
                 try:
                     monitor_obj = AptosMonitor(chain_config, chain_type)
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    if loop.run_until_complete(monitor_obj.connect()):
+                    if async_loop.run_until_complete(monitor_obj.connect()):
                         aptos_monitors.append(monitor_obj)
                         version_label = "Version" if chain_type == "aptos" else "Checkpoint"
                         print(f"   ✅ {chain_name} ({chain_type.upper()}): {version_label} {monitor_obj.last_version:,}")
@@ -1406,12 +1409,10 @@ def monitor():
                 except Exception as aptos_err:
                     print(f"   ❌ {chain_name} ({chain_type.upper()}): {str(aptos_err)[:60]}")
                     
-            elif chain_type == "near":
+            elif chain_type == "near" and async_loop:
                 try:
                     monitor_obj = NearMonitor(chain_config)
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    if loop.run_until_complete(monitor_obj.connect()):
+                    if async_loop.run_until_complete(monitor_obj.connect()):
                         near_monitors.append(monitor_obj)
                         print(f"   ✅ {chain_name} (Near): Height {monitor_obj.last_height:,}")
                     else:
