@@ -160,6 +160,32 @@ def delete_rule_from_file(rule_id: str) -> bool:
     return False
 
 
+def get_chain_type(chain_id: str) -> str:
+    """Determine chain type from chain ID."""
+    chain_lower = chain_id.lower()
+    
+    evm_chains = ["ethereum", "polygon", "arbitrum", "optimism", "bsc", "avalanche", "fantom", "base", "zksync", "linea"]
+    cosmos_chains = ["cosmos", "osmosis", "injective", "sei", "celestia", "dydx", "neutron"]
+    aptos_chains = ["aptos", "movement"]
+    sui_chains = ["sui"]
+    near_chains = ["near", "aurora"]
+    solana_chains = ["solana"]
+    
+    if chain_lower in evm_chains:
+        return "evm"
+    elif chain_lower in cosmos_chains:
+        return "cosmos"
+    elif chain_lower in aptos_chains:
+        return "aptos"
+    elif chain_lower in sui_chains:
+        return "sui"
+    elif chain_lower in near_chains:
+        return "near"
+    elif chain_lower in solana_chains:
+        return "solana"
+    return "evm"
+
+
 def load_chains_config() -> List[Dict]:
     """Load chain configuration."""
     config_file = CONFIG_DIR / "chains.yaml"
@@ -172,9 +198,26 @@ def load_chains_config() -> List[Dict]:
     
     chains = data.get('chains', [])
     
-    # Add status (would be determined by actual connection status)
+    # Add status and chain type info
     for chain in chains:
-        chain['status'] = 'connected'  # Simplified
+        chain_id = chain.get('chain_id', '')
+        chain_type = get_chain_type(chain_id)
+        chain['chain_type'] = chain_type
+        chain['status'] = 'connected'  # Will be updated by actual monitoring
+        
+        # Add type-specific info
+        if chain_type == "evm":
+            chain['protocol'] = "EVM (JSON-RPC)"
+        elif chain_type == "cosmos":
+            chain['protocol'] = "Cosmos (Tendermint RPC)"
+        elif chain_type in ["aptos", "sui"]:
+            chain['protocol'] = "Move (REST/JSON-RPC)"
+        elif chain_type == "near":
+            chain['protocol'] = "Near (JSON-RPC)"
+        elif chain_type == "solana":
+            chain['protocol'] = "Solana (JSON-RPC)"
+        else:
+            chain['protocol'] = "Unknown"
     
     return chains
 

@@ -1189,10 +1189,16 @@ async def run_async_monitors(monitors: List, rule_monitor: YAMLRuleMonitor):
     """Run async monitors (Cosmos, Aptos, Near) in parallel."""
     import aiohttp
     
+    print(f"🌐 Starting {len(monitors)} non-EVM monitors...")
+    
     while True:
         for monitor in monitors:
             try:
                 events = await monitor.scan_events()
+                
+                if events:
+                    print(f"📡 [{monitor.chain_id.upper():10}] Received {len(events)} events")
+                
                 for event in events:
                     monitor_state.add_event(event)
                     
@@ -1206,8 +1212,11 @@ async def run_async_monitors(monitors: List, rule_monitor: YAMLRuleMonitor):
                         severity_emoji = "🔴" if event.severity == "critical" else "🟠"
                         print(f"{severity_emoji} [{event.chain.upper():8}] {event.event_type:25} Block: {event.block:,}")
                         
-            except Exception:
-                pass
+            except Exception as e:
+                # Log non-EVM monitoring errors (but don't spam)
+                error_msg = str(e)[:50]
+                if "rate" not in error_msg.lower() and "limit" not in error_msg.lower():
+                    print(f"⚠️  [{monitor.chain_id.upper():10}] Error: {error_msg}")
         
         await asyncio.sleep(3)
 
