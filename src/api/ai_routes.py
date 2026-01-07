@@ -1,283 +1,446 @@
 """
-AI Analysis API Routes for Sentinel3.
-
-Provides AI-powered incident analysis, explanations, and recommendations.
+AI/ML API Routes
+Endpoints for contract analysis, auto-collection, and deep learning models
 """
 
-from typing import Optional, Dict, Any
+from typing import Dict, List, Optional
 from datetime import datetime
-
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-
 import structlog
 
-from ..ai.analyzer import get_analyzer, ATTACK_PATTERNS
+logger = structlog.get_logger(__name__)
 
-logger = structlog.get_logger()
-router = APIRouter(prefix="/ai", tags=["AI Analysis"])
-
-
-class AnalysisRequest(BaseModel):
-    """Request body for incident analysis."""
-    incident_id: Optional[str] = None
-    incident_data: Optional[Dict[str, Any]] = None
+router = APIRouter(prefix="/ai", tags=["AI/ML"])
 
 
-class AnalysisResponse(BaseModel):
-    """AI analysis response."""
-    incident_id: str
-    analysis: str
-    summary: str
-    recommendations: list
-    attack_pattern: Dict[str, Any]
-    backend: str
-    model: str
-    latency_seconds: float
-    timestamp: str
+# =============================================================================
+# REQUEST/RESPONSE MODELS
+# =============================================================================
+
+class AnalyzeRequest(BaseModel):
+    bytecode: str
+    use_deep_learning: bool = False
+    model_type: str = "mlp"  # mlp, cnn, transformer, ensemble
 
 
-@router.get("/analyze/{incident_id}")
-async def analyze_incident_by_id(incident_id: str):
+class AnalyzeResponse(BaseModel):
+    category: str
+    risk_score: float
+    confidence: float
+    is_threat: bool
+    alerts: List[str] = []
+    model_used: str
+    inference_time_ms: float
+    features: Dict = {}
+
+
+class CollectorStatusResponse(BaseModel):
+    running: bool
+    contracts_collected: int
+    contracts_analyzed: int
+    threats_detected: int
+    chains_monitoring: List[str]
+    by_chain: Dict[str, int]
+    by_threat_type: Dict[str, int]
+
+
+class TrainRequest(BaseModel):
+    model_type: str = "mlp"  # mlp, random_forest
+    epochs: int = 50
+    use_real_bytecode: bool = True
+
+
+class TrainResponse(BaseModel):
+    status: str
+    model_type: str
+    accuracy: float
+    training_samples: int
+    message: str
+
+
+# =============================================================================
+# AUTO-COLLECTOR ENDPOINTS
+# =============================================================================
+
+@router.post("/collector/start", summary="Start automatic contract collection")
+async def start_collector(
+    chains: List[str] = ["ethereum", "arbitrum", "polygon"],
+    background_tasks: BackgroundTasks = None
+) -> Dict:
     """
-    Get AI analysis for a specific incident by ID.
-    
-    The AI will provide:
-    - Executive summary
-    - Technical breakdown
-    - Impact assessment
-    - Recommended actions
-    - Root cause hypothesis
+    Start the automatic contract deployment collector.
+    Monitors specified chains for new contract deployments and analyzes them.
     """
-    from ..shared_state import monitor_state
-    
-    # Get incident from state
-    incidents = monitor_state.get_incidents()
-    incident = None
-    for inc in incidents:
-        if inc.id == incident_id:
-            incident = {
-                "id": inc.id,
-                "title": inc.title,
-                "severity": inc.severity,
-                "status": inc.status,
-                "attack_type": inc.attack_type,
-                "confidence": inc.confidence,
-                "total_loss_usd": inc.total_loss_usd,
-                "affected_chains": inc.affected_chains,
-                "created_at": inc.created_at.isoformat() if hasattr(inc.created_at, 'isoformat') else str(inc.created_at)
+    try:
+        from ..ai.collectors import start_auto_collection, get_collector
+        
+        # Check if already running
+        collector = get_collector()
+        if collector and collector.running:
+            return {
+                "status": "already_running",
+                "chains": collector.chains,
+                "stats": collector.get_stats()
             }
-            break
-    
-    # Check simulated incidents
-    if not incident:
-        simulated = _get_simulated_incidents()
-        for sim in simulated:
-            if sim["id"] == incident_id:
-                incident = sim
-                break
-    
-    if not incident:
-        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found")
-    
-    # Get AI analysis
-    analyzer = get_analyzer()
-    
-    analysis_result = await analyzer.analyze_incident(incident)
-    summary = await analyzer.get_quick_summary(incident)
-    recommendations = await analyzer.get_recommendations(incident)
-    
-    return {
-        "incident_id": incident_id,
-        "incident": incident,
-        "analysis": analysis_result["analysis"],
-        "summary": summary,
-        "recommendations": recommendations,
-        "attack_pattern": analysis_result["attack_pattern"],
-        "backend": analysis_result["backend"],
-        "model": analysis_result["model"],
-        "latency_seconds": analysis_result["latency_seconds"],
-        "timestamp": analysis_result["timestamp"]
-    }
-
-
-@router.post("/analyze")
-async def analyze_incident_data(request: AnalysisRequest):
-    """
-    Analyze custom incident data with AI.
-    
-    Send incident details in the request body for analysis.
-    """
-    if not request.incident_data:
-        raise HTTPException(status_code=400, detail="incident_data is required")
-    
-    analyzer = get_analyzer()
-    
-    analysis_result = await analyzer.analyze_incident(request.incident_data)
-    summary = await analyzer.get_quick_summary(request.incident_data)
-    recommendations = await analyzer.get_recommendations(request.incident_data)
-    
-    return {
-        "incident_id": request.incident_data.get("id", "custom"),
-        "analysis": analysis_result["analysis"],
-        "summary": summary,
-        "recommendations": recommendations,
-        "attack_pattern": analysis_result["attack_pattern"],
-        "backend": analysis_result["backend"],
-        "model": analysis_result["model"],
-        "latency_seconds": analysis_result["latency_seconds"],
-        "timestamp": analysis_result["timestamp"]
-    }
-
-
-@router.get("/patterns")
-async def list_attack_patterns():
-    """
-    List all known attack patterns with their indicators and recommended actions.
-    
-    Useful for understanding what the XDR can detect.
-    """
-    return {
-        "patterns": ATTACK_PATTERNS,
-        "total_patterns": len(ATTACK_PATTERNS),
-        "categories": list(ATTACK_PATTERNS.keys())
-    }
-
-
-@router.get("/patterns/{attack_type}")
-async def get_attack_pattern(attack_type: str):
-    """
-    Get detailed information about a specific attack pattern.
-    """
-    pattern = ATTACK_PATTERNS.get(attack_type)
-    if not pattern:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Attack pattern '{attack_type}' not found. Available: {list(ATTACK_PATTERNS.keys())}"
+        
+        # Define callbacks
+        async def on_threat(analysis):
+            logger.warning(
+                "threat_detected_via_api",
+                address=analysis.contract.address,
+                category=analysis.threat_category,
+                risk_score=analysis.risk_score
+            )
+            # TODO: Send notifications (Telegram, Slack, etc.)
+        
+        # Start collector
+        collector = await start_auto_collection(
+            chains=chains,
+            threat_callback=on_threat
         )
-    
-    return {
-        "attack_type": attack_type,
-        "pattern": pattern
-    }
-
-
-@router.get("/summary/{incident_id}")
-async def get_quick_summary(incident_id: str):
-    """
-    Get a quick 2-sentence summary of an incident for dashboard display.
-    """
-    from ..shared_state import monitor_state
-    
-    # Get incident
-    incidents = monitor_state.get_incidents()
-    incident = None
-    for inc in incidents:
-        if inc.id == incident_id:
-            incident = {
-                "id": inc.id,
-                "title": inc.title,
-                "severity": inc.severity,
-                "attack_type": inc.attack_type,
-                "total_loss_usd": inc.total_loss_usd,
-                "affected_chains": inc.affected_chains
-            }
-            break
-    
-    # Check simulated
-    if not incident:
-        simulated = _get_simulated_incidents()
-        for sim in simulated:
-            if sim["id"] == incident_id:
-                incident = sim
-                break
-    
-    if not incident:
-        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found")
-    
-    analyzer = get_analyzer()
-    summary = await analyzer.get_quick_summary(incident)
-    
-    return {
-        "incident_id": incident_id,
-        "summary": summary
-    }
-
-
-@router.get("/status")
-async def ai_status():
-    """
-    Check AI analysis service status and configuration.
-    """
-    analyzer = get_analyzer()
-    
-    return {
-        "status": "operational",
-        "backend": analyzer.backend,
-        "model": analyzer.model if analyzer.backend != "local" else "rule-based",
-        "api_configured": analyzer.backend != "local",
-        "supported_backends": ["openai", "anthropic", "local"],
-        "attack_patterns_loaded": len(ATTACK_PATTERNS)
-    }
-
-
-def _get_simulated_incidents():
-    """Get simulated incidents for demo."""
-    return [
-        {
-            "id": "SIM-WORMHOLE-001",
-            "title": "🔴 CRITICAL: Wormhole Unbacked Mint ($145M)",
-            "severity": "critical",
-            "status": "open",
-            "attack_type": "unbacked_mint",
-            "confidence": 0.95,
-            "total_loss_usd": 145156044.0,
-            "affected_chains": ["solana", "ethereum"],
-            "created_at": datetime.utcnow().isoformat()
-        },
-        {
-            "id": "SIM-FLASHLOAN-005",
-            "title": "🔴 CRITICAL: Flash Loan Bridge Exploit ($39M)",
-            "severity": "critical",
-            "status": "open",
-            "attack_type": "flash_loan_exploit",
-            "confidence": 0.97,
-            "total_loss_usd": 39099817.0,
-            "affected_chains": ["ethereum"],
-            "created_at": datetime.utcnow().isoformat()
-        },
-        {
-            "id": "SIM-LAUNDERING-004",
-            "title": "🔴 CRITICAL: Cross-chain Money Laundering ($42M)",
-            "severity": "critical",
-            "status": "investigating",
-            "attack_type": "money_laundering",
-            "confidence": 0.92,
-            "total_loss_usd": 42700793.0,
-            "affected_chains": ["ethereum", "polygon", "arbitrum", "bsc"],
-            "created_at": datetime.utcnow().isoformat()
-        },
-        {
-            "id": "SIM-STARGATE-003",
-            "title": "🟠 HIGH: Stargate Liquidity Drain ($21M)",
-            "severity": "high",
-            "status": "open",
-            "attack_type": "liquidity_drain",
-            "confidence": 0.85,
-            "total_loss_usd": 21771041.0,
-            "affected_chains": ["ethereum", "arbitrum", "polygon"],
-            "created_at": datetime.utcnow().isoformat()
-        },
-        {
-            "id": "SIM-LAYERZERO-002",
-            "title": "🟠 HIGH: LayerZero Message Forgery (Blocked)",
-            "severity": "high",
-            "status": "resolved",
-            "attack_type": "message_forgery",
-            "confidence": 0.88,
-            "total_loss_usd": 0.0,
-            "affected_chains": ["arbitrum"],
-            "created_at": datetime.utcnow().isoformat()
+        
+        return {
+            "status": "started",
+            "chains": chains,
+            "message": f"Now monitoring {len(chains)} chains for new contract deployments"
         }
-    ]
+        
+    except Exception as e:
+        logger.error("collector_start_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.post("/collector/stop", summary="Stop automatic contract collection")
+async def stop_collector() -> Dict:
+    """Stop the automatic contract collector"""
+    try:
+        from ..ai.collectors import stop_auto_collection, get_collector
+        
+        collector = get_collector()
+        if not collector or not collector.running:
+            return {"status": "not_running"}
+        
+        stats = collector.get_stats()
+        await stop_auto_collection()
+        
+        return {
+            "status": "stopped",
+            "final_stats": stats
+        }
+        
+    except Exception as e:
+        logger.error("collector_stop_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/collector/status", response_model=CollectorStatusResponse, summary="Get collector status")
+async def get_collector_status() -> CollectorStatusResponse:
+    """Get the current status of the auto-collector"""
+    try:
+        from ..ai.collectors import get_collector
+        
+        collector = get_collector()
+        if not collector:
+            return CollectorStatusResponse(
+                running=False,
+                contracts_collected=0,
+                contracts_analyzed=0,
+                threats_detected=0,
+                chains_monitoring=[],
+                by_chain={},
+                by_threat_type={}
+            )
+        
+        stats = collector.get_stats()
+        return CollectorStatusResponse(
+            running=stats.get("running", False),
+            contracts_collected=stats.get("contracts_collected", 0),
+            contracts_analyzed=stats.get("contracts_analyzed", 0),
+            threats_detected=stats.get("threats_detected", 0),
+            chains_monitoring=stats.get("chains_monitoring", []),
+            by_chain=stats.get("by_chain", {}),
+            by_threat_type=stats.get("by_threat_type", {})
+        )
+        
+    except Exception as e:
+        logger.error("collector_status_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# CONTRACT ANALYSIS ENDPOINTS
+# =============================================================================
+
+@router.post("/analyze", response_model=AnalyzeResponse, summary="Analyze contract bytecode")
+async def analyze_contract(request: AnalyzeRequest) -> AnalyzeResponse:
+    """
+    Analyze a contract's bytecode for potential threats.
+    
+    Supports:
+    - Traditional ML (RandomForest)
+    - Deep Learning (MLP, CNN, Transformer, Ensemble)
+    - Hybrid mode (combines both)
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        if request.use_deep_learning:
+            # Use deep learning model
+            try:
+                from ..ai.models.deep_classifier import DeepContractClassifier
+                
+                classifier = DeepContractClassifier(model_type=request.model_type)
+                result = classifier.classify(request.bytecode)
+                
+                return AnalyzeResponse(
+                    category=result.category,
+                    risk_score=result.risk_score,
+                    confidence=result.confidence,
+                    is_threat=result.category != "safe" and result.risk_score > 0.5,
+                    alerts=[],
+                    model_used=result.model_used,
+                    inference_time_ms=result.inference_time_ms,
+                    features={}
+                )
+                
+            except ImportError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="PyTorch not available. Install with: pip install torch"
+                )
+        else:
+            # Use traditional ML (RandomForest)
+            from ..ai.models.contract_classifier import ContractThreatClassifier
+            from ..ai.data.bytecode_collector import RealBytecodeFeatureExtractor
+            
+            classifier = ContractThreatClassifier()
+            extractor = RealBytecodeFeatureExtractor()
+            
+            # Extract features
+            features = extractor.extract_features(request.bytecode)
+            
+            # Classify
+            result = classifier.classify(request.bytecode)
+            
+            # Generate alerts based on features
+            alerts = []
+            if features.get("has_flash_loan_callback"):
+                alerts.append("Contains flash loan callback function")
+            if features.get("has_reentrancy_pattern"):
+                alerts.append("Potential reentrancy pattern detected")
+            if features.get("has_selfdestruct"):
+                alerts.append("Contains SELFDESTRUCT opcode")
+            if features.get("delegatecall_count", 0) > 2:
+                alerts.append(f"Multiple DELEGATECALL operations ({features['delegatecall_count']})")
+            
+            inference_time = (time.time() - start_time) * 1000
+            
+            return AnalyzeResponse(
+                category=result.category.value if hasattr(result.category, 'value') else str(result.category),
+                risk_score=result.risk_score,
+                confidence=result.confidence,
+                is_threat=result.risk_score > 0.5,
+                alerts=alerts,
+                model_used="random_forest",
+                inference_time_ms=inference_time,
+                features=features
+            )
+            
+    except Exception as e:
+        logger.error("analyze_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/analyze/hybrid", summary="Analyze using both ML and Deep Learning")
+async def analyze_hybrid(request: AnalyzeRequest) -> Dict:
+    """
+    Analyze contract using both RandomForest and Deep Learning models.
+    Returns combined results with confidence-weighted voting.
+    """
+    try:
+        from ..ai.models.deep_classifier import HybridClassifier
+        
+        classifier = HybridClassifier(deep_model_type=request.model_type)
+        results = classifier.classify(request.bytecode)
+        
+        return results
+        
+    except Exception as e:
+        logger.error("hybrid_analyze_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# TRAINING ENDPOINTS
+# =============================================================================
+
+@router.post("/train", response_model=TrainResponse, summary="Train ML model")
+async def train_model(request: TrainRequest, background_tasks: BackgroundTasks) -> TrainResponse:
+    """
+    Train or retrain the ML model.
+    
+    For production, this should be run as a background task.
+    """
+    try:
+        if request.model_type == "random_forest":
+            # Train RandomForest
+            from ..ai.training.pipeline import TrainingPipeline, TrainingConfig
+            
+            config = TrainingConfig(
+                model_type="random_forest",
+                n_estimators=100,
+                output_dir="./data/models"
+            )
+            
+            pipeline = TrainingPipeline(config)
+            pipeline.collect_training_data(use_real_bytecode=request.use_real_bytecode)
+            result = pipeline.train()
+            pipeline.save_model(result)
+            
+            return TrainResponse(
+                status="completed",
+                model_type="random_forest",
+                accuracy=result.accuracy,
+                training_samples=result.training_samples,
+                message="Model trained successfully"
+            )
+            
+        elif request.model_type in ["mlp", "cnn", "transformer", "ensemble"]:
+            # Train Deep Learning model
+            try:
+                from ..ai.models.deep_classifier import DeepContractClassifier
+                import json
+                
+                # Load training data
+                data_path = "./data/bytecode/training_data_real.json"
+                with open(data_path, "r") as f:
+                    training_data = json.load(f)
+                
+                # Split data
+                split_idx = int(len(training_data) * 0.8)
+                train_data = training_data[:split_idx]
+                val_data = training_data[split_idx:]
+                
+                # Train
+                classifier = DeepContractClassifier(model_type=request.model_type)
+                history = classifier.train(
+                    train_data=train_data,
+                    val_data=val_data,
+                    epochs=request.epochs
+                )
+                
+                return TrainResponse(
+                    status="completed",
+                    model_type=request.model_type,
+                    accuracy=history["val_acc"][-1] / 100 if history["val_acc"] else 0,
+                    training_samples=len(train_data),
+                    message=f"Deep learning model ({request.model_type}) trained successfully"
+                )
+                
+            except ImportError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="PyTorch not available for deep learning training"
+                )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown model type: {request.model_type}")
+            
+    except Exception as e:
+        logger.error("training_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/collect-bytecode", summary="Collect bytecode from blockchain")
+async def collect_bytecode(
+    chains: List[str] = ["ethereum", "arbitrum", "polygon", "bsc"],
+    background_tasks: BackgroundTasks = None
+) -> Dict:
+    """
+    Collect real bytecode from blockchain for training.
+    This fetches bytecode from known exploit and safe contracts.
+    """
+    try:
+        from ..ai.data.bytecode_collector import collect_training_bytecode
+        
+        # Run collection
+        training_data = await collect_training_bytecode()
+        
+        return {
+            "status": "completed",
+            "samples_collected": len(training_data),
+            "labels": list(set(d["label"] for d in training_data)),
+            "output_file": "./data/bytecode/training_data_real.json"
+        }
+        
+    except Exception as e:
+        logger.error("bytecode_collection_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# MODEL INFO ENDPOINTS
+# =============================================================================
+
+@router.get("/models", summary="List available ML models")
+async def list_models() -> Dict:
+    """List all available ML models and their status"""
+    import os
+    
+    models = {
+        "random_forest": {
+            "type": "traditional_ml",
+            "path": "./data/models/contract_classifier.pkl",
+            "available": os.path.exists("./data/models/contract_classifier.pkl"),
+            "description": "RandomForest classifier trained on bytecode features"
+        },
+        "deep_mlp": {
+            "type": "deep_learning",
+            "path": "./data/models/deep_mlp.pt",
+            "available": os.path.exists("./data/models/deep_mlp.pt"),
+            "description": "Multi-layer perceptron for feature-based classification"
+        },
+        "deep_cnn": {
+            "type": "deep_learning",
+            "path": "./data/models/deep_cnn.pt",
+            "available": os.path.exists("./data/models/deep_cnn.pt"),
+            "description": "1D CNN for opcode sequence analysis"
+        },
+        "deep_transformer": {
+            "type": "deep_learning",
+            "path": "./data/models/deep_transformer.pt",
+            "available": os.path.exists("./data/models/deep_transformer.pt"),
+            "description": "Transformer for attention-based analysis"
+        },
+    }
+    
+    # Check PyTorch availability
+    try:
+        import torch
+        pytorch_available = True
+        pytorch_version = torch.__version__
+        cuda_available = torch.cuda.is_available()
+    except ImportError:
+        pytorch_available = False
+        pytorch_version = None
+        cuda_available = False
+    
+    return {
+        "models": models,
+        "pytorch_available": pytorch_available,
+        "pytorch_version": pytorch_version,
+        "cuda_available": cuda_available,
+        "training_data_available": os.path.exists("./data/bytecode/training_data_real.json")
+    }
+
+
+@router.get("/exploit-database/stats", summary="Get exploit database statistics")
+async def get_exploit_stats() -> Dict:
+    """Get statistics about the exploit database"""
+    try:
+        from ..ai.data.exploit_database import get_statistics
+        return get_statistics()
+    except Exception as e:
+        logger.error("exploit_stats_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
