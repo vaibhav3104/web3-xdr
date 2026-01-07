@@ -444,3 +444,146 @@ async def get_exploit_stats() -> Dict:
     except Exception as e:
         logger.error("exploit_stats_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# CONTINUOUS LEARNING ENDPOINTS
+# =============================================================================
+
+class ContinuousLearningRequest(BaseModel):
+    chains: List[str] = ["ethereum", "polygon", "arbitrum", "bsc"]
+    model_types: List[str] = ["mlp", "random_forest"]
+    retrain_interval_hours: int = 6
+    min_new_samples: int = 50
+
+
+@router.post("/learning/start", summary="Start 24/7 continuous learning system")
+async def start_continuous_learning_endpoint(
+    request: ContinuousLearningRequest = None
+) -> Dict:
+    """
+    Start the 24/7/365 continuous learning system.
+    
+    This will:
+    - Monitor all specified chains for new contract deployments
+    - Analyze each contract with ML models
+    - Periodically retrain models with new data
+    - Alert on detected threats
+    """
+    try:
+        from ..ai.continuous_learning import (
+            start_continuous_learning, 
+            get_learning_system,
+            LearningConfig
+        )
+        
+        # Check if already running
+        system = get_learning_system()
+        if system and system.running:
+            return {
+                "status": "already_running",
+                "stats": system.get_stats()
+            }
+        
+        # Create config
+        config = LearningConfig(
+            chains=request.chains if request else ["ethereum", "polygon", "arbitrum", "bsc"],
+            model_types=request.model_types if request else ["mlp", "random_forest"],
+            retrain_interval_hours=request.retrain_interval_hours if request else 6,
+            min_new_samples=request.min_new_samples if request else 50
+        )
+        
+        # Start system
+        await start_continuous_learning(config)
+        
+        return {
+            "status": "started",
+            "config": {
+                "chains": config.chains,
+                "model_types": config.model_types,
+                "retrain_interval_hours": config.retrain_interval_hours,
+                "min_new_samples": config.min_new_samples
+            },
+            "message": "24/7 continuous learning system started successfully"
+        }
+        
+    except Exception as e:
+        logger.error("continuous_learning_start_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/learning/stop", summary="Stop continuous learning system")
+async def stop_continuous_learning_endpoint() -> Dict:
+    """Stop the continuous learning system"""
+    try:
+        from ..ai.continuous_learning import stop_continuous_learning, get_learning_system
+        
+        system = get_learning_system()
+        if not system or not system.running:
+            return {"status": "not_running"}
+        
+        final_stats = system.get_stats()
+        await stop_continuous_learning()
+        
+        return {
+            "status": "stopped",
+            "final_stats": final_stats
+        }
+        
+    except Exception as e:
+        logger.error("continuous_learning_stop_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/learning/status", summary="Get continuous learning status")
+async def get_continuous_learning_status() -> Dict:
+    """Get the status of the continuous learning system"""
+    try:
+        from ..ai.continuous_learning import get_learning_system
+        
+        system = get_learning_system()
+        if not system:
+            return {
+                "running": False,
+                "message": "Continuous learning system not started"
+            }
+        
+        stats = system.get_stats()
+        return {
+            "running": system.running,
+            "stats": stats,
+            "config": {
+                "chains": system.config.chains,
+                "model_types": system.config.model_types,
+                "retrain_interval_hours": system.config.retrain_interval_hours
+            }
+        }
+        
+    except Exception as e:
+        logger.error("continuous_learning_status_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/learning/retrain", summary="Force immediate model retraining")
+async def force_retrain_endpoint() -> Dict:
+    """Force immediate retraining of all models"""
+    try:
+        from ..ai.continuous_learning import get_learning_system
+        
+        system = get_learning_system()
+        if not system or not system.running:
+            raise HTTPException(status_code=400, detail="Continuous learning system not running")
+        
+        await system.force_retrain()
+        
+        return {
+            "status": "retrained",
+            "model_accuracies": system.stats.model_accuracies,
+            "models_trained": system.stats.models_trained
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("force_retrain_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
