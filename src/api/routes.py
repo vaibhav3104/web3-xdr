@@ -353,6 +353,80 @@ async def get_storage_stats():
         return {"error": "Database module not available", "storage": "in-memory"}
 
 
+@router.get("/chains/test-rpc")
+async def test_rpc_connections():
+    """
+    Test non-EVM RPC connections directly.
+    Useful for debugging connection issues.
+    """
+    import aiohttp
+    
+    results = {}
+    
+    # Test Cosmos RPCs
+    cosmos_rpcs = [
+        ("cosmos", "https://cosmos-rpc.polkachu.com/status"),
+        ("osmosis", "https://osmosis-rpc.polkachu.com/status"),
+        ("injective", "https://injective-rpc.polkachu.com/status"),
+    ]
+    
+    # Test Move RPCs
+    move_rpcs = [
+        ("aptos", "https://fullnode.mainnet.aptoslabs.com/v1"),
+    ]
+    
+    # Test Near RPCs
+    near_rpcs = [
+        ("near", "https://rpc.mainnet.near.org"),
+    ]
+    
+    async with aiohttp.ClientSession() as session:
+        # Test Cosmos
+        for chain, url in cosmos_rpcs:
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        height = data.get("result", {}).get("sync_info", {}).get("latest_block_height", "N/A")
+                        results[chain] = {"status": "connected", "block": height}
+                    else:
+                        results[chain] = {"status": "error", "code": resp.status}
+            except Exception as e:
+                results[chain] = {"status": "failed", "error": str(e)[:100]}
+        
+        # Test Aptos
+        for chain, url in move_rpcs:
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        version = data.get("ledger_version", "N/A")
+                        results[chain] = {"status": "connected", "version": version}
+                    else:
+                        results[chain] = {"status": "error", "code": resp.status}
+            except Exception as e:
+                results[chain] = {"status": "failed", "error": str(e)[:100]}
+        
+        # Test Near
+        for chain, url in near_rpcs:
+            try:
+                async with session.post(
+                    url, 
+                    json={"jsonrpc": "2.0", "id": "test", "method": "status", "params": []},
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        height = data.get("result", {}).get("sync_info", {}).get("latest_block_height", "N/A")
+                        results[chain] = {"status": "connected", "block": height}
+                    else:
+                        results[chain] = {"status": "error", "code": resp.status}
+            except Exception as e:
+                results[chain] = {"status": "failed", "error": str(e)[:100]}
+    
+    return results
+
+
 @router.get("/chains/status")
 async def get_chains_status():
     """
