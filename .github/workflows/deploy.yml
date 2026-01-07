@@ -47,7 +47,7 @@ jobs:
       
       - name: Run tests
         run: |
-          python -m pytest tests/ -v || echo "Tests completed"
+          python -m pytest tests/ -v -p no:anchorpy || echo "Tests completed"
 
   # ===========================================================================
   # Deploy to Staging (develop branch)
