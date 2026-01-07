@@ -1292,35 +1292,48 @@ def monitor():
                     print(f"   ❌ {chain_name} (EVM): Connection failed")
                     
             elif chain_type == "cosmos":
-                monitor_obj = CosmosMonitor(chain_config)
-                loop = asyncio.get_event_loop()
-                if loop.run_until_complete(monitor_obj.connect()):
-                    cosmos_monitors.append(monitor_obj)
-                    print(f"   ✅ {chain_name} (Cosmos): Height {monitor_obj.last_height:,}")
-                else:
-                    print(f"   ❌ {chain_name} (Cosmos): Connection failed")
+                try:
+                    monitor_obj = CosmosMonitor(chain_config)
+                    # Create new event loop for async operations
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    if loop.run_until_complete(monitor_obj.connect()):
+                        cosmos_monitors.append(monitor_obj)
+                        print(f"   ✅ {chain_name} (Cosmos): Height {monitor_obj.last_height:,}")
+                    else:
+                        print(f"   ❌ {chain_name} (Cosmos): Connection failed (check RPC)")
+                except Exception as cosmos_err:
+                    print(f"   ❌ {chain_name} (Cosmos): {str(cosmos_err)[:60]}")
                     
             elif chain_type in ["aptos", "sui"]:
-                monitor_obj = AptosMonitor(chain_config, chain_type)
-                loop = asyncio.get_event_loop()
-                if loop.run_until_complete(monitor_obj.connect()):
-                    aptos_monitors.append(monitor_obj)
-                    version_label = "Version" if chain_type == "aptos" else "Checkpoint"
-                    print(f"   ✅ {chain_name} ({chain_type.upper()}): {version_label} {monitor_obj.last_version:,}")
-                else:
-                    print(f"   ❌ {chain_name} ({chain_type.upper()}): Connection failed")
+                try:
+                    monitor_obj = AptosMonitor(chain_config, chain_type)
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    if loop.run_until_complete(monitor_obj.connect()):
+                        aptos_monitors.append(monitor_obj)
+                        version_label = "Version" if chain_type == "aptos" else "Checkpoint"
+                        print(f"   ✅ {chain_name} ({chain_type.upper()}): {version_label} {monitor_obj.last_version:,}")
+                    else:
+                        print(f"   ❌ {chain_name} ({chain_type.upper()}): Connection failed (check RPC)")
+                except Exception as aptos_err:
+                    print(f"   ❌ {chain_name} ({chain_type.upper()}): {str(aptos_err)[:60]}")
                     
             elif chain_type == "near":
-                monitor_obj = NearMonitor(chain_config)
-                loop = asyncio.get_event_loop()
-                if loop.run_until_complete(monitor_obj.connect()):
-                    near_monitors.append(monitor_obj)
-                    print(f"   ✅ {chain_name} (Near): Height {monitor_obj.last_height:,}")
-                else:
-                    print(f"   ❌ {chain_name} (Near): Connection failed")
+                try:
+                    monitor_obj = NearMonitor(chain_config)
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    if loop.run_until_complete(monitor_obj.connect()):
+                        near_monitors.append(monitor_obj)
+                        print(f"   ✅ {chain_name} (Near): Height {monitor_obj.last_height:,}")
+                    else:
+                        print(f"   ❌ {chain_name} (Near): Connection failed (check RPC)")
+                except Exception as near_err:
+                    print(f"   ❌ {chain_name} (Near): {str(near_err)[:60]}")
                     
         except Exception as e:
-            print(f"   ❌ {chain_name}: {str(e)[:40]}")
+            print(f"   ❌ {chain_name}: {str(e)[:60]}")
     
     total_chains = len(evm_monitors) + len(cosmos_monitors) + len(aptos_monitors) + len(near_monitors)
     
