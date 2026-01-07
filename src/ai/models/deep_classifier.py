@@ -81,7 +81,7 @@ if PYTORCH_AVAILABLE:
             for hidden_dim in hidden_dims:
                 layers.extend([
                     nn.Linear(prev_dim, hidden_dim),
-                    nn.BatchNorm1d(hidden_dim),
+                    nn.LayerNorm(hidden_dim),  # LayerNorm works with batch_size=1
                     nn.ReLU(),
                     nn.Dropout(dropout)
                 ])

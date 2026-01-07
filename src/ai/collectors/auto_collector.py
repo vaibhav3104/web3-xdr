@@ -398,7 +398,15 @@ class AutoContractCollector:
             if self.classifier:
                 result = self.classifier.classify(contract.bytecode)
                 
-                threat_category = result.category.value if hasattr(result.category, 'value') else str(result.category)
+                # Handle both old (threat_category) and new (category) attribute names
+                if hasattr(result, 'threat_category'):
+                    cat = result.threat_category
+                elif hasattr(result, 'category'):
+                    cat = result.category
+                else:
+                    cat = "unknown_threat"
+                
+                threat_category = cat.value if hasattr(cat, 'value') else str(cat)
                 risk_score = result.risk_score
                 confidence = result.confidence
                 is_threat = threat_category != "safe" and risk_score > 0.5
