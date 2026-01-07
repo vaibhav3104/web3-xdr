@@ -396,7 +396,7 @@ class DeepContractClassifier:
             self._extractor = RealBytecodeFeatureExtractor()
         return self._extractor
     
-    def _create_model(self) -> nn.Module:
+    def _create_model(self):
         """Create the neural network model"""
         num_classes = len(self.THREAT_CATEGORIES)
         
