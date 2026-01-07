@@ -703,19 +703,52 @@ class CosmosMonitor:
         self.session = None
         
     async def connect(self) -> bool:
-        """Connect to Cosmos chain via Tendermint RPC."""
+        """Connect to Cosmos chain via Tendermint RPC with fallback."""
         import aiohttp
         
-        try:
-            self.session = aiohttp.ClientSession()
-            async with self.session.get(f"{self.rpc_url}/status", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self.last_height = int(data.get("result", {}).get("sync_info", {}).get("latest_block_height", 0))
-                    self.connected = True
-                    return True
-        except Exception as e:
-            pass
+        # Fallback RPCs for Cosmos chains
+        fallback_rpcs = {
+            "cosmos": [
+                "https://cosmos-rpc.polkachu.com",
+                "https://rpc.cosmos.network",
+                "https://cosmos-rpc.publicnode.com",
+            ],
+            "osmosis": [
+                "https://osmosis-rpc.polkachu.com",
+                "https://rpc.osmosis.zone",
+                "https://osmosis-rpc.publicnode.com",
+            ],
+            "injective": [
+                "https://injective-rpc.polkachu.com",
+                "https://sentry.tm.injective.network",
+            ],
+        }
+        
+        rpcs_to_try = [self.rpc_url] + fallback_rpcs.get(self.chain_id.lower(), [])
+        
+        for rpc in rpcs_to_try:
+            try:
+                self.session = aiohttp.ClientSession()
+                async with self.session.get(
+                    f"{rpc}/status", 
+                    timeout=aiohttp.ClientTimeout(total=15),
+                    headers={"User-Agent": "Sentinel3/1.0"}
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        self.last_height = int(data.get("result", {}).get("sync_info", {}).get("latest_block_height", 0))
+                        self.connected = True
+                        self.rpc_url = rpc  # Use the working RPC
+                        print(f"      [Cosmos:{self.chain_id}] Connected via {rpc[:40]}...")
+                        return True
+                    else:
+                        print(f"      [Cosmos:{self.chain_id}] RPC {rpc[:30]} returned status {resp.status}")
+            except Exception as e:
+                print(f"      [Cosmos:{self.chain_id}] RPC {rpc[:30]} failed: {str(e)[:40]}")
+                if self.session:
+                    await self.session.close()
+                    self.session = None
+        
         return False
     
     async def scan_events(self) -> List[LiveEvent]:
@@ -824,33 +857,67 @@ class AptosMonitor:
         self.session = None
         
     async def connect(self) -> bool:
-        """Connect to Aptos/Sui chain."""
+        """Connect to Aptos/Sui chain with fallbacks."""
         import aiohttp
         
-        try:
-            self.session = aiohttp.ClientSession()
-            
-            if self.chain_type == "aptos":
-                async with self.session.get(self.rpc_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        self.last_version = int(data.get("ledger_version", 0))
-                        self.connected = True
-                        return True
-            else:  # Sui
-                async with self.session.post(
-                    self.rpc_url,
-                    json={"jsonrpc": "2.0", "method": "sui_getLatestCheckpointSequenceNumber", "id": 1},
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        self.last_version = int(data.get("result", 0))
-                        self.connected = True
-                        return True
-                        
-        except Exception:
-            pass
+        # Fallback RPCs for Move chains
+        fallback_rpcs = {
+            "aptos": [
+                "https://fullnode.mainnet.aptoslabs.com/v1",
+                "https://aptos-mainnet.public.blastapi.io/v1",
+                "https://rpc.ankr.com/aptos",
+            ],
+            "sui": [
+                "https://fullnode.mainnet.sui.io:443",
+                "https://sui-mainnet.public.blastapi.io",
+                "https://rpc.ankr.com/sui",
+            ],
+        }
+        
+        rpcs_to_try = [self.rpc_url] + fallback_rpcs.get(self.chain_type, [])
+        
+        for rpc in rpcs_to_try:
+            try:
+                self.session = aiohttp.ClientSession()
+                
+                if self.chain_type == "aptos":
+                    async with self.session.get(
+                        rpc, 
+                        timeout=aiohttp.ClientTimeout(total=15),
+                        headers={"User-Agent": "Sentinel3/1.0"}
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            self.last_version = int(data.get("ledger_version", 0))
+                            self.connected = True
+                            self.rpc_url = rpc
+                            print(f"      [Aptos:{self.chain_id}] Connected via {rpc[:40]}...")
+                            return True
+                        else:
+                            print(f"      [Aptos:{self.chain_id}] RPC {rpc[:30]} returned status {resp.status}")
+                else:  # Sui
+                    async with self.session.post(
+                        rpc,
+                        json={"jsonrpc": "2.0", "method": "sui_getLatestCheckpointSequenceNumber", "id": 1},
+                        timeout=aiohttp.ClientTimeout(total=15),
+                        headers={"User-Agent": "Sentinel3/1.0", "Content-Type": "application/json"}
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            self.last_version = int(data.get("result", 0))
+                            self.connected = True
+                            self.rpc_url = rpc
+                            print(f"      [Sui:{self.chain_id}] Connected via {rpc[:40]}...")
+                            return True
+                        else:
+                            print(f"      [Sui:{self.chain_id}] RPC {rpc[:30]} returned status {resp.status}")
+                            
+            except Exception as e:
+                print(f"      [{self.chain_type.upper()}:{self.chain_id}] RPC {rpc[:30]} failed: {str(e)[:40]}")
+                if self.session:
+                    await self.session.close()
+                    self.session = None
+        
         return False
     
     async def scan_events(self) -> List[LiveEvent]:
@@ -1036,24 +1103,44 @@ class NearMonitor:
         self.session = None
         
     async def connect(self) -> bool:
-        """Connect to Near RPC."""
+        """Connect to Near RPC with fallbacks."""
         import aiohttp
         
-        try:
-            self.session = aiohttp.ClientSession()
-            async with self.session.post(
-                self.rpc_url,
-                json={"jsonrpc": "2.0", "id": "xdr", "method": "status", "params": []},
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    sync_info = data.get("result", {}).get("sync_info", {})
-                    self.last_height = sync_info.get("latest_block_height", 0)
-                    self.connected = True
-                    return True
-        except Exception:
-            pass
+        # Fallback RPCs for Near
+        fallback_rpcs = [
+            "https://rpc.mainnet.near.org",
+            "https://near-mainnet.public.blastapi.io",
+            "https://rpc.ankr.com/near",
+            "https://public-rpc.blockpi.io/http/near",
+        ]
+        
+        rpcs_to_try = [self.rpc_url] + [r for r in fallback_rpcs if r != self.rpc_url]
+        
+        for rpc in rpcs_to_try:
+            try:
+                self.session = aiohttp.ClientSession()
+                async with self.session.post(
+                    rpc,
+                    json={"jsonrpc": "2.0", "id": "sentinel3", "method": "status", "params": []},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                    headers={"User-Agent": "Sentinel3/1.0", "Content-Type": "application/json"}
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        sync_info = data.get("result", {}).get("sync_info", {})
+                        self.last_height = sync_info.get("latest_block_height", 0)
+                        self.connected = True
+                        self.rpc_url = rpc
+                        print(f"      [Near:{self.chain_id}] Connected via {rpc[:40]}...")
+                        return True
+                    else:
+                        print(f"      [Near:{self.chain_id}] RPC {rpc[:30]} returned status {resp.status}")
+            except Exception as e:
+                print(f"      [Near:{self.chain_id}] RPC {rpc[:30]} failed: {str(e)[:40]}")
+                if self.session:
+                    await self.session.close()
+                    self.session = None
+        
         return False
     
     async def scan_events(self) -> List[LiveEvent]:
