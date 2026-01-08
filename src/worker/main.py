@@ -89,7 +89,8 @@ from fastapi.responses import Response
 logger = structlog.get_logger(__name__)
 
 # Configuration
-WORKER_HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "9090"))
+# Cloud Run sets PORT automatically, but we can override with WORKER_HEALTH_PORT
+WORKER_HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT") or os.getenv("PORT", "9090"))
 REDIS_URL = os.getenv("REDIS_URL", "")
 POLL_INTERVAL_SECONDS = float(os.getenv("POLL_INTERVAL_SECONDS", "2.0"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
