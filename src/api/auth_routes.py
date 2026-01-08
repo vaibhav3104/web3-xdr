@@ -19,7 +19,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest, client_ip: Optional[str] = None):
+async def login(request: LoginRequest):
     """
     Authenticate user and return JWT token.
     
