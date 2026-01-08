@@ -205,6 +205,18 @@ class InvariantContext:
         """
         # Default timelock delays
         return timedelta(hours=24)
+    
+    def get_recent_events(self, minutes: int = 30) -> List[SecurityEvent]:
+        """Get recent events within time window."""
+        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        results = []
+        
+        for events in self._events.values():
+            for event in events:
+                if event.block_timestamp >= cutoff:
+                    results.append(event)
+        
+        return sorted(results, key=lambda e: e.block_timestamp)
 
 
 class Invariant(ABC):

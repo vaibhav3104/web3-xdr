@@ -1,7 +1,14 @@
 """
-Aptos/Sui Listener (Move-based Chains)
-======================================
-Monitors Move-based blockchains for bridge events.
+Aptos/Sui Listener (Move-based Chains) - Robust
+================================================
+Monitors Move-based blockchains for bridge events with failover support.
+
+Features:
+- Multi-RPC failover with health tracking
+- Automatic reconnection
+- Heartbeat logging
+- Bridge transaction detection
+- Suspicious pattern detection
 
 Supported Chains:
 - Aptos
@@ -24,19 +31,36 @@ from dataclasses import dataclass, field
 import structlog
 import aiohttp
 
-from .base import ChainListener, ListenerConfig
+from .robust_non_evm import RobustNonEVMListener, NonEVMConfig
 from ..models.events import SecurityEvent, EventType, Severity
 
 logger = structlog.get_logger(__name__)
 
 
 @dataclass
-class AptosConfig(ListenerConfig):
-    """Configuration for Aptos/Sui listener"""
+class AptosConfig(NonEVMConfig):
+    """Configuration for Aptos/Sui listener with failover support."""
     rest_api: str = "https://fullnode.mainnet.aptoslabs.com/v1"
     indexer_api: str = ""  # GraphQL indexer
     chain_type: str = "aptos"  # "aptos" or "sui"
     bridge_modules: List[str] = field(default_factory=list)  # Move module addresses
+    
+    def __post_init__(self):
+        """Set rpc_url from rest_api if not provided."""
+        if not self.rpc_url and self.rest_api:
+            self.rpc_url = self.rest_api
+    
+    def get_all_rpc_urls(self) -> List[str]:
+        """Get all RPC URLs including rest_api."""
+        urls = []
+        if self.rest_api:
+            urls.append(self.rest_api)
+        if self.rpc_url and self.rpc_url != self.rest_api:
+            urls.append(self.rpc_url)
+        urls.extend(self.rpc_urls)
+        urls.extend(self.fallback_rpcs)
+        seen = set()
+        return [x for x in urls if not (x in seen or seen.add(x))]
 
 
 # Known Aptos Bridge Addresses
@@ -70,9 +94,9 @@ SUSPICIOUS_PATTERNS = [
 ]
 
 
-class AptosListener(ChainListener):
+class AptosListener(RobustNonEVMListener):
     """
-    Listens to Aptos/Sui chains via REST API.
+    Robust listener for Aptos/Sui chains via REST API.
     
     Move-based chains have unique security properties:
     - Formal verification support
@@ -83,136 +107,135 @@ class AptosListener(ChainListener):
     - Bridge logic errors
     - Oracle manipulation
     - Access control bugs
+    
+    Includes multi-RPC failover and automatic reconnection.
     """
     
     def __init__(self, config: AptosConfig):
         super().__init__(config)
         self.config: AptosConfig = config
-        self.http_session = None
-        self.latest_version = 0
         self.bridge_modules = set(config.bridge_modules or [])
         
-        # Add known bridges
+        # Add known bridges based on chain type
         if config.chain_type == "aptos":
             self.bridge_modules.update(APTOS_BRIDGES.keys())
             self.bridge_names = APTOS_BRIDGES
         else:
             self.bridge_modules.update(SUI_BRIDGES.keys())
             self.bridge_names = SUI_BRIDGES
+    
+    async def _make_chain_request(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        method: str,
+        params: Any,
+        is_json_rpc: bool
+    ) -> Optional[Dict]:
+        """Make Aptos REST API or Sui JSON-RPC request."""
+        
+        if self.config.chain_type == "aptos":
+            # Aptos uses REST API
+            endpoint_url = f"{url}/{method}"
             
-    async def connect(self) -> bool:
-        """Connect to Aptos/Sui REST API"""
-        try:
-            self.http_session = aiohttp.ClientSession()
+            if params:
+                query_params = "&".join(f"{k}={v}" for k, v in params.items())
+                endpoint_url = f"{endpoint_url}?{query_params}"
             
-            if self.config.chain_type == "aptos":
-                # Get ledger info for Aptos
-                async with self.http_session.get(
-                    f"{self.config.rest_api}"
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        self.latest_version = int(data.get("ledger_version", 0))
-                        logger.info(
-                            "aptos_connected",
-                            chain=self.config.chain_id,
-                            version=self.latest_version
-                        )
-                        self._connected = True
-                        return True
-            else:
-                # Sui connection
-                async with self.http_session.post(
-                    self.config.rest_api,
-                    json={"jsonrpc": "2.0", "method": "sui_getLatestCheckpointSequenceNumber", "id": 1}
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        self.latest_version = int(data.get("result", 0))
-                        logger.info(
-                            "sui_connected",
-                            chain=self.config.chain_id,
-                            checkpoint=self.latest_version
-                        )
-                        self._connected = True
-                        return True
-                        
-        except Exception as e:
-            logger.error(
-                f"{self.config.chain_type}_connection_failed",
-                chain=self.config.chain_id,
-                error=str(e)
+            async with session.get(endpoint_url) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                elif resp.status >= 500:
+                    raise aiohttp.ClientResponseError(
+                        resp.request_info,
+                        resp.history,
+                        status=resp.status
+                    )
+                return None
+        else:
+            # Sui uses JSON-RPC
+            async with session.post(
+                url,
+                json={
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": params or [],
+                    "id": 1
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("result")
+                elif resp.status >= 500:
+                    raise aiohttp.ClientResponseError(
+                        resp.request_info,
+                        resp.history,
+                        status=resp.status
+                    )
+                return None
+    
+    async def _get_latest_block_height(self) -> int:
+        """Get the latest ledger version (Aptos) or checkpoint (Sui)."""
+        
+        if self.config.chain_type == "aptos":
+            # Aptos: Get ledger info
+            result = await self._make_request("")  # Root endpoint
+            if result:
+                return int(result.get("ledger_version", 0))
+        else:
+            # Sui: Get latest checkpoint
+            result = await self._make_request(
+                "sui_getLatestCheckpointSequenceNumber",
+                [],
+                is_json_rpc=True
             )
-            
-        return False
+            if result is not None:
+                return int(result)
         
-    async def disconnect(self):
-        """Disconnect from API"""
-        if self.http_session:
-            await self.http_session.close()
-        self._connected = False
-        logger.info(f"{self.config.chain_type}_disconnected", chain=self.config.chain_id)
+        return 0
+    
+    async def _process_block_impl(self, height: int) -> List[SecurityEvent]:
+        """Process transactions at the given version/checkpoint."""
         
-    async def listen_events(self) -> AsyncGenerator[SecurityEvent, None]:
-        """Poll for new transactions"""
-        poll_interval = 2  # seconds
-        
-        while self._connected:
-            try:
-                if self.config.chain_type == "aptos":
-                    events = await self._poll_aptos_transactions()
-                else:
-                    events = await self._poll_sui_transactions()
-                    
-                for event in events:
-                    yield event
-                    
-                await asyncio.sleep(poll_interval)
-                
-            except Exception as e:
-                logger.error(
-                    f"{self.config.chain_type}_poll_error",
-                    chain=self.config.chain_id,
-                    error=str(e)
-                )
-                await asyncio.sleep(5)
-                
-    async def _poll_aptos_transactions(self) -> List[SecurityEvent]:
-        """Poll Aptos for new transactions"""
+        if self.config.chain_type == "aptos":
+            return await self._poll_aptos_transactions(height)
+        else:
+            return await self._poll_sui_transactions(height)
+    
+    async def _poll_aptos_transactions(self, start_version: int) -> List[SecurityEvent]:
+        """Poll Aptos for new transactions."""
         events = []
         
         try:
-            # Get recent transactions
-            async with self.http_session.get(
-                f"{self.config.rest_api}/transactions",
-                params={"limit": 100, "start": self.latest_version}
-            ) as resp:
-                if resp.status != 200:
-                    return events
-                    
-                transactions = await resp.json()
-                
-                for tx in transactions:
-                    tx_events = self._process_aptos_tx(tx)
-                    events.extend(tx_events)
-                    
-                    # Update latest version
-                    version = int(tx.get("version", 0))
-                    if version > self.latest_version:
-                        self.latest_version = version
-                        
-        except Exception as e:
-            logger.error("aptos_poll_failed", error=str(e))
+            result = await self._make_request(
+                "transactions",
+                {"limit": 100, "start": start_version}
+            )
             
-        return events
+            if not result:
+                return events
+            
+            for tx in result:
+                tx_events = self._process_aptos_tx(tx)
+                events.extend(tx_events)
+                
+                # Update latest version
+                version = int(tx.get("version", 0))
+                if version > self.latest_height:
+                    self.latest_height = version
+                    
+        except Exception as e:
+            logger.error("aptos_poll_failed", chain=self.chain_id, error=str(e))
         
+        return events
+    
     def _process_aptos_tx(self, tx: Dict) -> List[SecurityEvent]:
-        """Process an Aptos transaction"""
+        """Process an Aptos transaction."""
         events = []
         
         if tx.get("type") != "user_transaction":
             return events
-            
+        
         tx_hash = tx.get("hash", "")
         version = tx.get("version", 0)
         sender = tx.get("sender", "")
@@ -251,7 +274,7 @@ class AptosListener(ChainListener):
                     "value_usd": value
                 }
             ))
-            
+        
         # Check for suspicious patterns
         function_lower = function.lower()
         for pattern in SUSPICIOUS_PATTERNS:
@@ -275,13 +298,12 @@ class AptosListener(ChainListener):
                     }
                 ))
                 break
-                
+        
         # Check for events in the transaction
         for event in tx.get("events", []):
             event_type = event.get("type", "")
             
-            # Look for bridge-related events
-            if any(bridge in event_type.lower() for bridge in ["transfer", "deposit", "withdraw", "bridge"]):
+            if any(term in event_type.lower() for term in ["transfer", "deposit", "withdraw", "bridge"]):
                 event_data = event.get("data", {})
                 
                 events.append(SecurityEvent(
@@ -300,44 +322,39 @@ class AptosListener(ChainListener):
                         "event_data": event_data
                     }
                 ))
-                
-        return events
         
-    async def _poll_sui_transactions(self) -> List[SecurityEvent]:
-        """Poll Sui for new transactions"""
+        return events
+    
+    async def _poll_sui_transactions(self, checkpoint: int) -> List[SecurityEvent]:
+        """Poll Sui for new transactions."""
         events = []
         
         try:
-            # Get recent transactions using JSON-RPC
-            async with self.http_session.post(
-                self.config.rest_api,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "suix_queryTransactionBlocks",
-                    "params": [{
-                        "filter": None,
-                        "options": {"showInput": True, "showEffects": True, "showEvents": True}
-                    }, None, 50, True],
-                    "id": 1
-                }
-            ) as resp:
-                if resp.status != 200:
-                    return events
-                    
-                data = await resp.json()
-                transactions = data.get("result", {}).get("data", [])
-                
-                for tx in transactions:
-                    tx_events = self._process_sui_tx(tx)
-                    events.extend(tx_events)
-                    
-        except Exception as e:
-            logger.error("sui_poll_failed", error=str(e))
+            result = await self._make_request(
+                "suix_queryTransactionBlocks",
+                [{
+                    "filter": None,
+                    "options": {"showInput": True, "showEffects": True, "showEvents": True}
+                }, None, 50, True],
+                is_json_rpc=True
+            )
             
-        return events
+            if not result:
+                return events
+            
+            transactions = result.get("data", [])
+            
+            for tx in transactions:
+                tx_events = self._process_sui_tx(tx)
+                events.extend(tx_events)
+                
+        except Exception as e:
+            logger.error("sui_poll_failed", chain=self.chain_id, error=str(e))
         
+        return events
+    
     def _process_sui_tx(self, tx: Dict) -> List[SecurityEvent]:
-        """Process a Sui transaction"""
+        """Process a Sui transaction."""
         events = []
         
         digest = tx.get("digest", "")
@@ -378,7 +395,7 @@ class AptosListener(ChainListener):
                                 "function": function
                             }
                         ))
-                        
+        
         # Process emitted events
         for event in tx.get("events", []):
             event_type = event.get("type", "")
@@ -398,11 +415,11 @@ class AptosListener(ChainListener):
                         "event_type": event_type
                     }
                 ))
-                
-        return events
         
+        return events
+    
     def _extract_value(self, args: List) -> float:
-        """Extract USD value from transaction arguments"""
+        """Extract USD value from transaction arguments."""
         for arg in args:
             if isinstance(arg, (int, str)):
                 try:
@@ -413,9 +430,9 @@ class AptosListener(ChainListener):
                 except:
                     continue
         return 0
-        
+    
     def _calculate_severity(self, value: float) -> Severity:
-        """Calculate severity based on value"""
+        """Calculate severity based on value."""
         if value > 10_000_000:
             return Severity.CRITICAL
         elif value > 1_000_000:
@@ -423,16 +440,7 @@ class AptosListener(ChainListener):
         elif value > 100_000:
             return Severity.MEDIUM
         return Severity.LOW
-        
+    
     async def get_account_resources(self, address: str) -> Optional[List[Dict]]:
-        """Get account resources (for investigation)"""
-        try:
-            async with self.http_session.get(
-                f"{self.config.rest_api}/accounts/{address}/resources"
-            ) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-        except Exception as e:
-            logger.error("aptos_get_resources_failed", address=address, error=str(e))
-        return None
-
+        """Get account resources (for investigation)."""
+        return await self._make_request(f"accounts/{address}/resources")

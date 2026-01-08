@@ -1,5 +1,6 @@
 """
 Security Event Model - Unified schema for all blockchain events.
+Enhanced with lifecycle status and finality tracking.
 """
 
 from dataclasses import dataclass, field
@@ -8,6 +9,13 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Optional
 import uuid
+
+
+class EventStatus(Enum):
+    """Event lifecycle status."""
+    PENDING = "pending"  # Not yet confirmed (within reorg window)
+    CONFIRMED = "confirmed"  # Confirmed beyond finality threshold
+    DROPPED = "dropped"  # Dropped due to reorg
 
 
 class EventType(Enum):
@@ -33,6 +41,11 @@ class EventType(Enum):
     ADMIN_ACTION = "admin_action"
     ROLE_GRANTED = "role_granted"
     ROLE_REVOKED = "role_revoked"
+    OWNERSHIP_TRANSFERRED = "ownership_transferred"
+    UPGRADED = "upgraded"
+    ADMIN_CHANGED = "admin_changed"
+    PAUSED = "paused"
+    UNPAUSED = "unpaused"
     
     # Validator operations
     SIGNATURE_SUBMIT = "signature_submit"
@@ -50,6 +63,16 @@ class EventType(Enum):
     # Contract operations
     CONTRACT_DEPLOY = "contract_deploy"
     CONTRACT_UPGRADE = "contract_upgrade"
+    
+    # Large transfers
+    LARGE_TRANSFER = "large_transfer"
+    BRIDGE_CALL = "bridge_call"
+    BRIDGE_EVENT = "bridge_event"
+    SUSPICIOUS_CALL = "suspicious_call"
+    CROSS_CHAIN_TRANSFER = "cross_chain_transfer"
+    TOKEN_TRANSFER = "token_transfer"
+    ACCESS_CONTROL_CHANGE = "access_control_change"
+    CONTRACT_DEPLOYED = "contract_deployed"
     
     # Unknown / Other
     UNKNOWN = "unknown"
@@ -73,7 +96,7 @@ class Severity(Enum):
 @dataclass
 class SecurityEvent:
     """
-    Unified security event schema.
+    Unified security event schema with lifecycle management.
     
     All chain-specific events are normalized to this schema for
     cross-chain correlation and invariant checking.
@@ -86,6 +109,12 @@ class SecurityEvent:
     block_timestamp: datetime = field(default_factory=datetime.utcnow)
     tx_hash: str = ""
     log_index: int = 0
+    
+    # Lifecycle (NEW)
+    status: EventStatus = EventStatus.PENDING
+    confirmed_at: Optional[datetime] = None
+    block_hash: Optional[str] = None  # For reorg detection
+    canonical_event_hash: Optional[str] = None  # For deduplication
     
     # Classification
     event_type: EventType = EventType.UNKNOWN
@@ -120,6 +149,10 @@ class SecurityEvent:
     # Raw data
     raw_event: dict = field(default_factory=dict)
     
+    def get_unique_key(self) -> str:
+        """Generate unique key for deduplication: (chain_id, tx_hash, log_index)."""
+        return f"{self.chain_id}:{self.tx_hash}:{self.log_index}"
+    
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
@@ -129,6 +162,10 @@ class SecurityEvent:
             "block_timestamp": self.block_timestamp.isoformat(),
             "tx_hash": self.tx_hash,
             "log_index": self.log_index,
+            "status": self.status.value,
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
+            "block_hash": self.block_hash,
+            "canonical_event_hash": self.canonical_event_hash,
             "event_type": self.event_type.value,
             "severity": self.severity.name,
             "source_address": self.source_address,
@@ -155,6 +192,11 @@ class SecurityEvent:
                 if "block_timestamp" in data else datetime.utcnow(),
             tx_hash=data.get("tx_hash", ""),
             log_index=data.get("log_index", 0),
+            status=EventStatus(data.get("status", "pending")),
+            confirmed_at=datetime.fromisoformat(data["confirmed_at"]) 
+                if data.get("confirmed_at") else None,
+            block_hash=data.get("block_hash"),
+            canonical_event_hash=data.get("canonical_event_hash"),
             event_type=EventType(data.get("event_type", "unknown")),
             severity=Severity[data.get("severity", "INFO")],
             source_address=data.get("source_address", ""),
@@ -177,4 +219,3 @@ class SecurityEvent:
         if not isinstance(other, SecurityEvent):
             return False
         return self.event_id == other.event_id
-

@@ -40,13 +40,13 @@ services:
       retries: 5
 
   # --------------------------------------------------------------------------
-  # Main XDR Application
+  # API Server (FastAPI Dashboard & Control Plane)
   # --------------------------------------------------------------------------
-  xdr:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: sentinel3
+    container_name: sentinel3-api
     ports:
       - "8080:8080"
     volumes:
@@ -55,6 +55,9 @@ services:
       # Mount rules for hot-reloading
       - ./config/rules:/app/config/rules
     environment:
+      # Process type
+      - PROC_TYPE=api
+      - HEALTH_PORT=8080
       # Database
       - POSTGRES_ENABLED=true
       - POSTGRES_HOST=postgres
@@ -65,6 +68,8 @@ services:
       - DB_POOL_SIZE=10
       - DB_MAX_OVERFLOW=20
       - DB_BATCH_SIZE=100
+      # Redis (for shared state with worker)
+      - REDIS_URL=redis://redis:6379/0
       # RPC Endpoints (override in .env file)
       - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL:-}
       - POLYGON_RPC_URL=${POLYGON_RPC_URL:-}
@@ -78,6 +83,8 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-production}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -95,7 +102,7 @@ services:
         max-file: "5"
 
   # --------------------------------------------------------------------------
-  # Redis (for caching and real-time pub/sub)
+  # Redis (for caching, state sharing, and real-time pub/sub)
   # --------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -113,6 +120,63 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # --------------------------------------------------------------------------
+  # Worker - Dedicated Blockchain Listener Process
+  # --------------------------------------------------------------------------
+  # Runs separately from the API server for better scaling and isolation.
+  # Uses Redis for shared state with the main API.
+  #
+  # Scale workers: docker-compose up -d --scale worker=3
+  # Run specific chains: Add WORKER_CHAINS=ethereum,polygon to environment
+  # --------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinel3-worker
+    ports:
+      - "9090:9090"
+    environment:
+      # Process type
+      - PROC_TYPE=worker
+      - HEALTH_PORT=9090
+      # Redis for shared state (REQUIRED for production)
+      - REDIS_URL=redis://redis:6379/0
+      # Database (optional for workers)
+      - POSTGRES_ENABLED=false
+      # Worker settings
+      - WORKER_HEALTH_PORT=9090
+      - POLL_INTERVAL_SECONDS=2.0
+      - BATCH_SIZE=10
+      - PROCESSING_TIMEOUT_SECONDS=5.0
+      # Optional: Filter specific chains (comma-separated)
+      # - WORKER_CHAINS=ethereum,polygon,arbitrum
+      # RPC Endpoints (override in .env file)
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL:-}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-}
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL:-}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - xdr-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # --------------------------------------------------------------------------
   # pgAdmin (Database Management UI)

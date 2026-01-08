@@ -56,7 +56,13 @@ class EventModel(Base):
     tx_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     block_number: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     block_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    block_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)  # For reorg detection
     log_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    # Lifecycle status (NEW)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING", index=True)  # PENDING/CONFIRMED/DROPPED
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    canonical_event_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)  # For deduplication
     
     # Contract & addresses
     contract_address: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -89,6 +95,8 @@ class EventModel(Base):
         Index("ix_events_chain_timestamp", "chain_id", "block_timestamp"),
         Index("ix_events_contract_type", "contract_address", "event_type"),
         Index("ix_events_severity_timestamp", "severity", "block_timestamp"),
+        Index("ix_events_status", "status", "chain_id"),  # For finality tracking
+        Index("ix_events_unique_key", "chain_id", "tx_hash", "log_index", unique=True),  # Deduplication
     )
     
     def __repr__(self):
@@ -111,17 +119,22 @@ class IncidentModel(Base):
     
     # Incident identification
     incident_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    cluster_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # Phase 4: Deduplication key
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     
     # Classification
     severity: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN", index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN_PENDING", index=True)  # OPEN_PENDING/OPEN_CONFIRMED/RESOLVED/FALSE_POSITIVE/STALE
     attack_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     
     # Confidence & analysis
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     total_loss_usd: Mapped[Optional[Decimal]] = mapped_column(Numeric(20, 2), nullable=True)
+    explanation_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Phase 4: Structured explanation
+    
+    # Phase 4: Event aggregation
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Number of events in this incident
     
     # Affected scope
     affected_chains: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
@@ -164,6 +177,7 @@ class IncidentModel(Base):
     __table_args__ = (
         Index("ix_incidents_severity_status", "severity", "status"),
         Index("ix_incidents_attack_type_created", "attack_type", "created_at"),
+        Index("ix_incidents_cluster_key", "cluster_key"),  # Phase 4: For deduplication lookups
     )
     
     def __repr__(self):
@@ -314,13 +328,24 @@ class AuditLogModel(Base):
         default=uuid.uuid4
     )
     
-    action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    entity_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    entity_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Phase 5: Enhanced audit logging
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True
+    )
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # e.g., "LOGIN", "PAUSE", "RULE_CREATE"
+    actor_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)  # user or "system"
+    resource_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)  # incident_id, rule_id, etc.
+    details: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Additional context
     
-    user: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    
+    # Legacy fields (kept for backward compatibility)
+    action: Mapped[str] = mapped_column(String(64), nullable=True)  # Deprecated, use action_type
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=True)  # Deprecated, use details
+    entity_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)  # Deprecated, use resource_id
+    user: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)  # Deprecated, use actor_id
+    ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     old_value: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     new_value: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     
@@ -337,4 +362,45 @@ class AuditLogModel(Base):
     
     def __repr__(self):
         return f"<AuditLog {self.action} {self.entity_type}:{self.entity_id}>"
+
+
+class CorrelationKeyModel(Base):
+    """
+    Tracks correlation keys for cross-chain event matching.
+    Prevents replay attacks and ensures idempotency.
+    """
+    __tablename__ = "correlation_keys"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    
+    protocol_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    src_chain: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    dst_chain: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    correlation_key: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    
+    # Event references
+    source_event_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    dest_event_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    
+    # Status
+    matched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    matched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+    
+    __table_args__ = (
+        Index("ix_correlation_keys_unique", "protocol_id", "src_chain", "dst_chain", "correlation_key", unique=True),
+        Index("ix_correlation_keys_unmatched", "matched", "created_at"),
+    )
+    
+    def __repr__(self):
+        return f"<CorrelationKey {self.protocol_id}:{self.correlation_key[:16]} matched={self.matched}>"
 

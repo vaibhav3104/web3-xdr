@@ -1,0 +1,51 @@
+# Sentinel3 Worker - Dedicated Listener Process
+# ==============================================
+# 
+# Build and run:
+#   docker build -f Dockerfile.worker -t sentinel3-worker .
+#   docker run -e REDIS_URL=redis://host:6379 sentinel3-worker
+#
+# Cloud Run:
+#   gcloud run deploy sentinel3-worker --source . \
+#     --dockerfile Dockerfile.worker \
+#     --set-env-vars "REDIS_URL=redis://host:6379"
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY config/ ./config/
+COPY worker.py .
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV REDIS_ENABLED=true
+ENV POSTGRES_ENABLED=false
+ENV WORKER_HEALTH_PORT=8081
+ENV HEARTBEAT_INTERVAL=60
+
+# Health check endpoint
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Run the worker
+ENTRYPOINT ["python", "worker.py"]
+
+# Default arguments (can be overridden)
+CMD []
+

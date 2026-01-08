@@ -127,7 +127,7 @@ def create_app(
     # Health check
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "service": "sentinel3-v2"}
+        return {"status": "healthy", "service": "sentinel3"}
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")
@@ -164,4 +164,16 @@ async def run_server(
     )
     
     await server.serve()
+
+
+def main():
+    """Main entry point for API server."""
+    import asyncio
+    
+    app = create_app()
+    asyncio.run(run_server(app))
+
+
+if __name__ == "__main__":
+    main()
 

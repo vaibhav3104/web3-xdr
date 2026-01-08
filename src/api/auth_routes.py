@@ -19,7 +19,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, client_ip: Optional[str] = None):
     """
     Authenticate user and return JWT token.
     
@@ -28,14 +28,28 @@ async def login(request: LoginRequest):
     - operator/operator123 (limited admin)
     - viewer/viewer123 (read-only)
     """
+    from ..database.audit import AuditLogger, ActionType
+    from fastapi import Request
+    
     user = jwt_handler.authenticate_user(request.username, request.password)
     
+    # Get client IP
+    if not client_ip:
+        # Try to get from request headers (if available)
+        client_ip = None  # Would need Request object
+    
     if not user:
+        # Log failed login
+        AuditLogger.log_login(request.username, success=False, ip_address=client_ip)
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"}
         )
+    
+    # Log successful login
+    AuditLogger.log_login(request.username, success=True, ip_address=client_ip)
     
     # Create access token
     access_token = jwt_handler.create_access_token(
@@ -58,6 +72,13 @@ async def logout(current_user: User = Depends(require_auth)):
     Note: JWT tokens are stateless, so logout is handled client-side.
     For production, implement token blacklisting with Redis.
     """
+    from ..database.audit import AuditLogger, ActionType
+    
+    AuditLogger.log(
+        action_type=ActionType.LOGOUT,
+        actor_id=current_user.username
+    )
+    
     logger.info("user_logout", username=current_user.username)
     return {"message": "Logged out successfully", "username": current_user.username}
 

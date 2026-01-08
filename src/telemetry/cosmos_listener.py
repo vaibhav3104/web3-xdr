@@ -1,7 +1,14 @@
 """
-Cosmos/IBC Chain Listener
-=========================
+Cosmos/IBC Chain Listener (Robust)
+==================================
 Monitors Cosmos SDK chains via Tendermint RPC for bridge events.
+
+Features:
+- Multi-RPC failover with health tracking
+- Automatic reconnection
+- Heartbeat logging
+- IBC transfer monitoring
+- CosmWasm bridge contract detection
 
 Supported Chains:
 - Cosmos Hub (ATOM)
@@ -21,30 +28,41 @@ Bridge Protocols Monitored:
 
 import asyncio
 import json
-import hashlib
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional, Dict, Any, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import structlog
 import aiohttp
 from websockets import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
-from .base import ChainListener, ListenerConfig
+from .robust_non_evm import RobustNonEVMListener, NonEVMConfig
 from ..models.events import SecurityEvent, EventType, Severity
 
 logger = structlog.get_logger(__name__)
 
 
 @dataclass
-class CosmosConfig(ListenerConfig):
-    """Configuration for Cosmos chain listener"""
-    tendermint_rpc: str = ""  # http://localhost:26657
-    rest_api: str = ""  # http://localhost:1317
+class CosmosConfig(NonEVMConfig):
+    """Configuration for Cosmos chain listener with failover support."""
+    tendermint_rpc: str = ""  # Primary Tendermint RPC
+    rest_api: str = ""  # LCD REST API
     chain_prefix: str = "cosmos"  # Bech32 prefix
-    ibc_channels: List[str] = None  # IBC channel IDs to monitor
-    bridge_contracts: List[str] = None  # CosmWasm contract addresses
+    ibc_channels: List[str] = field(default_factory=list)  # IBC channel IDs to monitor
+    bridge_contracts: List[str] = field(default_factory=list)  # CosmWasm contract addresses
+    
+    def get_all_rpc_urls(self) -> List[str]:
+        """Get all RPC URLs including tendermint_rpc."""
+        urls = []
+        if self.tendermint_rpc:
+            urls.append(self.tendermint_rpc)
+        if self.rpc_url:
+            urls.append(self.rpc_url)
+        urls.extend(self.rpc_urls)
+        urls.extend(self.fallback_rpcs)
+        seen = set()
+        return [x for x in urls if not (x in seen or seen.add(x))]
 
 
 # IBC Message Types
@@ -65,9 +83,9 @@ BRIDGE_PATTERNS = {
 }
 
 
-class CosmosListener(ChainListener):
+class CosmosListener(RobustNonEVMListener):
     """
-    Listens to Cosmos SDK chains via Tendermint RPC/WebSocket.
+    Robust listener for Cosmos SDK chains via Tendermint RPC.
     
     Monitors:
     - IBC transfers and packet events
@@ -75,110 +93,137 @@ class CosmosListener(ChainListener):
     - Gravity Bridge events
     - Axelar GMP messages
     - Large token movements
+    
+    Includes multi-RPC failover and automatic reconnection.
     """
     
     def __init__(self, config: CosmosConfig):
         super().__init__(config)
         self.config: CosmosConfig = config
         self.ws_client = None
-        self.http_session = None
-        self.latest_height = 0
         self.ibc_channels = set(config.ibc_channels or [])
         self.bridge_contracts = set(config.bridge_contracts or [])
         
-    async def connect(self) -> bool:
-        """Connect to Tendermint RPC"""
-        try:
-            self.http_session = aiohttp.ClientSession()
-            
-            # Test connection by getting latest block
-            async with self.http_session.get(
-                f"{self.config.tendermint_rpc}/status"
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self.latest_height = int(
-                        data.get("result", {}).get("sync_info", {}).get("latest_block_height", 0)
-                    )
-                    logger.info(
-                        "cosmos_connected",
-                        chain=self.config.chain_id,
-                        height=self.latest_height
-                    )
-                    self._connected = True
-                    return True
-                    
-        except Exception as e:
-            logger.error("cosmos_connection_failed", chain=self.config.chain_id, error=str(e))
-            
-        return False
+    async def _make_chain_request(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        method: str,
+        params: Any,
+        is_json_rpc: bool
+    ) -> Optional[Dict]:
+        """Make a Tendermint RPC request."""
+        # Tendermint RPC uses path-based endpoints
+        endpoint_url = f"{url}/{method}"
         
-    async def disconnect(self):
-        """Disconnect from Tendermint"""
-        if self.ws_client:
-            await self.ws_client.close()
-        if self.http_session:
-            await self.http_session.close()
-        self._connected = False
-        logger.info("cosmos_disconnected", chain=self.config.chain_id)
+        if params:
+            # Add query params
+            query_params = "&".join(f"{k}={v}" for k, v in params.items())
+            endpoint_url = f"{endpoint_url}?{query_params}"
         
-    async def listen_events(self) -> AsyncGenerator[SecurityEvent, None]:
-        """Subscribe to Tendermint WebSocket events"""
-        ws_url = self.config.ws_url or self.config.tendermint_rpc.replace("http", "ws") + "/websocket"
+        async with session.get(endpoint_url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data.get("result", data)
+            elif resp.status >= 500:
+                raise aiohttp.ClientResponseError(
+                    resp.request_info,
+                    resp.history,
+                    status=resp.status,
+                    message=f"Server error {resp.status}"
+                )
+            else:
+                return None
+    
+    async def _get_latest_block_height(self) -> int:
+        """Get the latest block height from Tendermint."""
+        result = await self._make_request("status")
         
-        while self._connected:
-            try:
-                async with ws_connect(ws_url) as websocket:
-                    self.ws_client = websocket
-                    
-                    # Subscribe to new transactions
-                    await websocket.send(json.dumps({
-                        "jsonrpc": "2.0",
-                        "method": "subscribe",
-                        "id": 1,
-                        "params": {"query": "tm.event='Tx'"}
-                    }))
-                    
-                    logger.info("cosmos_ws_subscribed", chain=self.config.chain_id)
-                    
-                    async for message in websocket:
-                        try:
-                            data = json.loads(message)
-                            events = await self._process_tx_event(data)
-                            for event in events:
-                                yield event
-                        except json.JSONDecodeError:
-                            continue
-                            
-            except ConnectionClosed:
-                logger.warning("cosmos_ws_disconnected", chain=self.config.chain_id)
-                await asyncio.sleep(5)
-            except Exception as e:
-                logger.error("cosmos_ws_error", chain=self.config.chain_id, error=str(e))
-                await asyncio.sleep(5)
-                
-    async def _process_tx_event(self, data: Dict) -> List[SecurityEvent]:
-        """Process a Tendermint transaction event"""
+        if result:
+            sync_info = result.get("sync_info", {})
+            return int(sync_info.get("latest_block_height", 0))
+        return 0
+    
+    async def _process_block_impl(self, height: int) -> List[SecurityEvent]:
+        """Process a Cosmos block and extract security events."""
         events = []
         
-        result = data.get("result", {})
-        tx_result = result.get("data", {}).get("value", {}).get("TxResult", {})
+        # Get block results (contains transaction events)
+        block_results = await self._make_request(
+            "block_results",
+            {"height": str(height)}
+        )
         
-        if not tx_result:
+        if not block_results:
             return events
-            
-        tx_hash = tx_result.get("tx", "")[:64]  # First 64 chars as hash
-        height = tx_result.get("height", 0)
         
-        # Parse transaction events
-        tx_events = tx_result.get("result", {}).get("events", [])
+        # Process transaction results
+        txs_results = block_results.get("txs_results", [])
+        
+        for tx_idx, tx_result in enumerate(txs_results or []):
+            if tx_result is None:
+                continue
+                
+            # Get transaction hash from block
+            block_data = await self._make_request(
+                "block",
+                {"height": str(height)}
+            )
+            
+            if block_data:
+                txs = block_data.get("block", {}).get("data", {}).get("txs", [])
+                tx_hash = self._compute_tx_hash(txs[tx_idx]) if tx_idx < len(txs) else f"tx_{height}_{tx_idx}"
+            else:
+                tx_hash = f"tx_{height}_{tx_idx}"
+            
+            # Parse events from transaction
+            tx_events = await self._parse_tx_events(
+                tx_result.get("events", []),
+                tx_hash,
+                height
+            )
+            events.extend(tx_events)
+        
+        return events
+    
+    def _compute_tx_hash(self, tx_base64: str) -> str:
+        """Compute transaction hash from base64-encoded transaction."""
+        import base64
+        import hashlib
+        
+        try:
+            tx_bytes = base64.b64decode(tx_base64)
+            return hashlib.sha256(tx_bytes).hexdigest().upper()
+        except:
+            return tx_base64[:64]
+    
+    async def _parse_tx_events(
+        self,
+        tx_events: List[Dict],
+        tx_hash: str,
+        height: int
+    ) -> List[SecurityEvent]:
+        """Parse transaction events into security events."""
+        events = []
         
         for event in tx_events:
             event_type = event.get("type", "")
-            attributes = {
-                attr.get("key", ""): attr.get("value", "")
-                for attr in event.get("attributes", [])
-            }
+            attributes = {}
+            
+            # Parse attributes (may be base64 encoded)
+            for attr in event.get("attributes", []):
+                key = attr.get("key", "")
+                value = attr.get("value", "")
+                
+                # Try to decode base64
+                try:
+                    import base64
+                    key = base64.b64decode(key).decode() if key else ""
+                    value = base64.b64decode(value).decode() if value else ""
+                except:
+                    pass
+                
+                attributes[key] = value
             
             # Check for IBC events
             if event_type.startswith("ibc_"):
@@ -203,9 +248,9 @@ class CosmosListener(ChainListener):
                 )
                 if security_event:
                     events.append(security_event)
-                    
-        return events
         
+        return events
+    
     def _create_ibc_event(
         self,
         event_type: str,
@@ -213,7 +258,7 @@ class CosmosListener(ChainListener):
         tx_hash: str,
         height: int
     ) -> Optional[SecurityEvent]:
-        """Create security event from IBC activity"""
+        """Create security event from IBC activity."""
         
         # Extract IBC packet details
         packet_data = attributes.get("packet_data", "{}")
@@ -221,7 +266,7 @@ class CosmosListener(ChainListener):
             packet = json.loads(packet_data) if isinstance(packet_data, str) else packet_data
         except:
             packet = {}
-            
+        
         amount = packet.get("amount", "0")
         denom = packet.get("denom", "unknown")
         sender = packet.get("sender", "")
@@ -232,17 +277,17 @@ class CosmosListener(ChainListener):
             amount_float = float(amount) / 1e6  # Most Cosmos tokens use 6 decimals
         except:
             amount_float = 0
-            
+        
         # Determine severity based on amount
-        if amount_float > 10_000_000:  # $10M+
+        if amount_float > 10_000_000:
             severity = Severity.CRITICAL
-        elif amount_float > 1_000_000:  # $1M+
+        elif amount_float > 1_000_000:
             severity = Severity.HIGH
-        elif amount_float > 100_000:  # $100K+
+        elif amount_float > 100_000:
             severity = Severity.MEDIUM
         else:
             severity = Severity.LOW
-            
+        
         return SecurityEvent(
             event_id=f"cosmos_{tx_hash}_{event_type}",
             chain_id=self.config.chain_id,
@@ -269,14 +314,14 @@ class CosmosListener(ChainListener):
                 "amount_normalized": amount_float
             }
         )
-        
+    
     def _check_large_transfer(
         self,
         attributes: Dict,
         tx_hash: str,
         height: int
     ) -> Optional[SecurityEvent]:
-        """Check for suspicious large transfers"""
+        """Check for suspicious large transfers."""
         
         amount = attributes.get("amount", "0")
         sender = attributes.get("sender", "")
@@ -288,11 +333,11 @@ class CosmosListener(ChainListener):
             amount_float = float(amount_str) / 1e6
         except:
             return None
-            
+        
         # Only flag very large transfers
         if amount_float < 1_000_000:
             return None
-            
+        
         return SecurityEvent(
             event_id=f"cosmos_{tx_hash}_transfer",
             chain_id=self.config.chain_id,
@@ -310,14 +355,14 @@ class CosmosListener(ChainListener):
                 "amount_normalized": amount_float
             }
         )
-        
+    
     def _check_bridge_contract(
         self,
         attributes: Dict,
         tx_hash: str,
         height: int
     ) -> Optional[SecurityEvent]:
-        """Check for bridge contract interactions"""
+        """Check for bridge contract interactions."""
         
         contract = attributes.get("_contract_address", "")
         action = attributes.get("action", "")
@@ -333,10 +378,10 @@ class CosmosListener(ChainListener):
                 bridge_type = btype
                 is_bridge = True
                 break
-                
+        
         if not is_bridge:
             return None
-            
+        
         return SecurityEvent(
             event_id=f"cosmos_{tx_hash}_bridge",
             chain_id=self.config.chain_id,
@@ -354,28 +399,69 @@ class CosmosListener(ChainListener):
                 "protocol": "CosmWasm"
             }
         )
+    
+    async def listen_events_ws(self) -> AsyncGenerator[SecurityEvent, None]:
+        """
+        Alternative: Subscribe to Tendermint WebSocket events.
         
+        Uses WebSocket for real-time events instead of polling.
+        Falls back to polling on connection issues.
+        """
+        ws_url = self.config.ws_url or self.config.rpc_url.replace("http", "ws") + "/websocket"
+        
+        while self._connected and self._running:
+            try:
+                async with ws_connect(ws_url) as websocket:
+                    self.ws_client = websocket
+                    
+                    # Subscribe to new transactions
+                    await websocket.send(json.dumps({
+                        "jsonrpc": "2.0",
+                        "method": "subscribe",
+                        "id": 1,
+                        "params": {"query": "tm.event='Tx'"}
+                    }))
+                    
+                    logger.info("cosmos_ws_subscribed", chain=self.chain_id)
+                    
+                    async for message in websocket:
+                        try:
+                            data = json.loads(message)
+                            events = await self._process_ws_event(data)
+                            for event in events:
+                                yield event
+                        except json.JSONDecodeError:
+                            continue
+                        
+            except ConnectionClosed:
+                logger.warning("cosmos_ws_disconnected", chain=self.chain_id)
+                await asyncio.sleep(5)
+            except Exception as e:
+                logger.error("cosmos_ws_error", chain=self.chain_id, error=str(e))
+                await asyncio.sleep(5)
+    
+    async def _process_ws_event(self, data: Dict) -> List[SecurityEvent]:
+        """Process a WebSocket transaction event."""
+        events = []
+        
+        result = data.get("result", {})
+        tx_result = result.get("data", {}).get("value", {}).get("TxResult", {})
+        
+        if not tx_result:
+            return events
+        
+        tx_hash = tx_result.get("tx", "")[:64]
+        height = tx_result.get("height", 0)
+        
+        # Parse transaction events
+        tx_events = tx_result.get("result", {}).get("events", [])
+        
+        return await self._parse_tx_events(tx_events, tx_hash, int(height))
+    
     async def get_block(self, height: int) -> Optional[Dict]:
-        """Fetch a specific block by height"""
-        try:
-            async with self.http_session.get(
-                f"{self.config.tendermint_rpc}/block?height={height}"
-            ) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-        except Exception as e:
-            logger.error("cosmos_get_block_failed", height=height, error=str(e))
-        return None
-        
+        """Fetch a specific block by height."""
+        return await self._make_request("block", {"height": str(height)})
+    
     async def get_tx(self, tx_hash: str) -> Optional[Dict]:
-        """Fetch transaction by hash"""
-        try:
-            async with self.http_session.get(
-                f"{self.config.tendermint_rpc}/tx?hash=0x{tx_hash}"
-            ) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-        except Exception as e:
-            logger.error("cosmos_get_tx_failed", tx_hash=tx_hash, error=str(e))
-        return None
-
+        """Fetch transaction by hash."""
+        return await self._make_request("tx", {"hash": f"0x{tx_hash}"})

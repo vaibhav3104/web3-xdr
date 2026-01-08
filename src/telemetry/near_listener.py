@@ -1,7 +1,15 @@
 """
-Near Protocol Listener
-======================
-Monitors Near Protocol for bridge events via RPC.
+Near Protocol Listener (Robust)
+================================
+Monitors Near Protocol for bridge events via RPC with failover support.
+
+Features:
+- Multi-RPC failover with health tracking
+- Automatic reconnection
+- Heartbeat logging
+- Rainbow Bridge monitoring
+- Aurora EVM bridge events
+- Access key abuse detection
 
 Key Features:
 - Rainbow Bridge monitoring (ETH <-> Near)
@@ -26,16 +34,15 @@ from dataclasses import dataclass, field
 import structlog
 import aiohttp
 
-from .base import ChainListener, ListenerConfig
+from .robust_non_evm import RobustNonEVMListener, NonEVMConfig
 from ..models.events import SecurityEvent, EventType, Severity
 
 logger = structlog.get_logger(__name__)
 
 
 @dataclass
-class NearConfig(ListenerConfig):
-    """Configuration for Near Protocol listener"""
-    rpc_url: str = "https://rpc.mainnet.near.org"
+class NearConfig(NonEVMConfig):
+    """Configuration for Near Protocol listener with failover support."""
     archival_rpc: str = ""  # For historical queries
     indexer_url: str = ""  # Near Indexer for Explorer
     bridge_accounts: List[str] = field(default_factory=list)
@@ -70,9 +77,9 @@ SUSPICIOUS_METHODS = [
 ]
 
 
-class NearListener(ChainListener):
+class NearListener(RobustNonEVMListener):
     """
-    Listens to Near Protocol via JSON-RPC.
+    Robust listener for Near Protocol via JSON-RPC.
     
     Near has unique properties:
     - Account-based (not address-based)
@@ -85,105 +92,70 @@ class NearListener(ChainListener):
     - Aurora EVM escape
     - Access key compromise
     - Sharding timing attacks
+    
+    Includes multi-RPC failover and automatic reconnection.
     """
     
     def __init__(self, config: NearConfig):
         super().__init__(config)
         self.config: NearConfig = config
-        self.http_session = None
-        self.latest_block_height = 0
         self.bridge_accounts = set(config.bridge_accounts or [])
         self.bridge_accounts.update(NEAR_BRIDGES.keys())
-        
-    async def connect(self) -> bool:
-        """Connect to Near RPC"""
-        try:
-            self.http_session = aiohttp.ClientSession()
-            
-            # Get latest block
-            result = await self._rpc_call("status", [])
-            
-            if result:
-                sync_info = result.get("sync_info", {})
-                self.latest_block_height = sync_info.get("latest_block_height", 0)
-                
-                logger.info(
-                    "near_connected",
-                    chain=self.config.chain_id,
-                    height=self.latest_block_height,
-                    syncing=sync_info.get("syncing", False)
+    
+    async def _make_chain_request(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        method: str,
+        params: Any,
+        is_json_rpc: bool
+    ) -> Optional[Dict]:
+        """Make a Near JSON-RPC request."""
+        async with session.post(
+            url,
+            json={
+                "jsonrpc": "2.0",
+                "id": "sentinel3",
+                "method": method,
+                "params": params or {}
+            }
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if "error" in data:
+                    logger.warning(
+                        "near_rpc_error",
+                        method=method,
+                        error=data["error"]
+                    )
+                    return None
+                return data.get("result")
+            elif resp.status >= 500:
+                raise aiohttp.ClientResponseError(
+                    resp.request_info,
+                    resp.history,
+                    status=resp.status
                 )
-                self._connected = True
-                return True
-                
-        except Exception as e:
-            logger.error("near_connection_failed", chain=self.config.chain_id, error=str(e))
-            
-        return False
+            return None
+    
+    async def _get_latest_block_height(self) -> int:
+        """Get the latest block height from Near."""
+        result = await self._make_request("status", [])
         
-    async def disconnect(self):
-        """Disconnect from Near RPC"""
-        if self.http_session:
-            await self.http_session.close()
-        self._connected = False
-        logger.info("near_disconnected", chain=self.config.chain_id)
-        
-    async def _rpc_call(self, method: str, params: Any) -> Optional[Dict]:
-        """Make a JSON-RPC call to Near"""
-        try:
-            async with self.http_session.post(
-                self.config.rpc_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": "web3-xdr",
-                    "method": method,
-                    "params": params
-                }
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("result")
-        except Exception as e:
-            logger.error("near_rpc_failed", method=method, error=str(e))
-        return None
-        
-    async def listen_events(self) -> AsyncGenerator[SecurityEvent, None]:
-        """Poll for new blocks and transactions"""
-        poll_interval = 1  # Near has ~1s block time
-        
-        while self._connected:
-            try:
-                # Get latest block
-                result = await self._rpc_call("status", [])
-                if not result:
-                    await asyncio.sleep(poll_interval)
-                    continue
-                    
-                current_height = result.get("sync_info", {}).get("latest_block_height", 0)
-                
-                # Process new blocks
-                while self.latest_block_height < current_height:
-                    self.latest_block_height += 1
-                    
-                    events = await self._process_block(self.latest_block_height)
-                    for event in events:
-                        yield event
-                        
-                await asyncio.sleep(poll_interval)
-                
-            except Exception as e:
-                logger.error("near_poll_error", chain=self.config.chain_id, error=str(e))
-                await asyncio.sleep(5)
-                
-    async def _process_block(self, height: int) -> List[SecurityEvent]:
-        """Process a Near block"""
+        if result:
+            sync_info = result.get("sync_info", {})
+            return sync_info.get("latest_block_height", 0)
+        return 0
+    
+    async def _process_block_impl(self, height: int) -> List[SecurityEvent]:
+        """Process a Near block."""
         events = []
         
         # Get block details
-        block = await self._rpc_call("block", {"block_id": height})
+        block = await self._make_request("block", {"block_id": height})
         if not block:
             return events
-            
+        
         block_hash = block.get("header", {}).get("hash", "")
         
         # Get chunks (Near is sharded)
@@ -191,24 +163,24 @@ class NearListener(ChainListener):
             chunk_hash = chunk_header.get("chunk_hash", "")
             
             # Get chunk details with transactions
-            chunk = await self._rpc_call("chunk", {"chunk_id": chunk_hash})
+            chunk = await self._make_request("chunk", {"chunk_id": chunk_hash})
             if not chunk:
                 continue
-                
+            
             # Process transactions in chunk
             for tx in chunk.get("transactions", []):
                 tx_events = await self._process_transaction(tx, height, block_hash)
                 events.extend(tx_events)
-                
-        return events
         
+        return events
+    
     async def _process_transaction(
         self,
         tx: Dict,
         height: int,
         block_hash: str
     ) -> List[SecurityEvent]:
-        """Process a Near transaction"""
+        """Process a Near transaction."""
         events = []
         
         tx_hash = tx.get("hash", "")
@@ -216,24 +188,24 @@ class NearListener(ChainListener):
         receiver_id = tx.get("receiver_id", "")
         
         # Get full transaction outcome
-        outcome = await self._rpc_call("tx", [tx_hash, signer_id])
+        outcome = await self._make_request("tx", [tx_hash, signer_id])
         if not outcome:
             return events
-            
+        
         # Process each action in the transaction
         for action in tx.get("actions", []):
             action_events = self._process_action(
                 action, tx_hash, height, signer_id, receiver_id, outcome
             )
             events.extend(action_events)
-            
+        
         # Check receipts for cross-contract calls
         for receipt in outcome.get("receipts_outcome", []):
             receipt_events = self._process_receipt(receipt, tx_hash, height)
             events.extend(receipt_events)
-            
-        return events
         
+        return events
+    
     def _process_action(
         self,
         action: Dict,
@@ -243,7 +215,7 @@ class NearListener(ChainListener):
         receiver: str,
         outcome: Dict
     ) -> List[SecurityEvent]:
-        """Process a single Near action"""
+        """Process a single Near action."""
         events = []
         
         # Transfer action
@@ -251,11 +223,10 @@ class NearListener(ChainListener):
             amount = int(action["Transfer"].get("deposit", 0))
             amount_near = amount / 1e24  # Near uses 24 decimals
             
-            # Check if receiver is a bridge
             is_bridge = receiver in self.bridge_accounts
             bridge_name = NEAR_BRIDGES.get(receiver)
             
-            if is_bridge or amount_near > 100000:  # Large transfer or bridge
+            if is_bridge or amount_near > 100000:
                 severity = self._calculate_severity(amount_near, is_bridge)
                 
                 events.append(SecurityEvent(
@@ -277,7 +248,7 @@ class NearListener(ChainListener):
                         "is_bridge": is_bridge
                     }
                 ))
-                
+        
         # Function call action
         elif "FunctionCall" in action:
             fc = action["FunctionCall"]
@@ -293,8 +264,7 @@ class NearListener(ChainListener):
                     args = {}
             except:
                 args = {"raw": args_raw}
-                
-            # Check if calling a bridge
+            
             is_bridge = receiver in self.bridge_accounts
             bridge_name = NEAR_BRIDGES.get(receiver)
             
@@ -326,7 +296,7 @@ class NearListener(ChainListener):
                         "deposit_near": deposit / 1e24
                     }
                 ))
-                
+            
             if is_suspicious:
                 events.append(SecurityEvent(
                     event_id=f"near_{tx_hash}_suspicious",
@@ -347,7 +317,7 @@ class NearListener(ChainListener):
                         "reason": "Matches suspicious pattern"
                     }
                 ))
-                
+        
         # Add/Delete key actions (access key manipulation)
         elif "AddKey" in action or "DeleteKey" in action:
             key_action = "AddKey" if "AddKey" in action else "DeleteKey"
@@ -375,7 +345,7 @@ class NearListener(ChainListener):
                         "key_data": key_data
                     }
                 ))
-                
+        
         # Deploy contract action
         elif "DeployContract" in action:
             events.append(SecurityEvent(
@@ -396,16 +366,16 @@ class NearListener(ChainListener):
                     "deployed_to": receiver
                 }
             ))
-            
-        return events
         
+        return events
+    
     def _process_receipt(
         self,
         receipt: Dict,
         tx_hash: str,
         height: int
     ) -> List[SecurityEvent]:
-        """Process a Near receipt (cross-contract call result)"""
+        """Process a Near receipt (cross-contract call result)."""
         events = []
         
         outcome = receipt.get("outcome", {})
@@ -434,11 +404,11 @@ class NearListener(ChainListener):
                             "log": log
                         }
                     ))
-                    
-        return events
         
+        return events
+    
     def _calculate_severity(self, amount_near: float, is_bridge: bool) -> Severity:
-        """Calculate severity based on amount and context"""
+        """Calculate severity based on amount and context."""
         if is_bridge:
             if amount_near > 1_000_000:
                 return Severity.CRITICAL
@@ -452,21 +422,20 @@ class NearListener(ChainListener):
             elif amount_near > 1_000_000:
                 return Severity.HIGH
         return Severity.LOW
-        
+    
     async def get_account(self, account_id: str) -> Optional[Dict]:
-        """Get account details"""
-        return await self._rpc_call("query", {
+        """Get account details."""
+        return await self._make_request("query", {
             "request_type": "view_account",
             "finality": "final",
             "account_id": account_id
         })
-        
+    
     async def get_access_keys(self, account_id: str) -> Optional[List[Dict]]:
-        """Get account access keys (for investigation)"""
-        result = await self._rpc_call("query", {
+        """Get account access keys (for investigation)."""
+        result = await self._make_request("query", {
             "request_type": "view_access_key_list",
             "finality": "final",
             "account_id": account_id
         })
         return result.get("keys", []) if result else None
-

@@ -1,20 +1,26 @@
 """
-Explainability Engine.
+Explainability Module
+=====================
 
-Converts raw detections into human-readable explanations:
-- Deterministic template-based explanations
-- What happened / Why it's dangerous / What to do
-- Confidence scoring
-- Evidence compilation
+Phase 4: Structured explanations for incidents.
 """
 
-from .engine import ExplainabilityEngine
-from .templates import ExplanationTemplates
-from .explanation import Explanation
+from .engine import (
+    ExplainabilityEngine,
+    Explanation,
+    TimelineEntry,
+    TechnicalContext,
+    Evidence,
+    RecommendedAction
+)
+from .templates import ExplanationTemplate
 
 __all__ = [
     "ExplainabilityEngine",
-    "ExplanationTemplates",
     "Explanation",
+    "TimelineEntry",
+    "TechnicalContext",
+    "Evidence",
+    "RecommendedAction",
+    "ExplanationTemplate",
 ]
-

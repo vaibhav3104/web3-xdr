@@ -1,11 +1,16 @@
 """
 EVM Chain Listener - For Ethereum, Polygon, Arbitrum, etc.
 With contract deployment detection and ML-based threat analysis.
+
+Features:
+- Robust RPC failover with multiple endpoints
+- Automatic health tracking and rotation
+- Contract deployment detection with ML analysis
 """
 
 from datetime import datetime
 from decimal import Decimal
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+from typing import AsyncIterator, Dict, List, Optional, Tuple, Union
 import asyncio
 import json
 import hashlib
@@ -16,6 +21,7 @@ from web3.exceptions import BlockNotFound
 from eth_abi import decode
 
 from .base import ChainListener, ListenerConfig, BlockMetadata
+from .robust_provider import RobustAsyncHTTPProvider, create_robust_provider
 from .contract_alerts import (
     ContractThreatAlert, ContractAlertStore, 
     ThreatLevel, AlertStatus, contract_alert_store
@@ -62,13 +68,48 @@ class EVMListener(ChainListener):
     Listener for EVM-compatible chains.
     
     Supports Ethereum, Polygon, Arbitrum, Optimism, BSC, etc.
-    Includes contract deployment detection and ML-based threat analysis.
+    Includes:
+    - Robust RPC failover with multiple endpoints
+    - Contract deployment detection
+    - ML-based threat analysis
     """
     
-    def __init__(self, config: ListenerConfig):
+    def __init__(
+        self,
+        config: ListenerConfig,
+        rpc_urls: Optional[List[str]] = None
+    ):
+        """
+        Initialize EVM Listener.
+        
+        Args:
+            config: Listener configuration
+            rpc_urls: Optional list of RPC URLs for failover.
+                     If not provided, uses config.rpc_url only.
+        """
         super().__init__(config)
         self.w3: Optional[AsyncWeb3] = None
         self._subscription_id: Optional[str] = None
+        
+        # RPC URLs for failover (primary + fallbacks)
+        self._rpc_urls: List[str] = []
+        if rpc_urls:
+            self._rpc_urls = rpc_urls
+        elif hasattr(config, 'rpc_urls') and config.rpc_urls:
+            self._rpc_urls = config.rpc_urls
+        else:
+            self._rpc_urls = [config.rpc_url]
+        
+        # Add fallback URLs if available in config
+        if hasattr(config, 'fallback_rpcs') and config.fallback_rpcs:
+            self._rpc_urls.extend(config.fallback_rpcs)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        self._rpc_urls = [x for x in self._rpc_urls if not (x in seen or seen.add(x))]
+        
+        # Provider reference for stats
+        self._provider: Optional[RobustAsyncHTTPProvider] = None
         
         # Contract ABIs cache
         self._contract_abis: Dict[str, dict] = {}
@@ -89,20 +130,53 @@ class EVMListener(ChainListener):
             except Exception as e:
                 logger.warning("ml_classifier_init_failed", chain=self.chain_id, error=str(e))
     
-    async def connect(self):
-        """Connect to EVM node."""
-        self.w3 = AsyncWeb3(AsyncHTTPProvider(self.config.rpc_url))
+    async def connect(self) -> bool:
+        """
+        Connect to EVM node using robust provider with failover.
         
-        if not await self.w3.is_connected():
-            raise ConnectionError(f"Failed to connect to {self.config.rpc_url}")
-        
-        chain_id = await self.w3.eth.chain_id
-        logger.info(
-            "evm_connected",
-            chain_id=self.chain_id,
-            node_chain_id=chain_id,
-            rpc_url=self.config.rpc_url[:50] + "..."
-        )
+        Returns:
+            True if connected successfully
+        """
+        try:
+            # Create robust provider with all available URLs
+            self._provider = RobustAsyncHTTPProvider(self._rpc_urls)
+            self.w3 = AsyncWeb3(self._provider)
+            
+            # Test connection by getting chain ID (more reliable than is_connected())
+            # is_connected() can return False even when RPC is responding
+            try:
+                chain_id = await self.w3.eth.chain_id
+            except Exception as chain_err:
+                raise ConnectionError(f"Failed to connect to any RPC endpoint: {chain_err}")
+            
+            # Get current block to confirm working
+            current_block = await self.w3.eth.block_number
+            
+            logger.info(
+                "evm_connected_robust",
+                chain_id=self.chain_id,
+                node_chain_id=chain_id,
+                current_block=current_block,
+                rpc_count=len(self._rpc_urls),
+                primary_rpc=self._rpc_urls[0][:50] + "..." if self._rpc_urls else "none"
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(
+                "evm_connection_failed",
+                chain_id=self.chain_id,
+                error=str(e),
+                rpc_urls=[url[:40] + "..." for url in self._rpc_urls]
+            )
+            return False
+    
+    def get_provider_stats(self) -> Dict:
+        """Get RPC provider health statistics."""
+        if self._provider:
+            return self._provider.get_stats()
+        return {"error": "Provider not initialized"}
     
     async def disconnect(self):
         """Disconnect from EVM node."""

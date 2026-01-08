@@ -25,6 +25,10 @@ class ListenerConfig:
     rpc_url: str
     ws_url: Optional[str] = None
     
+    # Fallback RPC URLs (for robust failover)
+    rpc_urls: List[str] = field(default_factory=list)  # All URLs including primary
+    fallback_rpcs: List[str] = field(default_factory=list)  # Additional fallback URLs
+    
     # Contracts to monitor
     bridge_contracts: List[str] = field(default_factory=list)
     token_contracts: List[str] = field(default_factory=list)
@@ -44,6 +48,17 @@ class ListenerConfig:
     # Retry configuration
     max_retries: int = 5
     retry_delay_seconds: float = 2.0
+    
+    def get_all_rpc_urls(self) -> List[str]:
+        """Get all RPC URLs including fallbacks."""
+        urls = []
+        if self.rpc_url:
+            urls.append(self.rpc_url)
+        urls.extend(self.rpc_urls)
+        urls.extend(self.fallback_rpcs)
+        # Remove duplicates while preserving order
+        seen = set()
+        return [x for x in urls if not (x in seen or seen.add(x))]
 
 
 @dataclass

@@ -26,6 +26,46 @@ class IncidentSummary(BaseModel):
     total_loss_usd: float
     affected_chains: List[str]
     created_at: datetime
+    event_count: int = 0  # Phase 4: Number of events
+    
+    class Config:
+        from_attributes = True
+
+
+class TimelineEntry(BaseModel):
+    """Timeline entry for incident details."""
+    timestamp: datetime
+    chain: str
+    tx_hash: str
+    description: str
+    event_id: Optional[str] = None
+    severity: Optional[str] = None
+
+
+class IncidentDetail(BaseModel):
+    """Full incident details with timeline and explanation."""
+    id: str
+    incident_id: str
+    cluster_key: str
+    title: str
+    summary: str
+    severity: str
+    status: str
+    attack_type: str
+    confidence: float
+    total_loss_usd: float
+    event_count: int
+    affected_chains: List[str]
+    affected_contracts: Optional[List[str]] = None
+    affected_addresses: Optional[List[str]] = None
+    created_at: datetime
+    updated_at: datetime
+    first_event_time: Optional[datetime] = None
+    last_event_time: Optional[datetime] = None
+    
+    # Phase 4: Timeline and explanation
+    timeline: List[TimelineEntry] = []
+    explanation: Optional[dict] = None  # Structured explanation JSON
     
     class Config:
         from_attributes = True
@@ -68,6 +108,26 @@ class StatsResponse(BaseModel):
     events_by_chain: dict
     events_by_type: dict
     uptime_seconds: int
+
+
+class ChainStatus(BaseModel):
+    """Chain status information."""
+    chain_id: str
+    chain_name: str
+    head_height: int
+    processed_height: int
+    lag_blocks: int
+    confirmed_height: int
+    status: str  # healthy, lagging, error
+    last_update: Optional[datetime]
+
+
+class ChainsStatusResponse(BaseModel):
+    """Chains status response."""
+    chains: List[ChainStatus]
+    total_chains: int
+    healthy_chains: int
+    lagging_chains: int
 
 
 # ============================================================================
@@ -117,6 +177,88 @@ async def list_incidents(
     all_incidents.sort(key=lambda i: (severity_order.get(i.severity, 4), -i.created_at.timestamp() if i.created_at else 0))
     
     return all_incidents[:limit]
+
+
+@router.get("/incidents/{incident_id}", response_model=IncidentDetail)
+async def get_incident_details(incident_id: str):
+    """
+    Get full incident details including timeline and structured explanation.
+    
+    Phase 4: Returns complete incident information with:
+    - Timeline of all events
+    - Structured explanation (summary, technical context, evidence)
+    - Recommended actions
+    """
+    from ..shared_state import monitor_state
+    
+    # Get incident from monitor state
+    incidents = monitor_state.get_incidents()
+    incident = next((i for i in incidents if i.id == incident_id or getattr(i, 'incident_id', '') == incident_id), None)
+    
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    # Build timeline from incident data
+    timeline = []
+    if hasattr(incident, 'timeline') and incident.timeline:
+        timeline = [
+            TimelineEntry(
+                timestamp=entry.get('timestamp', incident.created_at) if isinstance(entry, dict) else entry.timestamp,
+                chain=entry.get('chain', 'unknown') if isinstance(entry, dict) else entry.chain,
+                tx_hash=entry.get('tx_hash', '') if isinstance(entry, dict) else entry.tx_hash,
+                description=entry.get('description', '') if isinstance(entry, dict) else entry.description,
+                event_id=entry.get('event_id') if isinstance(entry, dict) else getattr(entry, 'event_id', None),
+                severity=entry.get('severity') if isinstance(entry, dict) else getattr(entry, 'severity', None)
+            )
+            for entry in incident.timeline
+        ]
+    else:
+        # Fallback: create timeline from event_ids
+        timeline = [
+            TimelineEntry(
+                timestamp=incident.created_at,
+                chain=chain,
+                tx_hash="",
+                description=f"Event on {chain}",
+                severity=incident.severity.lower() if incident.severity else "medium"
+            )
+            for chain in incident.affected_chains
+        ]
+    
+    # Get explanation (if available)
+    explanation = None
+    if hasattr(incident, 'explanation_json') and incident.explanation_json:
+        explanation = incident.explanation_json
+    elif hasattr(incident, 'summary'):
+        # Generate basic explanation from summary
+        explanation = {
+            "summary": incident.summary,
+            "recommended_action": "INVESTIGATE",
+            "confidence": incident.confidence
+        }
+    
+    return IncidentDetail(
+        id=incident.id,
+        incident_id=getattr(incident, 'incident_id', incident.id),
+        cluster_key=getattr(incident, 'cluster_key', ''),
+        title=incident.title,
+        summary=incident.summary,
+        severity=incident.severity.lower() if incident.severity else "medium",
+        status=incident.status.lower() if incident.status else "open",
+        attack_type=incident.attack_type,
+        confidence=incident.confidence,
+        total_loss_usd=incident.total_loss_usd,
+        event_count=getattr(incident, 'event_count', len(incident.affected_chains)),
+        affected_chains=incident.affected_chains,
+        affected_contracts=getattr(incident, 'affected_contracts', None),
+        affected_addresses=getattr(incident, 'affected_addresses', None),
+        created_at=incident.created_at,
+        updated_at=getattr(incident, 'updated_at', incident.created_at),
+        first_event_time=getattr(incident, 'first_event_time', None),
+        last_event_time=getattr(incident, 'last_event_time', None),
+        timeline=timeline,
+        explanation=explanation
+    )
 
 
 @router.get("/events")
@@ -507,6 +649,90 @@ async def get_chains_status():
         "evm_chains": sorted(evm_chains, key=lambda x: x.get("events_count", 0), reverse=True),
         "non_evm_chains": sorted(non_evm_chains, key=lambda x: x.get("events_count", 0), reverse=True)
     }
+
+
+@router.get("/chains/status", response_model=ChainsStatusResponse)
+async def get_chains_status():
+    """
+    Get status of all monitored chains.
+    Reports head height, processed height, and lag.
+    Queries Prometheus metrics from worker.
+    """
+    import os
+    import yaml
+    from pathlib import Path
+    import httpx
+    
+    # Load chain config
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / "chains.yaml"
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+    
+    # Try to fetch metrics from worker (if available)
+    metrics_text = None
+    worker_url = os.getenv("WORKER_METRICS_URL", "http://localhost:9090/metrics")
+    
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(worker_url)
+            if response.status_code == 200:
+                metrics_text = response.text
+    except Exception:
+        pass  # Worker may not be running
+    
+    # Parse metrics
+    metrics_data = {}
+    if metrics_text:
+        from prometheus_client.parser import text_string_to_metric_families
+        for family in text_string_to_metric_families(metrics_text):
+            for sample in family.samples:
+                if sample.name.startswith("sentinel3_"):
+                    # Extract labels
+                    chain = sample.labels.get("chain", "")
+                    key = f"{sample.name}:{chain}"
+                    metrics_data[key] = sample.value
+    
+    chains_status = []
+    healthy_count = 0
+    lagging_count = 0
+    
+    for chain_config in config.get("chains", []):
+        chain_id = chain_config.get("chain_id", "")
+        chain_name = chain_config.get("chain_name", chain_id)
+        
+        # Get metrics
+        head_height = int(metrics_data.get(f"sentinel3_chain_head_height:{chain_id}", 0))
+        processed_height = int(metrics_data.get(f"sentinel3_worker_processed_height:{chain_id}", 0))
+        lag_blocks = int(metrics_data.get(f"sentinel3_head_lag_blocks:{chain_id}", 0))
+        confirmed_height = int(metrics_data.get(f"sentinel3_finality_confirmed_blocks:{chain_id}", 0))
+        
+        # Determine status
+        if lag_blocks > 100:
+            status = "lagging"
+            lagging_count += 1
+        elif head_height == 0:
+            status = "error"
+        else:
+            status = "healthy"
+            healthy_count += 1
+        
+        chains_status.append(ChainStatus(
+            chain_id=chain_id,
+            chain_name=chain_name,
+            head_height=head_height,
+            processed_height=processed_height,
+            lag_blocks=lag_blocks,
+            confirmed_height=confirmed_height,
+            status=status,
+            last_update=datetime.now()
+        ))
+    
+    return ChainsStatusResponse(
+        chains=chains_status,
+        total_chains=len(chains_status),
+        healthy_chains=healthy_count,
+        lagging_chains=lagging_count
+    )
 
 
 @router.post("/maintenance/purge")

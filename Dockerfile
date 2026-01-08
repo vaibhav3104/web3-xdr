@@ -1,5 +1,5 @@
 # ============================================================================
-# Sentinel3 - Production Dockerfile
+# Web3 XDR - Production Dockerfile
 # ============================================================================
 
 FROM python:3.11-slim
@@ -38,13 +38,16 @@ RUN useradd --create-home --shell /bin/bash xdr && \
 
 USER xdr
 
-# Expose port
-EXPOSE 8080
+# Expose ports (API: 8080, Worker: 9090)
+EXPOSE 8080 9090
 
-# Health check
+# Health check (defaults to API port)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:${HEALTH_PORT:-8080}/health || exit 1
 
-# Default command
-CMD ["python", "monitor.py"]
+# Default: Run API server
+# Override with: docker run -e PROC_TYPE=worker ...
+# Or use: CMD ["python", "-m", "src.worker.main"] for worker mode
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["if [ \"$PROC_TYPE\" = \"worker\" ]; then python -m src.worker.main; else python -m src.api.server; fi"]
 

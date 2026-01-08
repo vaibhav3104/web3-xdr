@@ -7,11 +7,15 @@ import os
 import yaml
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel, Field
 from pathlib import Path
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# Import auth dependencies
+from ..auth.jwt_handler import require_role
+from ..auth.models import User
 
 # Get config directory
 CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
@@ -386,6 +390,64 @@ async def reload_rules():
     """Reload all rules from files."""
     rules = load_all_rules()
     return {"status": "reloaded", "rule_count": len(rules)}
+
+
+@router.post("/rules/dry-run")
+async def dry_run_rule(
+    rule_yaml: str = Body(..., embed=True, description="YAML rule definition to test"),
+    event_count: int = Body(10000, embed=True, description="Number of historical events to test"),
+    time_window_hours: int = Body(24, embed=True, description="Time window in hours"),
+    current_user: User = Depends(require_role(["admin"]))
+):
+    """
+    Dry-run a rule against historical events.
+    
+    Phase 5: Tests a proposed rule against the last N events to prevent
+    deploying noisy rules that would generate too many alerts.
+    
+    Requires admin role.
+    
+    Returns:
+        Dictionary with hypothetical alert count and statistics
+    """
+    from ..invariants.validator import RuleValidator
+    from ..database.audit import AuditLogger, ActionType
+    
+    validator = RuleValidator()
+    
+    # Validate schema
+    is_valid, error, rule = validator.validate_schema(rule_yaml)
+    
+    if not is_valid:
+        # Log failed validation
+        AuditLogger.log(
+            action_type=ActionType.RULE_CREATE,
+            actor_id=current_user.username,
+            details={"error": error, "rule_yaml_length": len(rule_yaml)}
+        )
+        
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rule validation failed: {error}"
+        )
+    
+    # Run dry-run
+    result = validator.dry_run(rule, event_count=event_count, time_window_hours=time_window_hours)
+    
+    # Log dry-run
+    AuditLogger.log(
+        action_type=ActionType.RULE_CREATE,
+        actor_id=current_user.username,
+        resource_id=rule.rule_id,
+        details={
+            "dry_run": True,
+            "hypothetical_alerts": result.get("hypothetical_alerts", 0),
+            "alert_rate": result.get("alert_rate_percent", 0),
+            "is_noisy": result.get("is_noisy", False)
+        }
+    )
+    
+    return result
 
 
 # ============================================================================
