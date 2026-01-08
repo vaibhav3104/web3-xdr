@@ -6,7 +6,7 @@ import os
 from typing import Optional
 import asyncio
 import structlog
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -23,6 +23,23 @@ from .guardian_routes import router as guardian_router
 from .parser_routes import router as parser_router
 from .alert_routes import router as alert_router
 from .contract_routes import router as contract_router
+from .scorecard_routes import router as scorecard_router
+
+# WebSocket feed for War Room dashboard
+try:
+    from .websockets import websocket_feed
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
+    websocket_feed = None
+
+# Runtime Security Plane routes
+try:
+    from .runtime_routes import router as runtime_router
+    RUNTIME_ROUTES_AVAILABLE = True
+except ImportError:
+    RUNTIME_ROUTES_AVAILABLE = False
+    runtime_router = None
 
 # Customer management and API keys
 try:
@@ -124,10 +141,23 @@ def create_app(
     if CROSS_CHAIN_ROUTES_AVAILABLE and cross_chain_router:
         app.include_router(cross_chain_router, prefix="/api")
     
+    # Include Runtime Security Plane routes
+    if RUNTIME_ROUTES_AVAILABLE and runtime_router:
+        app.include_router(runtime_router)
+    
+    # Include Scorecard/ROI routes
+    app.include_router(scorecard_router)
+    
     # Health check
     @app.get("/health")
     async def health_check():
         return {"status": "healthy", "service": "sentinel3"}
+    
+    # WebSocket feed for War Room dashboard
+    if WEBSOCKET_AVAILABLE and websocket_feed:
+        @app.websocket("/ws/feed")
+        async def websocket_endpoint(websocket: WebSocket):
+            await websocket_feed(websocket)
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")

@@ -68,6 +68,11 @@
             border-left: 4px solid var(--accent-green);
         }
         
+        .severity-predicted {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.1));
+            border-left: 4px solid #a855f7;
+        }
+        
         .pulse-critical {
             animation: pulse-red 2s infinite;
         }
@@ -196,10 +201,11 @@
                             <div 
                                 class="p-4 rounded-lg cursor-pointer transition hover:bg-gray-800/50"
                                 :class="{
-                                    'severity-critical pulse-critical': incident.severity === 'CRITICAL',
-                                    'severity-high': incident.severity === 'HIGH',
-                                    'severity-medium': incident.severity === 'MEDIUM',
-                                    'severity-low': incident.severity === 'LOW'
+                                    'severity-critical pulse-critical': incident.severity === 'CRITICAL' && !incident.is_predicted,
+                                    'severity-high': incident.severity === 'HIGH' && !incident.is_predicted,
+                                    'severity-medium': incident.severity === 'MEDIUM' && !incident.is_predicted,
+                                    'severity-low': incident.severity === 'LOW' && !incident.is_predicted,
+                                    'severity-predicted': incident.is_predicted
                                 }"
                                 @click="selectIncident(incident)"
                             >
@@ -208,12 +214,13 @@
                                         <span 
                                             class="status-badge"
                                             :class="{
-                                                'bg-red-500/20 text-red-400': incident.severity === 'CRITICAL',
-                                                'bg-orange-500/20 text-orange-400': incident.severity === 'HIGH',
-                                                'bg-yellow-500/20 text-yellow-400': incident.severity === 'MEDIUM',
-                                                'bg-green-500/20 text-green-400': incident.severity === 'LOW'
+                                                'bg-red-500/20 text-red-400': incident.severity === 'CRITICAL' && !incident.is_predicted,
+                                                'bg-orange-500/20 text-orange-400': incident.severity === 'HIGH' && !incident.is_predicted,
+                                                'bg-yellow-500/20 text-yellow-400': incident.severity === 'MEDIUM' && !incident.is_predicted,
+                                                'bg-green-500/20 text-green-400': incident.severity === 'LOW' && !incident.is_predicted,
+                                                'bg-purple-500/20 text-purple-400': incident.is_predicted
                                             }"
-                                            x-text="incident.severity"
+                                            x-text="incident.is_predicted ? 'PREDICTED' : incident.severity"
                                         ></span>
                                     </div>
                                     <span class="text-xs text-gray-500 font-mono" x-text="formatTime(incident.created_at)"></span>
@@ -441,14 +448,49 @@
                 
                 async loadIncidents() {
                     try {
+                        // Load confirmed incidents
                         const res = await fetch('/api/incidents');
-                        if (!res.ok) throw new Error('API error');
-                        const data = await res.json();
-                        // Normalize severity to uppercase
-                        this.incidents = data.map(inc => ({
-                            ...inc,
-                            severity: (inc.severity || 'low').toUpperCase()
-                        }));
+                        let confirmedIncidents = [];
+                        if (res.ok) {
+                            const data = await res.json();
+                            confirmedIncidents = data.map(inc => ({
+                                ...inc,
+                                severity: (inc.severity || 'low').toUpperCase(),
+                                is_predicted: false
+                            }));
+                        }
+                        
+                        // Load predicted incidents
+                        let predictedIncidents = [];
+                        try {
+                            const predRes = await fetch('/api/runtime/predicted-incidents?status=OPEN&limit=50');
+                            if (predRes.ok) {
+                                const predData = await predRes.json();
+                                predictedIncidents = predData.map(inc => ({
+                                    id: inc.id,
+                                    incident_id: inc.id,
+                                    title: `[PREDICTED] ${inc.predicted_type || 'Security Threat'}`,
+                                    summary: inc.explanation_json?.summary || 'Simulation-based prediction',
+                                    severity: (inc.severity || 'medium').toUpperCase(),
+                                    status: 'PREDICTED',
+                                    attack_type: inc.predicted_type || 'UNKNOWN',
+                                    confidence: inc.confidence || 0.5,
+                                    total_loss_usd: null,
+                                    affected_chains: [inc.chain_id],
+                                    created_at: inc.created_at,
+                                    tx_hash: inc.tx_hash,
+                                    is_predicted: true,
+                                    predicted_type: inc.predicted_type,
+                                    explanation_json: inc.explanation_json
+                                }));
+                            }
+                        } catch (e) {
+                            console.log('Predicted incidents API not available');
+                        }
+                        
+                        // Merge and sort by created_at
+                        this.incidents = [...confirmedIncidents, ...predictedIncidents]
+                            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                     } catch (e) {
                         console.log('Incidents API not ready');
                     }

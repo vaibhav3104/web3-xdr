@@ -113,3 +113,41 @@ worker_processing_duration_seconds = Histogram(
     buckets=[0.001, 0.01, 0.1, 0.5, 1.0, 5.0]
 )
 
+# Runtime Security Plane metrics
+runtime_simulations_total = Counter(
+    "sentinel3_runtime_simulations_total",
+    "Total number of simulations run",
+    ["chain", "mode", "result"]  # mode: FAST/FULL/BUNDLE, result: SUCCESS/FAILED/TIMEOUT
+)
+
+runtime_simulation_duration_ms = Histogram(
+    "sentinel3_runtime_simulation_duration_ms",
+    "Simulation duration in milliseconds",
+    ["chain", "mode"],
+    buckets=[10, 50, 100, 500, 1000, 5000, 10000]
+)
+
+runtime_risk_router_decisions_total = Counter(
+    "sentinel3_runtime_risk_router_decisions_total",
+    "Total risk router decisions",
+    ["chain", "decision"]  # decision: IGNORE/HOT_ONLY/SIM_FAST/SIM_FULL/TRACE
+)
+
+runtime_budget_drops_total = Counter(
+    "sentinel3_runtime_budget_drops_total",
+    "Total simulations dropped due to budget limits",
+    ["chain", "reason"]  # reason: chain_budget_exceeded/protocol_budget_exceeded
+)
+
+predicted_incidents_total = Counter(
+    "sentinel3_predicted_incidents_total",
+    "Total predicted incidents created",
+    ["severity", "status"]  # severity: LOW/MEDIUM/HIGH/CRITICAL, status: OPEN/DISMISSED/CONFIRMED_MATCH/CONFIRMED_MISMATCH
+)
+
+predicted_to_confirmed_match_rate = Gauge(
+    "sentinel3_predicted_to_confirmed_match_rate",
+    "Rate of predicted incidents that matched confirmed incidents",
+    ["chain"]
+)
+

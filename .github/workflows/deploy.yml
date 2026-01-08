@@ -120,8 +120,8 @@ jobs:
             --cpu 2 \
             --min-instances 1 \
             --max-instances 3 \
-            --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090" \
-            --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
+            --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo" \
+            --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest,BLOXROUTE_AUTH_HEADER=web3-xdr-bloxroute-auth-header:latest"
       
       - name: Get Staging URLs
         run: |
@@ -204,8 +204,8 @@ jobs:
             --cpu 2 \
             --min-instances 1 \
             --max-instances 3 \
-            --set-env-vars "ENVIRONMENT=production,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090" \
-            --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
+            --set-env-vars "ENVIRONMENT=production,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo" \
+            --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest,BLOXROUTE_AUTH_HEADER=web3-xdr-bloxroute-auth-header:latest"
       
       - name: Get Production URLs
         run: |

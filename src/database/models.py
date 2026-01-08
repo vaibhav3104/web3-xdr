@@ -22,6 +22,7 @@ from sqlalchemy import (
     Index,
     JSON,
     Enum as SQLEnum,
+    DECIMAL,
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
@@ -403,4 +404,148 @@ class CorrelationKeyModel(Base):
     
     def __repr__(self):
         return f"<CorrelationKey {self.protocol_id}:{self.correlation_key[:16]} matched={self.matched}>"
+
+
+class SimulationRunModel(Base):
+    """
+    Runtime Security Plane: Audit record of simulation execution.
+    """
+    __tablename__ = "simulation_runs"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    
+    # Chain and block reference
+    chain_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    block_number: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    block_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    
+    # Transaction reference
+    tx_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    tx_from: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    tx_to: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    tx_selector: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # Function selector (first 4 bytes)
+    
+    # Simulation details
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)  # FAST/FULL/BUNDLE
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # SUCCESS/FAILED/TIMEOUT
+    
+    # Timing and resource usage
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rpc_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    
+    # Results (stored as JSONB)
+    state_diff_fingerprint: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    invariant_results: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # Confidence
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    confidence_reasons: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # Assumptions
+    assumptions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True
+    )
+    
+    __table_args__ = (
+        Index("ix_simulation_runs_chain_block", "chain_id", "block_number"),
+        Index("ix_simulation_runs_tx_hash", "tx_hash"),
+        Index("ix_simulation_runs_status", "status", "created_at"),
+    )
+    
+    def __repr__(self):
+        return f"<SimulationRun {self.id} [{self.chain_id}] {self.tx_hash[:16]} mode={self.mode} status={self.status}>"
+
+
+class PredictedIncidentModel(Base):
+    """
+    Runtime Security Plane: Predicted incidents based on simulation results.
+    """
+    __tablename__ = "predicted_incidents"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    
+    # Identity
+    chain_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    tx_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    
+    # Classification
+    protocol_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    predicted_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    
+    # Confidence & status
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN", index=True)
+    # OPEN/DISMISSED/CONFIRMED_MATCH/CONFIRMED_MISMATCH
+    
+    # Deduplication
+    dedupe_key: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    
+    # Explanation and evidence (JSONB)
+    explanation_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    evidence_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # Linked simulation
+    linked_simulation_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("simulation_runs.id"),
+        nullable=True,
+        index=True
+    )
+    
+    # Linked confirmed incident (if matched)
+    confirmed_incident_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id"),
+        nullable=True,
+        index=True
+    )
+    matched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    # Financial impact (Phase 9 - ROI Engine)
+    potential_loss_usd: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(20, 2),
+        nullable=True,
+        index=True
+    )
+    potential_loss_token_symbol: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    financial_impact_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+    
+    __table_args__ = (
+        Index("ix_predicted_incidents_chain_status", "chain_id", "status", "created_at"),
+        Index("ix_predicted_incidents_dedupe_key", "dedupe_key"),
+        Index("ix_predicted_incidents_severity_status", "severity", "status"),
+        Index("ix_predicted_incidents_tx_hash", "tx_hash"),
+    )
+    
+    def __repr__(self):
+        return f"<PredictedIncident {self.id} [{self.chain_id}] {self.predicted_type} status={self.status}>"
 

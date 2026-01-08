@@ -15,6 +15,8 @@ import structlog
 
 from ..correlation.incident_builder import Incident, IncidentStatus
 from ..models.invariants import InvariantResult
+from ..models.predicted_incidents import PredictedIncident, PredictedIncidentStatus
+import os
 
 logger = structlog.get_logger(__name__)
 
@@ -48,6 +50,14 @@ class PausePolicyConfig:
     # Value thresholds
     auto_pause_threshold_usd: Decimal = Decimal("1000000")  # $1M+
     require_approval_threshold_usd: Decimal = Decimal("10000000")  # $10M+ requires approval
+    
+    # Runtime Security Plane: Predicted incident settings
+    runtime_enabled: bool = os.getenv("RUNTIME_ENABLED", "false").lower() == "true"
+    runtime_auto_action_enabled: bool = os.getenv("RUNTIME_AUTO_ACTION_ENABLED", "false").lower() == "true"
+    runtime_auto_action_min_confidence: float = float(os.getenv("RUNTIME_AUTO_ACTION_MIN_CONFIDENCE", "0.95"))
+    runtime_action_cooldown_seconds: int = int(os.getenv("RUNTIME_ACTION_COOLDOWN_SECONDS", "3600"))
+    runtime_allowlist_protocols: Set[str] = field(default_factory=set)
+    runtime_allowlist_contracts: Set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -210,4 +220,131 @@ class PausePolicy:
         if protocol_id in self._last_pause_attempts:
             del self._last_pause_attempts[protocol_id]
             logger.info("pause_cooldown_reset", protocol_id=protocol_id)
+    
+    def evaluate_predicted(
+        self,
+        predicted_incident: PredictedIncident,
+        violations: List[InvariantResult],
+        protocol_id: Optional[str] = None,
+        state_diff_severe: bool = False,
+        oracle_deviation_active: bool = False,
+        anomaly_high: bool = False
+    ) -> PausePolicyResult:
+        """
+        Evaluate whether a PREDICTED incident warrants automated pause.
+        
+        This has STRICTER requirements than confirmed incidents:
+        - Runtime auto-action must be explicitly enabled
+        - Higher confidence threshold (default 0.95)
+        - Must be allowlisted (protocol or contract)
+        - Requires multiple independent signals
+        - Cooldown applies
+        
+        Default behavior: NO auto-pause (safe by default)
+        """
+        checks_passed = []
+        checks_failed = []
+        
+        # Check 0: Runtime enabled
+        if not self.config.runtime_enabled:
+            checks_failed.append("Runtime Security Plane is disabled")
+            return PausePolicyResult(
+                decision=PauseDecision.REJECTED,
+                reason="Runtime Security Plane is disabled (RUNTIME_ENABLED=false)",
+                checks_failed=checks_failed
+            )
+        
+        # Check 1: Auto-action enabled
+        if not self.config.runtime_auto_action_enabled:
+            checks_failed.append("Runtime auto-action is disabled (default safe)")
+            return PausePolicyResult(
+                decision=PauseDecision.REJECTED,
+                reason="Runtime auto-action is disabled. Predicted incidents do not trigger auto-pause by default.",
+                checks_failed=checks_failed
+            )
+        checks_passed.append("Runtime auto-action is enabled")
+        
+        # Check 2: Allowlist (protocol or contract)
+        is_allowlisted = False
+        if protocol_id and protocol_id in self.config.runtime_allowlist_protocols:
+            is_allowlisted = True
+            checks_passed.append(f"Protocol {protocol_id} is allowlisted")
+        
+        # Check contract allowlist (would need contract address from predicted incident)
+        # For now, assume not allowlisted unless protocol is
+        
+        if not is_allowlisted:
+            checks_failed.append("Protocol/contract is not allowlisted")
+            return PausePolicyResult(
+                decision=PauseDecision.REJECTED,
+                reason="Protocol/contract is not in allowlist. Auto-action requires explicit allowlisting.",
+                checks_failed=checks_failed
+            )
+        
+        # Check 3: Confidence threshold (higher for predicted)
+        if predicted_incident.confidence < self.config.runtime_auto_action_min_confidence:
+            checks_failed.append(
+                f"Confidence {predicted_incident.confidence:.2f} < threshold {self.config.runtime_auto_action_min_confidence}"
+            )
+            return PausePolicyResult(
+                decision=PauseDecision.REJECTED,
+                reason=f"Confidence too low for predicted incident: {predicted_incident.confidence:.2f} < {self.config.runtime_auto_action_min_confidence}",
+                checks_failed=checks_failed
+            )
+        checks_passed.append(f"Confidence {predicted_incident.confidence:.2f} >= {self.config.runtime_auto_action_min_confidence}")
+        
+        # Check 4: Multiple independent signals (REQUIRED for predicted)
+        signal_count = 0
+        if violations:
+            signal_count += 1
+        if state_diff_severe:
+            signal_count += 1
+        if oracle_deviation_active:
+            signal_count += 1
+        if anomaly_high:
+            signal_count += 1
+        
+        if signal_count < 2:
+            checks_failed.append(f"Only {signal_count} independent signal(s), requires >= 2")
+            return PausePolicyResult(
+                decision=PauseDecision.REJECTED,
+                reason=f"Insufficient independent signals: {signal_count} < 2. Required: invariant violation + (state diff OR oracle deviation OR anomaly)",
+                checks_failed=checks_failed
+            )
+        checks_passed.append(f"Multiple independent signals: {signal_count} >= 2")
+        
+        # Check 5: Cooldown
+        last_attempt = self._last_pause_attempts.get(protocol_id or "unknown")
+        if last_attempt:
+            elapsed = (datetime.now(timezone.utc) - last_attempt).total_seconds()
+            if elapsed < self.config.runtime_action_cooldown_seconds:
+                checks_failed.append(
+                    f"Cooldown: {elapsed:.0f}s elapsed, requires {self.config.runtime_action_cooldown_seconds}s"
+                )
+                return PausePolicyResult(
+                    decision=PauseDecision.REJECTED,
+                    reason=f"Cooldown period not elapsed: {elapsed:.0f}s < {self.config.runtime_action_cooldown_seconds}s",
+                    checks_failed=checks_failed
+                )
+        checks_passed.append("Cooldown period elapsed")
+        
+        # All checks passed - but still require approval for predicted incidents
+        logger.warning(
+            "predicted_incident_auto_pause_approved",
+            predicted_incident_id=predicted_incident.id,
+            protocol_id=protocol_id,
+            confidence=predicted_incident.confidence,
+            signals=signal_count
+        )
+        
+        # Record pause attempt
+        self._last_pause_attempts[protocol_id or "unknown"] = datetime.now(timezone.utc)
+        
+        # Even if all checks pass, predicted incidents require approval by default
+        return PausePolicyResult(
+            decision=PauseDecision.REQUIRES_APPROVAL,
+            reason="Predicted incident passed all checks but requires manual approval for safety",
+            checks_passed=checks_passed,
+            requires_approval_reason="Predicted incidents require explicit approval even when all checks pass"
+        )
 
