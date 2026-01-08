@@ -127,7 +127,7 @@ def create_app(
     # Health check
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "service": "sentinel3"}
+        return {"status": "healthy", "service": "sentinel3-v2"}
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")
