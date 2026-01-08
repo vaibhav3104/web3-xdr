@@ -1279,41 +1279,75 @@ async def run_async_monitors_with_lazy_init(
 ):
     """Initialize non-EVM monitors lazily and then run them."""
     import aiohttp
+    import traceback
+    
+    print(f"🔧 [DEBUG] Starting lazy init for {len(non_evm_configs)} non-EVM chains...")
     
     # Lazy initialize non-EVM monitors
-    for chain_config, chain_type in non_evm_configs:
+    for i, (chain_config, chain_type) in enumerate(non_evm_configs):
         chain_id = chain_config["chain_id"]
         chain_name = chain_config["chain_name"]
+        rpc_url = chain_config.get("rpc_url", "N/A")
+        
+        print(f"🔧 [DEBUG] [{i+1}/{len(non_evm_configs)}] Initializing {chain_id} ({chain_type})...")
+        print(f"🔧 [DEBUG]   RPC: {rpc_url[:50]}...")
         
         try:
+            monitor = None
+            
             if chain_type == "cosmos":
+                print(f"🔧 [DEBUG]   Creating CosmosMonitor...")
                 monitor = CosmosMonitor(chain_config)
-                if await monitor.connect():
+                print(f"🔧 [DEBUG]   Calling connect()...")
+                connected = await monitor.connect()
+                print(f"🔧 [DEBUG]   Connect result: {connected}")
+                
+                if connected:
                     monitors.append(monitor)
+                    monitor_state.update_chain_status(chain_id, "connected", chain_type, monitor.last_height)
                     print(f"   ✅ {chain_name} (Cosmos): Height {monitor.last_height:,}")
                 else:
+                    monitor_state.update_chain_status(chain_id, "failed", chain_type, 0, "Connection returned False")
                     print(f"   ❌ {chain_name} (Cosmos): Connection failed")
                     
             elif chain_type in ["aptos", "sui"]:
+                print(f"🔧 [DEBUG]   Creating AptosMonitor ({chain_type})...")
                 monitor = AptosMonitor(chain_config, chain_type)
-                if await monitor.connect():
+                print(f"🔧 [DEBUG]   Calling connect()...")
+                connected = await monitor.connect()
+                print(f"🔧 [DEBUG]   Connect result: {connected}")
+                
+                if connected:
                     monitors.append(monitor)
+                    monitor_state.update_chain_status(chain_id, "connected", chain_type, monitor.last_version)
                     label = "Version" if chain_type == "aptos" else "Checkpoint"
                     print(f"   ✅ {chain_name} ({chain_type.upper()}): {label} {monitor.last_version:,}")
                 else:
+                    monitor_state.update_chain_status(chain_id, "failed", chain_type, 0, "Connection returned False")
                     print(f"   ❌ {chain_name} ({chain_type.upper()}): Connection failed")
                     
             elif chain_type == "near":
+                print(f"🔧 [DEBUG]   Creating NearMonitor...")
                 monitor = NearMonitor(chain_config)
-                if await monitor.connect():
+                print(f"🔧 [DEBUG]   Calling connect()...")
+                connected = await monitor.connect()
+                print(f"🔧 [DEBUG]   Connect result: {connected}")
+                
+                if connected:
                     monitors.append(monitor)
+                    monitor_state.update_chain_status(chain_id, "connected", chain_type, monitor.last_height)
                     print(f"   ✅ {chain_name} (Near): Height {monitor.last_height:,}")
                 else:
+                    monitor_state.update_chain_status(chain_id, "failed", chain_type, 0, "Connection returned False")
                     print(f"   ❌ {chain_name} (Near): Connection failed")
                     
         except Exception as e:
-            print(f"   ❌ {chain_name}: {str(e)[:50]}")
+            error_msg = str(e)
+            print(f"   ❌ {chain_name}: {error_msg[:80]}")
+            print(f"🔧 [DEBUG]   Traceback: {traceback.format_exc()[:200]}")
+            monitor_state.update_chain_status(chain_id, "error", chain_type, 0, error_msg[:100])
     
+    print(f"🔧 [DEBUG] Lazy init complete. Connected: {len(monitors)} monitors")
     print(f"🌐 Running {len(monitors)} non-EVM monitors...")
     
     # Now run the monitors
@@ -1509,14 +1543,24 @@ def monitor():
     print(f"🌐 {len(non_evm_configs)} non-EVM chains will connect in background thread...")
     
     def run_async():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(run_async_monitors_with_lazy_init(
-            async_monitors, non_evm_configs, rule_monitor
-        ))
+        print("🔧 [DEBUG] Background thread started!")
+        try:
+            print("🔧 [DEBUG] Creating event loop...")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            print("🔧 [DEBUG] Event loop created, starting lazy init...")
+            loop.run_until_complete(run_async_monitors_with_lazy_init(
+                async_monitors, non_evm_configs, rule_monitor
+            ))
+        except Exception as e:
+            print(f"🔧 [DEBUG] Background thread error: {str(e)[:100]}")
+            import traceback
+            print(f"🔧 [DEBUG] Traceback: {traceback.format_exc()[:300]}")
     
+    print("🔧 [DEBUG] Starting background thread...")
     async_thread = threading.Thread(target=run_async, daemon=True)
     async_thread.start()
+    print("🔧 [DEBUG] Background thread started, continuing main thread...")
     
     scan_count = 0
     yaml_incidents = 0

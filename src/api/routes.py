@@ -353,6 +353,35 @@ async def get_storage_stats():
         return {"error": "Database module not available", "storage": "in-memory"}
 
 
+@router.get("/chains/debug-logs")
+async def get_debug_logs():
+    """
+    Get recent debug logs for non-EVM chain initialization.
+    """
+    from ..shared_state import monitor_state
+    
+    chain_status = monitor_state.get_chain_status()
+    
+    # Get all chains including failed ones
+    all_chains = []
+    for chain_id, status in chain_status.items():
+        all_chains.append({
+            "chain_id": chain_id,
+            "chain_type": status.get("chain_type", "unknown"),
+            "status": status.get("status", "unknown"),
+            "last_block": status.get("last_block", 0),
+            "last_update": status.get("last_update"),
+            "error": status.get("error"),
+        })
+    
+    return {
+        "total_tracked": len(all_chains),
+        "connected": len([c for c in all_chains if c["status"] == "connected"]),
+        "failed": len([c for c in all_chains if c["status"] in ["failed", "error"]]),
+        "chains": sorted(all_chains, key=lambda x: x["chain_id"])
+    }
+
+
 @router.get("/chains/test-rpc")
 async def test_rpc_connections():
     """
