@@ -28,7 +28,15 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
+    # Type-only imports for IDE autocomplete (not evaluated at runtime)
     from src.runtime.runtime_engine import RuntimeEngine
+    from src.models.predicted_incidents import PredictedIncident
+    from src.runtime.intent_sources.pseudo_block import PseudoIntentBlockSource
+    from src.runtime.risk_router import RiskRouter
+    from src.runtime.simulator.anvil import AnvilSimulator
+    from src.invariants.engine import InvariantEngine
+    from src.database.connection import DatabaseManager
+    from src.database.models import PredictedIncidentModel, SimulationRunModel
 
 # Use aiohttp for lightweight, fast-binding health server
 from aiohttp import web
@@ -454,7 +462,7 @@ class Sentinel3Worker:
         # For now, this is a placeholder
         pass
     
-    async def _store_predicted_incident(self, incident: PredictedIncident):
+    async def _store_predicted_incident(self, incident: "PredictedIncident"):
         """Store predicted incident to database."""
         try:
             async with DatabaseManager.get_session() as session:
@@ -511,7 +519,7 @@ class Sentinel3Worker:
         except Exception as e:
             logger.error("failed_to_store_predicted_incident", error=str(e), exc_info=True)
     
-    async def _publish_predicted_incident(self, incident: PredictedIncident):
+    async def _publish_predicted_incident(self, incident: "PredictedIncident"):
         """Publish predicted incident to event bus with PREDICTED flag."""
         try:
             # Create a synthetic SecurityEvent for the predicted incident
