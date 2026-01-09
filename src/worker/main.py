@@ -724,23 +724,34 @@ async def main():
     logger.info("health_server_started")
     
     # Create and start worker (initialization happens here)
-    try:
-        worker_instance = Sentinel3Worker()
-        logger.info("worker_instance_created", starting_initialization=True)
-        
-        # Start worker (this will initialize and run loops)
-        await worker_instance.start()
-        worker_ready = True
-        logger.info("worker_fully_started")
-        
-        # Keep running until shutdown
-        while worker_instance.running:
-            await asyncio.sleep(1.0)
+    # Do this in background so health server keeps responding
+    async def start_worker_background():
+        global worker_instance, worker_ready
+        try:
+            worker_instance = Sentinel3Worker()
+            logger.info("worker_instance_created", starting_initialization=True)
             
-    except Exception as e:
-        logger.error("worker_startup_failed", error=str(e), exc_info=True)
-        # Health server will still respond, but status will be "starting"
-        raise
+            # Start worker (this will initialize and run loops)
+            await worker_instance.start()
+            worker_ready = True
+            logger.info("worker_fully_started")
+            
+            # Keep running until shutdown
+            while worker_instance.running:
+                await asyncio.sleep(1.0)
+                
+        except Exception as e:
+            logger.error("worker_startup_failed", error=str(e), exc_info=True)
+            # Health server will still respond, but status will be "starting"
+            # Don't raise - let health server keep running
+    
+    worker_task = asyncio.create_task(start_worker_background())
+    
+    # Wait for either worker to complete or shutdown signal
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
     finally:
         worker_ready = False
         if worker_instance:
