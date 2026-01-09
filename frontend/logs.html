@@ -1344,8 +1344,25 @@
             // If Lucene query was used, server already filtered, just apply time and dropdown filters
             filteredEvents = allEvents.filter(event => {
                 // Time filter (always apply client-side for precision)
-                const eventTime = new Date(event.timestamp);
-                if (eventTime < startTime || eventTime > endTime) return false;
+                // Handle both timezone-aware and timezone-naive timestamps
+                let eventTime;
+                try {
+                    eventTime = new Date(event.timestamp);
+                    // If timestamp doesn't have timezone, assume UTC
+                    if (isNaN(eventTime.getTime())) {
+                        // Try adding UTC timezone if missing
+                        const ts = event.timestamp;
+                        eventTime = new Date(ts.includes('+') || ts.includes('Z') ? ts : ts + '+00:00');
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse event timestamp:', event.timestamp, e);
+                    return false; // Skip events with invalid timestamps
+                }
+                
+                // Only filter by time if both start and end times are valid
+                if (startTime && endTime && !isNaN(startTime.getTime()) && !isNaN(endTime.getTime())) {
+                    if (eventTime < startTime || eventTime > endTime) return false;
+                }
 
                 // If no Lucene query, apply dropdown filters
                 if (!luceneQuery) {
