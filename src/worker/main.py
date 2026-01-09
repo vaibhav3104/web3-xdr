@@ -464,7 +464,11 @@ class Sentinel3Worker:
     
     async def _store_predicted_incident(self, incident: "PredictedIncident"):
         """Store predicted incident to database."""
+        if not RUNTIME_AVAILABLE:
+            return
         try:
+            from src.database.models import PredictedIncidentModel
+            from src.database.connection import DatabaseManager
             async with DatabaseManager.get_session() as session:
                 # Check if already exists (by dedupe_key)
                 from sqlalchemy import select
