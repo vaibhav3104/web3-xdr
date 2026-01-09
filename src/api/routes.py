@@ -847,12 +847,10 @@ async def migrate_events_table():
                     END $$;
                 """))
             
-            # Add indexes
-            await session.execute(text("""
-                CREATE INDEX IF NOT EXISTS ix_events_block_hash ON events(block_hash);
-                CREATE INDEX IF NOT EXISTS ix_events_canonical_event_hash ON events(canonical_event_hash);
-                CREATE UNIQUE INDEX IF NOT EXISTS ix_events_unique_key ON events(chain_id, tx_hash, log_index);
-            """))
+            # Add indexes (execute separately to avoid prepared statement error)
+            await session.execute(text("CREATE INDEX IF NOT EXISTS ix_events_block_hash ON events(block_hash)"))
+            await session.execute(text("CREATE INDEX IF NOT EXISTS ix_events_canonical_event_hash ON events(canonical_event_hash)"))
+            await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_events_unique_key ON events(chain_id, tx_hash, log_index)"))
             
             await session.commit()
             
