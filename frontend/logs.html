@@ -1249,7 +1249,25 @@
                 if (endTimeVal) params.append('end_time', new Date(endTimeVal).toISOString());
                 
                 const response = await fetch(`${API_BASE}/api/events?${params.toString()}`);
+                
+                // Check if response is OK
+                if (!response.ok) {
+                    console.error('API request failed:', response.status, response.statusText);
+                    const errorText = await response.text();
+                    console.error('Error details:', errorText);
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                
+                // Debug logging
+                console.log('API Response:', {
+                    status: response.status,
+                    total: data.total,
+                    eventsReturned: data.events ? data.events.length : 0,
+                    dataKeys: Object.keys(data),
+                    firstEvent: data.events && data.events.length > 0 ? data.events[0] : null
+                });
 
                 allEvents = data.events || [];
                 
@@ -1261,6 +1279,10 @@
                 console.log('Time range:', startTimeVal, 'to', endTimeVal);
                 if (allEvents.length > 0) {
                     console.log('First event timestamp:', allEvents[0].timestamp);
+                } else {
+                    console.warn('⚠️ No events returned from API!');
+                    console.warn('API URL:', `${API_BASE}/api/events?${params.toString()}`);
+                    console.warn('Full API response:', JSON.stringify(data, null, 2));
                 }
                 
                 // Show query used if available
