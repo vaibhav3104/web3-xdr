@@ -3,7 +3,7 @@ Database Service Layer for Sentinel3.
 Provides high-level async methods for CRUD operations.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 import uuid
