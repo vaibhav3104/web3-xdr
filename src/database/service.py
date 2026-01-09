@@ -82,30 +82,61 @@ class DatabaseService:
         import json
         
         saved = 0
+        errors = []
         async with DatabaseManager.get_session() as session:
-            insert_sql = text("""
-                INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
-                    block_timestamp, contract_address, severity, amount, amount_usd,
-                    from_address, to_address, raw_data)
-                VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                    CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), :contract_address, :severity, :amount, :amount_usd,
-                    :from_address, :to_address, CAST(:raw_data AS JSONB))
-                ON CONFLICT (event_id) DO NOTHING
-            """)
             for event in events:
                 try:
+                    # Validate required fields
+                    event_id = event.get('event_id')
+                    tx_hash = event.get('tx_hash')
+                    block_number = event.get('block_number')
+                    
+                    if not event_id or not tx_hash or block_number is None:
+                        errors.append(f"Missing required fields: event_id={bool(event_id)}, tx_hash={bool(tx_hash)}, block_number={block_number is not None}")
+                        continue
+                    
+                    # Prepare data
                     raw = event.get('raw_data') or event
                     raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
+                    
+                    # Handle timestamp - convert to datetime if string
+                    block_timestamp = event.get('block_timestamp')
+                    if isinstance(block_timestamp, str):
+                        try:
+                            from dateutil.parser import parse as parse_date
+                            block_timestamp = parse_date(block_timestamp)
+                        except:
+                            block_timestamp = datetime.utcnow()
+                    elif block_timestamp is None:
+                        block_timestamp = datetime.utcnow()
+                    
+                    # Convert to ISO format string for SQL
+                    if isinstance(block_timestamp, datetime):
+                        block_timestamp_str = block_timestamp.isoformat()
+                    else:
+                        block_timestamp_str = str(block_timestamp)
+                    
+                    insert_sql = text("""
+                        INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
+                            block_timestamp, contract_address, severity, amount, amount_usd,
+                            from_address, to_address, raw_data)
+                        VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
+                            CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), :contract_address, :severity, 
+                            CAST(:amount AS NUMERIC), CAST(:amount_usd AS NUMERIC),
+                            :from_address, :to_address, CAST(:raw_data AS JSONB))
+                        ON CONFLICT (event_id) DO NOTHING
+                    """)
+                    
                     await session.execute(insert_sql, {
                         'id': str(uuid.uuid4()),
-                        'event_id': event.get('event_id'),
-                        'chain_id': event.get('chain_id') or 'unknown',
-                        'event_type': event.get('event_type') or 'unknown',
-                        'tx_hash': event.get('tx_hash'),
-                        'block_number': event.get('block_number'),
-                        'block_timestamp': event.get('block_timestamp') or datetime.utcnow().isoformat(),
-                        'contract_address': event.get('contract_address') or '',
-                        'severity': (event.get('severity') or 'LOW').upper(),
+                        'event_id': str(event_id),
+                        'chain_id': str(event.get('chain_id') or 'unknown'),
+                        'event_type': str(event.get('event_type') or 'unknown'),
+                        'tx_hash': str(tx_hash),
+                        'block_number': int(block_number),
+                        'block_timestamp': block_timestamp_str,
+                        'contract_address': str(event.get('contract_address') or ''),
+                        'severity': str((event.get('severity') or 'LOW').upper()),
                         'amount': event.get('amount'),
                         'amount_usd': event.get('amount_usd'),
                         'from_address': event.get('from_address'),
@@ -114,10 +145,15 @@ class DatabaseService:
                     })
                     saved += 1
                 except Exception as e:
-                    logger.debug("event_insert_skipped", event_id=event.get('event_id'), error=str(e)[:100])
+                    error_msg = str(e)
+                    errors.append(f"event_id={event.get('event_id', 'N/A')}: {error_msg[:200]}")
+                    logger.warning("event_insert_failed", event_id=event.get('event_id'), error=error_msg[:300], exc_info=True)
+            
             # get_session context manager auto-commits on success
         if saved > 0:
             logger.info("events_batch_saved", count=saved, total=len(events))
+        if errors:
+            logger.warning("events_batch_errors", error_count=len(errors), errors=errors[:5])
         return saved
     
     @staticmethod
