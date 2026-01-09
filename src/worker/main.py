@@ -59,7 +59,6 @@ try:
         BLOXROUTE_AVAILABLE = True
     except ImportError as e:
         BLOXROUTE_AVAILABLE = False
-        logger.warning("bloxroute_source_not_available", error=str(e))
         BloxrouteMempoolSource = None
     
     RUNTIME_AVAILABLE = True
@@ -67,7 +66,6 @@ except ImportError as e:
     RUNTIME_AVAILABLE = False
     BLOXROUTE_AVAILABLE = False
     BloxrouteMempoolSource = None
-    logger.warning("runtime_security_plane_not_available", error=str(e))
 from src.telemetry.metrics import (
     events_ingested_total,
     head_lag_blocks,
@@ -88,9 +86,16 @@ from fastapi.responses import Response
 
 logger = structlog.get_logger(__name__)
 
+# Log runtime availability status (after logger is defined)
+if not RUNTIME_AVAILABLE:
+    logger.warning("runtime_security_plane_not_available", message="Runtime security features disabled")
+if not BLOXROUTE_AVAILABLE:
+    logger.debug("bloxroute_source_not_available", message="bloXroute mempool source disabled")
+
 # Configuration
-# Cloud Run sets PORT automatically, but we can override with WORKER_HEALTH_PORT
-WORKER_HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT") or os.getenv("PORT", "9090"))
+# Cloud Run sets PORT automatically - use it directly for health server
+# WORKER_HEALTH_PORT can override, but PORT takes precedence for Cloud Run compatibility
+WORKER_HEALTH_PORT = int(os.getenv("PORT") or os.getenv("WORKER_HEALTH_PORT", "9090"))
 REDIS_URL = os.getenv("REDIS_URL", "")
 POLL_INTERVAL_SECONDS = float(os.getenv("POLL_INTERVAL_SECONDS", "2.0"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
@@ -682,19 +687,32 @@ async def main():
     signal.signal(signal.SIGINT, signal_handler)
     
     # Start health server FIRST (before any initialization)
-    logger.info("starting_health_server", port=WORKER_HEALTH_PORT)
-    config = uvicorn.Config(
-        health_app,
-        host="0.0.0.0",
-        port=WORKER_HEALTH_PORT,
-        log_level="error"
-    )
-    server = uvicorn.Server(config)
-    health_server_task = asyncio.create_task(server.serve())
+    # This MUST start immediately for Cloud Run health checks
+    logger.info("starting_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
     
-    # Give health server a moment to start
-    await asyncio.sleep(0.5)
-    logger.info("health_server_started")
+    try:
+        # Create server config - use simple config for fast startup
+        config = uvicorn.Config(
+            health_app,
+            host="0.0.0.0",
+            port=WORKER_HEALTH_PORT,
+            log_level="error",
+            access_log=False,  # Reduce logging overhead
+            loop="asyncio"  # Explicitly use asyncio loop
+        )
+        server = uvicorn.Server(config)
+        
+        # Start server in background - this will bind to the port immediately
+        health_server_task = asyncio.create_task(server.serve())
+        
+        # Give server a moment to bind (critical for Cloud Run)
+        await asyncio.sleep(1.0)
+        logger.info("health_server_started", port=WORKER_HEALTH_PORT)
+        
+    except Exception as e:
+        logger.error("health_server_startup_failed", error=str(e), exc_info=True)
+        # If health server fails, we can't proceed - Cloud Run will fail
+        raise
     
     # Create and start worker (initialization happens here)
     # Do this in background so health server keeps responding
