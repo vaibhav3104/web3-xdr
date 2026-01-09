@@ -788,15 +788,27 @@ async def main():
         print(f"[WORKER] ✓ Health server bound successfully on port {WORKER_HEALTH_PORT}", flush=True)
         logger.info("health_server_bound", port=WORKER_HEALTH_PORT, host="0.0.0.0")
         
-        # Verify server is actually listening
+        # Keep references to prevent garbage collection
+        app['_runner'] = runner
+        app['_site'] = site
+        
+        # Verify server is actually listening (with retry)
         import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex(('127.0.0.1', WORKER_HEALTH_PORT))
-        sock.close()
-        if result == 0:
-            print(f"[WORKER] ✓ Port {WORKER_HEALTH_PORT} is listening and accepting connections", flush=True)
-        else:
-            print(f"[WORKER] ⚠️  Port {WORKER_HEALTH_PORT} check failed (result={result})", flush=True)
+        for i in range(5):
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex(('127.0.0.1', WORKER_HEALTH_PORT))
+                sock.close()
+                if result == 0:
+                    print(f"[WORKER] ✓ Port {WORKER_HEALTH_PORT} is listening and accepting connections", flush=True)
+                    break
+                else:
+                    print(f"[WORKER] Port check attempt {i+1}/5 failed (result={result}), retrying...", flush=True)
+                    await asyncio.sleep(0.5)
+            except Exception as e:
+                print(f"[WORKER] Port check error: {e}", flush=True)
+                await asyncio.sleep(0.5)
         
         # STEP 2: Start background initialization (non-blocking)
         print(f"[WORKER] Starting background initialization...", flush=True)
