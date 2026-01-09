@@ -318,6 +318,16 @@ async def list_events(
                 end_time=str(end_dt) if end_dt else None,
                 limit=limit)
     try:
+        # Get actual total count from database (for accurate pagination info)
+        total_count = await DatabaseService.get_events_count(
+            chain_id=chain_id,
+            event_type=event_type,
+            severity=severity,
+            start_time=start_dt,
+            end_time=end_dt
+        )
+        
+        # Fetch events (fetch more than requested for client-side filtering)
         db_events = await DatabaseService.get_events(
             chain_id=chain_id,
             event_type=event_type,
@@ -327,15 +337,12 @@ async def list_events(
             limit=min(limit * 2, 2000),  # Fetch more for filtering/search
             offset=0
         )
-        logger.info("api_database_query_successful", events_count=len(db_events))
+        logger.info("api_database_query_successful", events_count=len(db_events), total_in_db=total_count)
     except Exception as e:
         logger.error("database_query_failed", error=str(e), exc_info=True)
         # Fallback to empty result
-        return {
-            "total": 0,
-            "query_used": None,
-            "events": []
-        }
+        total_count = 0
+        db_events = []
     
     # Convert events to dict format expected by frontend
     # get_events now returns dicts directly, so just format them
@@ -401,7 +408,8 @@ async def list_events(
     
     # Return full event details
     return {
-        "total": len(event_dicts),
+        "total": total_count,  # Actual total in database (not just returned count)
+        "returned": len(event_dicts),  # Number of events actually returned
         "query_used": query if query else (f"text:{search}" if search else None),
         "events": [
             {

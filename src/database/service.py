@@ -192,30 +192,76 @@ class DatabaseService:
             return events
     
     @staticmethod
+    async def get_events_count(
+        chain_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        severity: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+    ) -> int:
+        """
+        Get actual total count of events matching filters using raw SQL.
+        This avoids ORM schema issues and gives accurate counts.
+        """
+        async with DatabaseManager.get_session() as session:
+            # Build WHERE clause (same logic as get_events)
+            where_parts = []
+            params = {}
+            
+            if chain_id:
+                where_parts.append("chain_id = :chain_id")
+                params['chain_id'] = chain_id
+            if event_type:
+                where_parts.append("event_type = :event_type")
+                params['event_type'] = event_type
+            if severity:
+                where_parts.append("severity = :severity")
+                params['severity'] = severity.upper()
+            if start_time:
+                if isinstance(start_time, datetime):
+                    if start_time.tzinfo is None:
+                        start_time = start_time.replace(tzinfo=timezone.utc)
+                    else:
+                        start_time = start_time.astimezone(timezone.utc)
+                    start_time_str = start_time.isoformat()
+                else:
+                    start_time_str = str(start_time)
+                where_parts.append("block_timestamp >= CAST(:start_time AS TIMESTAMP WITH TIME ZONE)")
+                params['start_time'] = start_time_str
+            if end_time:
+                if isinstance(end_time, datetime):
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=timezone.utc)
+                    else:
+                        end_time = end_time.astimezone(timezone.utc)
+                    end_time_str = end_time.isoformat()
+                else:
+                    end_time_str = str(end_time)
+                where_parts.append("block_timestamp <= CAST(:end_time AS TIMESTAMP WITH TIME ZONE)")
+                params['end_time'] = end_time_str
+            
+            where_clause = " AND ".join(where_parts) if where_parts else "1=1"
+            
+            # Count query
+            sql = f"SELECT COUNT(*) FROM events WHERE {where_clause}"
+            result = await session.execute(text(sql), params)
+            count = result.scalar()
+            return count or 0
+    
+    @staticmethod
     async def count_events(
         chain_id: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
     ) -> int:
         """
-        Count events matching filters.
+        Count events matching filters (legacy method, use get_events_count instead).
         """
-        async with DatabaseManager.get_session() as session:
-            query = select(func.count(EventModel.id))
-            
-            conditions = []
-            if chain_id:
-                conditions.append(EventModel.chain_id == chain_id)
-            if start_time:
-                conditions.append(EventModel.block_timestamp >= start_time)
-            if end_time:
-                conditions.append(EventModel.block_timestamp <= end_time)
-            
-            if conditions:
-                query = query.where(and_(*conditions))
-            
-            result = await session.execute(query)
-            return result.scalar() or 0
+        return await DatabaseService.get_events_count(
+            chain_id=chain_id,
+            start_time=start_time,
+            end_time=end_time
+        )
     
     @staticmethod
     async def get_events_by_chain(
