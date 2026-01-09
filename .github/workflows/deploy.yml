@@ -94,7 +94,7 @@ jobs:
         run: |
           echo " Building multi-stage Docker image ()..."
           docker build \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --no-cache \
             -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} .
           docker tag ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} \
                      ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging
@@ -190,7 +190,7 @@ jobs:
         run: |
           echo " Building multi-stage Docker image ()..."
           docker build \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --no-cache \
             -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} .
           docker tag ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} \
                      ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:latest
