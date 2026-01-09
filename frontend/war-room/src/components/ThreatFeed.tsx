@@ -150,5 +150,5 @@ const ThreatFeed: React.FC = () => {
   );
 };
 
+export { ThreatFeed };
 export default ThreatFeed;
-

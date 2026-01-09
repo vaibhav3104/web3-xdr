@@ -61,5 +61,6 @@ const KPICard: React.FC<KPICardProps> = ({
   );
 };
 
+export { KPICard };
 export default KPICard;
 

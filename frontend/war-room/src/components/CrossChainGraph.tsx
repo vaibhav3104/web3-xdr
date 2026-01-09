@@ -242,5 +242,6 @@ const CrossChainGraph: React.FC<CrossChainGraphProps> = ({ messages }) => {
   );
 };
 
+export { CrossChainGraph };
 export default CrossChainGraph;
 
