@@ -78,8 +78,9 @@ class DatabaseService:
         Uses INSERT ON CONFLICT DO NOTHING for idempotency.
         Returns count of inserted events.
         
-        Uses legacy-compatible columns first (no status column) since production
-        DB may not have been migrated yet. Try full schema only if legacy fails.
+        Uses legacy-compatible columns (no status column) for production DB
+        that may not have been migrated yet. Run /api/maintenance/migrate-events
+        to add status column, then EventModel insert will work.
         """
         if not events:
             return 0
@@ -143,11 +144,12 @@ class DatabaseService:
                 values_placeholders = []
                 params = {}
                 for idx, vals in enumerate(values_list):
+                    # Use CAST() instead of :: syntax for better compatibility with sqlalchemy text()
                     values_placeholders.append(f"""(
-                        :id_{idx}::uuid, :event_id_{idx}, :chain_id_{idx}, :event_type_{idx},
-                        :tx_hash_{idx}, :block_number_{idx}, :block_timestamp_{idx},
+                        CAST(:id_{idx} AS UUID), :event_id_{idx}, :chain_id_{idx}, :event_type_{idx},
+                        :tx_hash_{idx}, :block_number_{idx}, CAST(:block_timestamp_{idx} AS TIMESTAMP WITH TIME ZONE),
                         :contract_address_{idx}, :severity_{idx}, :amount_{idx}, :amount_usd_{idx},
-                        :from_address_{idx}, :to_address_{idx}, :raw_data_{idx}::jsonb
+                        :from_address_{idx}, :to_address_{idx}, CAST(:raw_data_{idx} AS JSONB)
                     )""")
                     params[f'id_{idx}'] = vals[0]
                     params[f'event_id_{idx}'] = vals[1]
@@ -179,19 +181,10 @@ class DatabaseService:
                 return count if count and count > 0 else len(events)  # rowcount may not be accurate for batch
                     
             except Exception as legacy_error:
-                logger.debug("legacy_insert_failed_trying_full", error=str(legacy_error)[:200])
-            
-            # Strategy 2: Try full EventModel (for migrated DB with status column)
-            try:
-                stmt = insert(EventModel).values(events)
-                stmt = stmt.on_conflict_do_nothing(index_elements=['event_id'])
-                result = await session.execute(stmt)
-                count = result.rowcount
-                if count > 0:
-                    logger.info("events_batch_saved_full_schema", count=count)
-                    return count
-            except Exception as e:
-                logger.error("events_batch_save_failed", error=str(e)[:300], count=len(events))
+                # Log as warning so it's visible - legacy should work with base schema
+                logger.warning("legacy_insert_failed", error=str(legacy_error)[:300], count=len(events))
+                # Don't try Strategy 2 (full EventModel) - it requires status column which doesn't exist
+                # in production DB yet. Just re-raise so caller knows save failed.
                 raise
     
     @staticmethod
