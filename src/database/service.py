@@ -5,7 +5,7 @@ Provides high-level async methods for CRUD operations.
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import uuid
 import json
 
