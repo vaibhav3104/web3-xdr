@@ -891,12 +891,7 @@ async def migrate_events_table():
             "error": str(e),
             "type": type(e).__name__,
         }
-        # Log error if logger available
-        try:
-            import structlog
-            structlog.get_logger().error("migration_failed", **error_details, traceback=traceback.format_exc())
-        except:
-            pass
+        logger.error("migration_failed", **error_details, exc_info=True)
         return {
             "status": "error",
             **error_details
