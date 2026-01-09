@@ -284,9 +284,9 @@ class TestBloxrouteMempoolSource:
             
             # Yield control to let async operations run
             await asyncio.sleep(0.2)
-            
-            # Get pending transactions
-            pending_txs = await source.get_pending_txs(limit=10)
+        
+        # Get pending transactions
+        pending_txs = await source.get_pending_txs(limit=10)
             
             await source.stop()
         
@@ -302,12 +302,12 @@ class TestBloxrouteMempoolSource:
         """Test: Source with no monitored addresses should warn and not subscribe."""
         # Patch the module-level logger before creating the source
         with patch('src.runtime.intent_sources.bloxroute_source.logger') as mock_log:
-            empty_source = BloxrouteMempoolSource(
-                chain_id="ethereum",
-                auth_header="Bearer test-token",
-                monitored_addresses=[],
-            )
-            
+        empty_source = BloxrouteMempoolSource(
+            chain_id="ethereum",
+            auth_header="Bearer test-token",
+            monitored_addresses=[],
+        )
+        
             # Should warn about empty monitored addresses during initialization
             assert mock_log.warning.called
     
@@ -341,7 +341,7 @@ class TestBloxrouteMempoolSource:
         
         messages = [
             json.dumps({"id": 1, "result": "subscribed"}),
-            bloxroute_message,
+                bloxroute_message,
         ]
         
         call_count = [0]

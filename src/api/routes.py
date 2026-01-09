@@ -314,35 +314,43 @@ async def list_events(
                 chain_id=chain_id, 
                 event_type=event_type, 
                 severity=severity,
+                status=status,
                 start_time=str(start_dt) if start_dt else None,
                 end_time=str(end_dt) if end_dt else None,
-                limit=limit)
+                limit=limit,
+                cursor=cursor is not None)
     try:
-        # Get actual total count from database (for accurate pagination info)
-        total_count = await DatabaseService.get_events_count(
-            chain_id=chain_id,
-            event_type=event_type,
-            severity=severity,
-            start_time=start_dt,
-            end_time=end_dt
-        )
+        # Get actual total count from database (only if requested - expensive operation)
+        total_count = None
+        if include_total:
+            total_count = await DatabaseService.get_events_count(
+                chain_id=chain_id,
+                event_type=event_type,
+                severity=severity,
+                status=status,
+                start_time=start_dt,
+                end_time=end_dt
+            )
         
-        # Fetch events (fetch more than requested for client-side filtering)
-        db_events = await DatabaseService.get_events(
+        # Fetch events with cursor pagination (preferred) or offset (backward compat)
+        db_events, next_cursor = await DatabaseService.get_events(
             chain_id=chain_id,
             event_type=event_type,
             severity=severity,
+            status=status,
             start_time=start_dt,
             end_time=end_dt,
-            limit=min(limit * 2, 2000),  # Fetch more for filtering/search
-            offset=0
+            limit=limit,
+            offset=0,  # Not used if cursor provided
+            cursor=cursor
         )
-        logger.info("api_database_query_successful", events_count=len(db_events), total_in_db=total_count)
+        logger.info("api_database_query_successful", events_count=len(db_events), total_in_db=total_count, has_next_cursor=next_cursor is not None)
     except Exception as e:
         logger.error("database_query_failed", error=str(e), exc_info=True)
         # Fallback to empty result
-        total_count = 0
+        total_count = None
         db_events = []
+        next_cursor = None
     
     # Convert events to dict format expected by frontend
     # get_events now returns dicts directly, so just format them
@@ -406,9 +414,8 @@ async def list_events(
     # Limit results
     event_dicts = event_dicts[:limit]
     
-    # Return full event details
-    return {
-        "total": total_count,  # Actual total in database (not just returned count)
+    # Return full event details with cursor pagination
+    response = {
         "returned": len(event_dicts),  # Number of events actually returned
         "query_used": query if query else (f"text:{search}" if search else None),
         "events": [
@@ -426,6 +433,16 @@ async def list_events(
             for e in event_dicts
         ]
     }
+    
+    # Add total count if requested
+    if include_total and total_count is not None:
+        response["total"] = total_count
+    
+    # Add next cursor if available
+    if next_cursor:
+        response["next_cursor"] = next_cursor
+    
+    return response
 
 
 @router.get("/events/query-help")

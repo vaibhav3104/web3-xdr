@@ -13,7 +13,7 @@
 - 2GB RAM available
 
 **Deploy:**
-```bash
+   ```bash
 cd /Users/vaibhav.tiwari/siem-optimizer/web3-xdr
 
 # Start Docker Desktop first!

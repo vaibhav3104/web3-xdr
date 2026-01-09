@@ -234,7 +234,7 @@ class TestAnvilSimulator:
             elif method == "evm_revert":
                 revert_calls.append(("revert", params))
                 return None
-            return None
+                return None
         
         mock_web3.provider.make_request = AsyncMock(side_effect=mock_make_request)
         

@@ -98,10 +98,66 @@ class EventModel(Base):
         Index("ix_events_severity_timestamp", "severity", "block_timestamp"),
         Index("ix_events_status", "status", "chain_id"),  # For finality tracking
         Index("ix_events_unique_key", "chain_id", "tx_hash", "log_index", unique=True),  # Deduplication
+        Index("ix_events_timestamp_id", "block_timestamp", "id"),  # For cursor pagination
     )
     
     def __repr__(self):
         return f"<Event {self.event_id} [{self.chain_id}] {self.event_type}>"
+
+
+class EventProcessingModel(Base):
+    """
+    Idempotency tracking for event processing.
+    Ensures exactly-once processing even with retries/failover.
+    """
+    __tablename__ = "event_processing"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    
+    idempotency_key: Mapped[str] = mapped_column(
+        String(128),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+    
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+    
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True
+    )
+    
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="PENDING",
+        index=True
+    )  # PENDING/PROCESSED/FAILED
+    
+    event_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    incident_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    
+    __table_args__ = (
+        Index("ix_event_processing_status", "status", "first_seen_at"),
+        Index("ix_event_processing_processed", "processed_at"),
+    )
+    
+    def __repr__(self):
+        return f"<EventProcessing {self.idempotency_key[:16]}... status={self.status}>"
 
 
 class IncidentModel(Base):

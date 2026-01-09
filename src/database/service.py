@@ -101,13 +101,19 @@ class DatabaseService:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         severity: Optional[str] = None,
+        status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Dict[str, Any]]:
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         """
-        Query events with optional filters using raw SQL to avoid ORM schema issues.
-        Returns list of dicts instead of EventModel objects.
+        Query events with optional filters using raw SQL.
+        Supports cursor-based pagination for better performance.
+        
+        Returns: (events_list, next_cursor)
         """
+        from .cursor import encode_cursor, decode_cursor
+        
         async with DatabaseManager.get_session() as session:
             # Build WHERE clause
             where_parts = []
@@ -123,7 +129,6 @@ class DatabaseService:
                 where_parts.append("contract_address = :contract_address")
                 params['contract_address'] = contract_address
             if start_time:
-                # Convert datetime to ISO string to avoid asyncpg timezone issues
                 if isinstance(start_time, datetime):
                     if start_time.tzinfo is None:
                         start_time = start_time.replace(tzinfo=timezone.utc)
@@ -135,7 +140,6 @@ class DatabaseService:
                 where_parts.append("block_timestamp >= CAST(:start_time AS TIMESTAMP WITH TIME ZONE)")
                 params['start_time'] = start_time_str
             if end_time:
-                # Convert datetime to ISO string to avoid asyncpg timezone issues
                 if isinstance(end_time, datetime):
                     if end_time.tzinfo is None:
                         end_time = end_time.replace(tzinfo=timezone.utc)
@@ -149,21 +153,36 @@ class DatabaseService:
             if severity:
                 where_parts.append("severity = :severity")
                 params['severity'] = severity.upper()
+            if status:
+                where_parts.append("status = :status")
+                params['status'] = status.upper()
+            
+            # Cursor-based pagination (preferred over OFFSET)
+            if cursor:
+                cursor_data = decode_cursor(cursor)
+                if cursor_data:
+                    cursor_timestamp, cursor_id = cursor_data
+                    where_parts.append(
+                        "(block_timestamp, id) < (CAST(:cursor_timestamp AS TIMESTAMP WITH TIME ZONE), CAST(:cursor_id AS UUID))"
+                    )
+                    params['cursor_timestamp'] = cursor_timestamp.isoformat()
+                    params['cursor_id'] = cursor_id
             
             where_clause = " AND ".join(where_parts) if where_parts else "1=1"
             
-            # Query using raw SQL - only select columns that definitely exist
+            # Query using raw SQL with cursor pagination
+            # Order by (block_timestamp DESC, id DESC) for stable cursor
             sql = f"""
                 SELECT id, event_id, chain_id, event_type, tx_hash, block_number,
                        block_timestamp, contract_address, severity, amount, amount_usd,
-                       from_address, to_address, raw_data, created_at
+                       from_address, to_address, raw_data, created_at,
+                       COALESCE(status, 'PENDING') as status
                 FROM events
                 WHERE {where_clause}
-                ORDER BY block_timestamp DESC
-                LIMIT :limit OFFSET :offset
+                ORDER BY block_timestamp DESC, id DESC
+                LIMIT :limit
             """
-            params['limit'] = limit
-            params['offset'] = offset
+            params['limit'] = limit + 1  # Fetch one extra to check if there's more
             
             result = await session.execute(text(sql), params)
             rows = result.fetchall()
@@ -187,9 +206,18 @@ class DatabaseService:
                     'to_address': row[12],
                     'raw_data': row[13] if isinstance(row[13], dict) else (json.loads(row[13]) if row[13] else {}),
                     'created_at': row[14],
+                    'status': row[15] if len(row) > 15 else 'PENDING',
                 })
             
-            return events
+            # Generate next cursor if there are more results
+            next_cursor = None
+            if len(events) > limit:
+                # Remove the extra event
+                last_event = events[limit - 1]
+                next_cursor = encode_cursor(last_event['block_timestamp'], last_event['id'])
+                events = events[:limit]
+            
+            return events, next_cursor
     
     @staticmethod
     async def get_events_count(

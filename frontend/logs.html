@@ -1113,11 +1113,13 @@
             <div class="pagination">
                 <div class="pagination-info">
                     Showing <span id="showingStart">0</span>-<span id="showingEnd">0</span> of <span id="totalCount">0</span> events
+                    <span id="loadMoreInfo" style="margin-left: 1rem; color: var(--accent-cyan); font-size: 0.85rem;"></span>
                 </div>
                 <div class="pagination-btns">
                     <button class="page-btn" id="prevBtn" onclick="prevPage()" disabled>← Previous</button>
                     <button class="page-btn active">1</button>
                     <button class="page-btn" id="nextBtn" onclick="nextPage()">Next →</button>
+                    <button class="page-btn" id="loadMoreBtn" onclick="loadMoreEvents()" style="display: none; background: var(--accent-blue);">Load More</button>
                 </div>
             </div>
         </div>
@@ -1126,12 +1128,14 @@
     <script>
         const API_BASE = window.location.origin;
         
-        let allEvents = [];
+        let allEvents = [];  // Accumulated events from pagination
         let filteredEvents = [];
         let currentPage = 1;
         let pageSize = 50;
         let sortField = 'timestamp';
         let sortOrder = 'desc';
+        let nextCursor = null;  // Cursor for pagination
+        let isLoadingMore = false;  // Prevent duplicate loads
         let refreshTimer = null;
 
         // Initialize
@@ -1173,8 +1177,8 @@
             document.querySelectorAll('.quick-time-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
 
-            // Calculate time range in UTC (events are stored in UTC)
-            const now = new Date(); // Current time
+            // Calculate time range in local time (user's timezone)
+            const now = new Date();
             let startTime;
 
             switch(range) {
@@ -1187,17 +1191,11 @@
                 case 'custom': return; // Don't change inputs
             }
 
-            // Convert UTC times to local time for datetime-local input display
-            // datetime-local inputs expect local time, but we want to show the UTC equivalent
-            // So we display the UTC time as if it were local time
-            const startLocal = new Date(startTime.getUTCFullYear(), startTime.getUTCMonth(), startTime.getUTCDate(), 
-                                       startTime.getUTCHours(), startTime.getUTCMinutes(), startTime.getUTCSeconds());
-            const endLocal = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
-                                     now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
+            // Set datetime-local inputs (they expect local time)
+            document.getElementById('endTime').value = formatDateTimeLocal(now);
+            document.getElementById('startTime').value = formatDateTimeLocal(startTime);
             
-            document.getElementById('endTime').value = formatDateTimeLocal(endLocal);
-            document.getElementById('startTime').value = formatDateTimeLocal(startLocal);
-            
+            // Reload events with new time range
             searchLogs();
         }
 
@@ -1223,51 +1221,67 @@
             updateRefresh();
         }
 
-        // Load events from API with Lucene query support
-        async function loadEvents() {
+        // Load events from API with server-side filtering and cursor pagination
+        async function loadEvents(reset = true) {
+            if (isLoadingMore) return;  // Prevent duplicate loads
+            
             const startTime = performance.now();
+            
+            // Reset events if starting fresh
+            if (reset) {
+                allEvents = [];
+                nextCursor = null;
+                currentPage = 1;
+            }
 
             try {
+                isLoadingMore = true;
+                
                 // Build query params
                 const params = new URLSearchParams();
-                params.append('limit', '1000');
+                params.append('limit', '200');  // Smaller page size for better performance
                 
-                // Get Lucene query
+                // Get filters
                 const luceneQuery = document.getElementById('searchQuery').value.trim();
-                if (luceneQuery) {
-                    params.append('query', luceneQuery);
-                    updateQueryMode('LUCENE', 'Server-side Lucene query execution');
-                } else {
-                    updateQueryMode('BASIC', 'Client-side filtering active');
-                }
-                
-                // Add basic filters if no Lucene query
                 const chainFilter = document.getElementById('chainFilter').value;
                 const severityFilter = document.getElementById('severityFilter').value;
                 const eventTypeFilter = document.getElementById('eventTypeFilter').value;
                 const startTimeVal = document.getElementById('startTime').value;
                 const endTimeVal = document.getElementById('endTime').value;
                 
-                if (!luceneQuery) {
-                    if (chainFilter) params.append('chain_id', chainFilter);
-                    if (severityFilter) params.append('severity', severityFilter);
-                    if (eventTypeFilter) params.append('event_type', eventTypeFilter);
+                // Add Lucene query if provided
+                if (luceneQuery) {
+                    params.append('query', luceneQuery);
+                    updateQueryMode('LUCENE', 'Server-side Lucene query execution');
+                } else {
+                    updateQueryMode('SERVER', 'Server-side filtering active');
                 }
                 
-                // DON'T send time filters to API - do all filtering client-side
-                // This avoids timezone conversion issues entirely
-                // The API will return recent events, and we filter by time client-side
-                // if (false && startTimeVal && endTimeVal) {
-                //     // Time filtering disabled - done client-side instead
-                //     const startDate = new Date(startTimeVal);
-                //     const endDate = new Date(endTimeVal);
-                //     params.append('start_time', startDate.toISOString());
-                //     params.append('end_time', endDate.toISOString());
-                // }
+                // Add server-side filters (always send to API)
+                if (chainFilter) params.append('chain_id', chainFilter);
+                if (severityFilter) params.append('severity', severityFilter);
+                if (eventTypeFilter) params.append('event_type', eventTypeFilter);
+                
+                // Send time filters to API (server-side filtering)
+                if (startTimeVal && endTimeVal) {
+                    // datetime-local inputs are in local time
+                    // Create Date objects (interprets as local time)
+                    const startDate = new Date(startTimeVal);
+                    const endDate = new Date(endTimeVal);
+                    
+                    // Convert to UTC ISO strings for API
+                    // toISOString() automatically converts to UTC
+                    params.append('start_time', startDate.toISOString());
+                    params.append('end_time', endDate.toISOString());
+                }
+                
+                // Add cursor for pagination if available
+                if (nextCursor && !reset) {
+                    params.append('cursor', nextCursor);
+                }
                 
                 const response = await fetch(`${API_BASE}/api/events?${params.toString()}`);
                 
-                // Check if response is OK
                 if (!response.ok) {
                     console.error('API request failed:', response.status, response.statusText);
                     const errorText = await response.text();
@@ -1277,37 +1291,31 @@
                 
                 const data = await response.json();
                 
-                // Debug logging
-                console.log('API Response:', {
-                    status: response.status,
-                    total: data.total,
-                    eventsReturned: data.events ? data.events.length : 0,
-                    dataKeys: Object.keys(data),
-                    firstEvent: data.events && data.events.length > 0 ? data.events[0] : null
-                });
-
-                allEvents = data.events || [];
+                // Accumulate events (for pagination)
+                const newEvents = data.events || [];
+                allEvents = reset ? newEvents : [...allEvents, ...newEvents];
+                nextCursor = data.next_cursor || null;
                 
                 const queryTime = Math.round(performance.now() - startTime);
                 document.getElementById('queryTime').textContent = queryTime;
                 
-                // Debug logging
-                console.log('Events loaded:', allEvents.length, 'total');
-                console.log('Time range:', startTimeVal, 'to', endTimeVal);
-                if (allEvents.length > 0) {
-                    console.log('First event timestamp:', allEvents[0].timestamp);
-                } else {
-                    console.warn('⚠️ No events returned from API!');
-                    console.warn('API URL:', `${API_BASE}/api/events?${params.toString()}`);
-                    console.warn('Full API response:', JSON.stringify(data, null, 2));
-                }
+                console.log('Events loaded:', {
+                    new: newEvents.length,
+                    total: allEvents.length,
+                    hasNext: nextCursor !== null,
+                    returned: data.returned
+                });
                 
                 // Show query used if available
                 if (data.query_used) {
                     console.log('Query executed:', data.query_used);
                 }
-
+                
+                // Apply client-side filters (only for display/sorting, not time filtering)
                 applyFilters();
+                
+                // Update "Load more" button visibility
+                updateLoadMoreButton();
                 
             } catch (error) {
                 console.error('Failed to load events:', error);
@@ -1322,6 +1330,37 @@
                         </td>
                     </tr>
                 `;
+            } finally {
+                isLoadingMore = false;
+            }
+        }
+        
+        // Load more events (pagination)
+        async function loadMoreEvents() {
+            if (nextCursor && !isLoadingMore) {
+                await loadEvents(false);  // Don't reset, append
+            }
+        }
+        
+        // Update "Load more" button
+        function updateLoadMoreButton() {
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            const loadMoreInfo = document.getElementById('loadMoreInfo');
+            
+            if (loadMoreBtn) {
+                loadMoreBtn.style.display = nextCursor ? 'inline-block' : 'none';
+                loadMoreBtn.disabled = isLoadingMore || !nextCursor;
+                loadMoreBtn.textContent = isLoadingMore ? 'Loading...' : 'Load More';
+            }
+            
+            if (loadMoreInfo) {
+                if (nextCursor) {
+                    loadMoreInfo.textContent = '• More available';
+                } else if (allEvents.length > 0) {
+                    loadMoreInfo.textContent = '• All loaded';
+                } else {
+                    loadMoreInfo.textContent = '';
+                }
             }
         }
 
@@ -1343,7 +1382,7 @@
         // Search logs with Lucene query
         function searchLogs() {
             currentPage = 1;
-            loadEvents(); // Reload from server with query
+            loadEvents(true); // Reset and reload from server
         }
         
         // Show query help modal
@@ -1375,102 +1414,23 @@
             document.getElementById('eventTypeFilter').value = '';
             setDefaultTimeRange();
             currentPage = 1;
-            applyFilters();
+            loadEvents(true);  // Reset and reload
         }
 
-        // Apply filters (client-side for basic filtering after Lucene query)
+        // Apply filters (minimal client-side filtering - most filtering is server-side)
         function applyFilters() {
-            const luceneQuery = document.getElementById('searchQuery').value.trim();
-            const chainFilter = document.getElementById('chainFilter').value;
-            const severityFilter = document.getElementById('severityFilter').value;
-            const eventTypeFilter = document.getElementById('eventTypeFilter').value;
+            // Since we're using server-side filtering, we mainly just need to:
+            // 1. Use allEvents directly (already filtered by server)
+            // 2. Apply sorting
+            // 3. Handle pagination display
             
-            // Parse time inputs - datetime-local inputs are timezone-naive (local time)
-            // We need to convert them to UTC for comparison with event timestamps (which are in UTC)
-            const startTimeInput = document.getElementById('startTime').value;
-            const endTimeInput = document.getElementById('endTime').value;
+            // For now, use all events (server has already filtered)
+            filteredEvents = allEvents;
             
-            let startTime = null;
-            let endTime = null;
-            
-            if (startTimeInput) {
-                // datetime-local inputs are timezone-naive (treated as local time by browser)
-                // But setTimeRange sets them to UTC time values (displayed as local)
-                // So we need to interpret the input as UTC time, not local time
-                // Parse the datetime-local string and create a UTC Date
-                const [datePart, timePart] = startTimeInput.split('T');
-                const [year, month, day] = datePart.split('-').map(Number);
-                const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
-                // Create Date object treating the input as UTC
-                startTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
-            }
-            
-            if (endTimeInput) {
-                const [datePart, timePart] = endTimeInput.split('T');
-                const [year, month, day] = datePart.split('-').map(Number);
-                const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
-                endTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
-            }
-            
-            console.log('Applying filters:', {
-                allEvents: allEvents.length,
-                startTimeInput,
-                endTimeInput,
-                startTime: startTime ? startTime.toISOString() : 'none',
-                endTime: endTime ? endTime.toISOString() : 'none',
-                timezoneOffset: new Date().getTimezoneOffset()
+            console.log('Applied filters (server-side):', {
+                total: filteredEvents.length,
+                hasNext: nextCursor !== null
             });
-
-            // If Lucene query was used, server already filtered, just apply time and dropdown filters
-            let filteredCount = 0;
-            filteredEvents = allEvents.filter(event => {
-                // Time filter (always apply client-side for precision)
-                // Handle both timezone-aware and timezone-naive timestamps
-                let eventTime;
-                try {
-                    eventTime = new Date(event.timestamp);
-                    // If timestamp doesn't have timezone, assume UTC
-                    if (isNaN(eventTime.getTime())) {
-                        // Try adding UTC timezone if missing
-                        const ts = event.timestamp;
-                        eventTime = new Date(ts.includes('+') || ts.includes('Z') ? ts : ts + '+00:00');
-                    }
-                } catch (e) {
-                    console.warn('Failed to parse event timestamp:', event.timestamp, e);
-                    return false; // Skip events with invalid timestamps
-                }
-                
-                // Only filter by time if both start and end times are valid
-                if (startTime && endTime && !isNaN(startTime.getTime()) && !isNaN(endTime.getTime())) {
-                    const beforeStart = eventTime < startTime;
-                    const afterEnd = eventTime > endTime;
-                    if (beforeStart || afterEnd) {
-                        if (filteredCount < 3) {
-                            console.log('Event filtered out:', {
-                                eventTime: eventTime.toISOString(),
-                                startTime: startTime.toISOString(),
-                                endTime: endTime.toISOString(),
-                                beforeStart,
-                                afterEnd
-                            });
-                        }
-                        return false;
-                    }
-                }
-                
-                filteredCount++;
-
-                // If no Lucene query, apply dropdown filters
-                if (!luceneQuery) {
-                    if (chainFilter && event.chain !== chainFilter) return false;
-                    if (severityFilter && event.severity !== severityFilter) return false;
-                    if (eventTypeFilter && event.event_type !== eventTypeFilter) return false;
-                }
-
-                return true;
-            });
-            
-            console.log('Filtered events:', filteredEvents.length, 'out of', allEvents.length);
 
             // Sort
             sortEvents();
