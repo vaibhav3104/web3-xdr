@@ -106,47 +106,54 @@ class DatabaseService:
                                                     'confirmed_at', 'topics', 'asset_type', 'asset_address']}
                         filtered_events.append(filtered_event)
                     
-                    # Use raw SQL to insert without status column
+                    # Use raw SQL batch insert without status column
                     from sqlalchemy import text
                     try:
-                        # Build INSERT statement without status column
-                        insert_sql = """
+                        import uuid
+                        import json
+                        from sqlalchemy.dialects.postgresql import JSONB
+                        
+                        # Build batch INSERT using VALUES clause
+                        values_list = []
+                        params = {}
+                        for idx, event in enumerate(filtered_events):
+                            event_id_key = f"event_id_{idx}"
+                            values_list.append(f"""(
+                                :id_{idx}, :{event_id_key}, :chain_id_{idx}, :event_type_{idx}, 
+                                :tx_hash_{idx}, :block_number_{idx}, :block_timestamp_{idx},
+                                :contract_address_{idx}, :severity_{idx}, :amount_{idx}, :amount_usd_{idx},
+                                :from_address_{idx}, :to_address_{idx}, :raw_data_{idx}::jsonb
+                            )""")
+                            
+                            params.update({
+                                f'id_{idx}': str(uuid.uuid4()),
+                                event_id_key: event.get('event_id'),
+                                f'chain_id_{idx}': event.get('chain_id'),
+                                f'event_type_{idx}': event.get('event_type', 'unknown'),
+                                f'tx_hash_{idx}': event.get('tx_hash'),
+                                f'block_number_{idx}': event.get('block_number'),
+                                f'block_timestamp_{idx}': event.get('block_timestamp'),
+                                f'contract_address_{idx}': event.get('contract_address'),
+                                f'severity_{idx}': event.get('severity', 'LOW'),
+                                f'amount_{idx}': event.get('amount'),
+                                f'amount_usd_{idx}': event.get('amount_usd'),
+                                f'from_address_{idx}': event.get('from_address'),
+                                f'to_address_{idx}': event.get('to_address'),
+                                f'raw_data_{idx}': json.dumps(event.get('raw_data', {}))
+                            })
+                        
+                        insert_sql = f"""
                             INSERT INTO events (
                                 id, event_id, chain_id, event_type, tx_hash, block_number, 
                                 block_timestamp, contract_address, severity, amount, amount_usd,
                                 from_address, to_address, raw_data
-                            ) VALUES (
-                                :id, :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                                :block_timestamp, :contract_address, :severity, :amount, :amount_usd,
-                                :from_address, :to_address, :raw_data::jsonb
-                            )
+                            ) VALUES {', '.join(values_list)}
                             ON CONFLICT (event_id) DO NOTHING
                         """
                         
-                        import uuid
-                        import json
-                        count = 0
-                        for event in filtered_events:
-                            result = await session.execute(text(insert_sql), {
-                                'id': str(uuid.uuid4()),
-                                'event_id': event.get('event_id'),
-                                'chain_id': event.get('chain_id'),
-                                'event_type': event.get('event_type', 'unknown'),
-                                'tx_hash': event.get('tx_hash'),
-                                'block_number': event.get('block_number'),
-                                'block_timestamp': event.get('block_timestamp'),
-                                'contract_address': event.get('contract_address'),
-                                'severity': event.get('severity', 'LOW'),
-                                'amount': event.get('amount'),
-                                'amount_usd': event.get('amount_usd'),
-                                'from_address': event.get('from_address'),
-                                'to_address': event.get('to_address'),
-                                'raw_data': json.dumps(event.get('raw_data', {}))
-                            })
-                            if result.rowcount > 0:
-                                count += 1
-                        
+                        result = await session.execute(text(insert_sql), params)
                         await session.commit()
+                        count = result.rowcount
                         logger.info("events_batch_saved_fallback", count=count, total=len(events))
                         return count
                     except Exception as fallback_error:
