@@ -103,18 +103,24 @@ class DatabaseService:
                     block_timestamp = event.get('block_timestamp')
                     if isinstance(block_timestamp, str):
                         try:
-                            from dateutil.parser import parse as parse_date
-                            block_timestamp = parse_date(block_timestamp)
+                            # Try ISO format first (most common)
+                            block_timestamp = datetime.fromisoformat(block_timestamp.replace('Z', '+00:00'))
                         except:
-                            block_timestamp = datetime.utcnow()
+                            try:
+                                # Fallback to strptime for other formats
+                                block_timestamp = datetime.strptime(block_timestamp, '%Y-%m-%dT%H:%M:%S.%f')
+                            except:
+                                block_timestamp = datetime.utcnow()
                     elif block_timestamp is None:
                         block_timestamp = datetime.utcnow()
                     
-                    # Convert to ISO format string for SQL
+                    # Convert to ISO format string for SQL (ensure timezone-aware)
                     if isinstance(block_timestamp, datetime):
+                        if block_timestamp.tzinfo is None:
+                            block_timestamp = block_timestamp.replace(tzinfo=timezone.utc)
                         block_timestamp_str = block_timestamp.isoformat()
                     else:
-                        block_timestamp_str = str(block_timestamp)
+                        block_timestamp_str = datetime.utcnow().isoformat()
                     
                     insert_sql = text("""
                         INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
