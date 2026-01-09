@@ -1252,24 +1252,18 @@
                 }
                 
                 if (startTimeVal && endTimeVal) {
-                    // datetime-local inputs are in local timezone
-                    // We need to convert them to UTC for the API
-                    // The issue: new Date("2026-01-08T21:38") creates a Date in local time
-                    // But we want to treat it as if it were UTC (since events are in UTC)
-                    // Solution: Parse as UTC directly
-                    const startUTC = new Date(startTimeVal + 'Z'); // Add Z to treat as UTC
-                    const endUTC = new Date(endTimeVal + 'Z');
+                    // datetime-local inputs represent local time
+                    // Convert to UTC by treating the input as local time and getting UTC equivalent
+                    // Example: "2026-01-08T21:38" in IST means 21:38 IST = 16:08 UTC
+                    // new Date("2026-01-08T21:38") creates a Date representing 21:38 in local timezone
+                    // getTime() returns UTC milliseconds for that moment
+                    // So we can use toISOString() directly - it converts to UTC
+                    const startDate = new Date(startTimeVal);
+                    const endDate = new Date(endTimeVal);
                     
-                    // But wait - if user is in IST and selects 21:38, they mean 21:38 IST
-                    // But events are stored in UTC, so we need to convert
-                    // Actually, the simplest fix: Don't send time filters to API
-                    // Let the API return all recent events, then filter client-side
-                    // OR: Calculate time range in UTC from current UTC time
-                    
-                    // For now, let's just not send time filters and filter client-side
-                    // This avoids timezone conversion issues
-                    // params.append('start_time', startUTC.toISOString());
-                    // params.append('end_time', endUTC.toISOString());
+                    // toISOString() converts to UTC, which is what the API expects
+                    params.append('start_time', startDate.toISOString());
+                    params.append('end_time', endDate.toISOString());
                 }
                 
                 const response = await fetch(`${API_BASE}/api/events?${params.toString()}`);
