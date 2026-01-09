@@ -750,8 +750,14 @@ async def main():
     """
     global start_time
     
+    # CRITICAL: Print immediately to stdout (Cloud Run needs to see this)
+    print(f"[WORKER] Starting Sentinel3 Worker on port {WORKER_HEALTH_PORT}", flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
     # Handle graceful shutdown
     def signal_handler(sig, frame):
+        print(f"[WORKER] Signal received: {sig}", flush=True)
         logger.info("signal_received", signal=sig)
         if worker_instance:
             asyncio.create_task(worker_instance.stop())
@@ -759,46 +765,90 @@ async def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     
-    # STEP 1: Create and bind HTTP server IMMEDIATELY (no blocking operations before this)
-    logger.info("binding_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
-    
-    app = web.Application()
-    app.router.add_get("/", root_handler)
-    app.router.add_get("/health", health_handler)
-    app.router.add_get("/metrics", metrics_handler)
-    
-    # Create site and bind to port immediately
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
-    # Bind to 0.0.0.0 (not 127.0.0.1) - critical for Cloud Run
-    site = web.TCPSite(runner, host="0.0.0.0", port=WORKER_HEALTH_PORT)
-    await site.start()
-    
-    logger.info("health_server_bound", port=WORKER_HEALTH_PORT, host="0.0.0.0")
-    
-    # STEP 2: Start background initialization (non-blocking)
-    init_task = asyncio.create_task(background_init())
-    
-    # STEP 3: Keep server running forever
     try:
-        # Wait for initialization to complete (or fail)
-        await init_task
-    except Exception as e:
-        logger.error("unexpected_error_in_main", error=str(e), exc_info=True)
-    finally:
-        # Keep server running even if init fails
-        logger.info("health_server_running", message="Server will continue running for health checks")
+        # STEP 1: Create and bind HTTP server IMMEDIATELY (no blocking operations before this)
+        print(f"[WORKER] Creating aiohttp application...", flush=True)
+        logger.info("binding_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
+        
+        app = web.Application()
+        app.router.add_get("/", root_handler)
+        app.router.add_get("/health", health_handler)
+        app.router.add_get("/metrics", metrics_handler)
+        
+        print(f"[WORKER] Setting up AppRunner...", flush=True)
+        # Create site and bind to port immediately
+        runner = web.AppRunner(app)
+        await runner.setup()
+        
+        print(f"[WORKER] Starting TCPSite on 0.0.0.0:{WORKER_HEALTH_PORT}...", flush=True)
+        # Bind to 0.0.0.0 (not 127.0.0.1) - critical for Cloud Run
+        site = web.TCPSite(runner, host="0.0.0.0", port=WORKER_HEALTH_PORT)
+        await site.start()
+        
+        print(f"[WORKER] ✓ Health server bound successfully on port {WORKER_HEALTH_PORT}", flush=True)
+        logger.info("health_server_bound", port=WORKER_HEALTH_PORT, host="0.0.0.0")
+        
+        # Verify server is actually listening
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(('127.0.0.1', WORKER_HEALTH_PORT))
+        sock.close()
+        if result == 0:
+            print(f"[WORKER] ✓ Port {WORKER_HEALTH_PORT} is listening and accepting connections", flush=True)
+        else:
+            print(f"[WORKER] ⚠️  Port {WORKER_HEALTH_PORT} check failed (result={result})", flush=True)
+        
+        # STEP 2: Start background initialization (non-blocking)
+        print(f"[WORKER] Starting background initialization...", flush=True)
+        init_task = asyncio.create_task(background_init())
+        
+        # STEP 3: Keep server running forever
+        print(f"[WORKER] Health server is running. Waiting for initialization...", flush=True)
         try:
-            # Wait indefinitely (until SIGTERM)
-            while True:
-                await asyncio.sleep(60.0)
-        except KeyboardInterrupt:
-            logger.info("shutdown_requested")
-        finally:
+            # Wait for initialization to complete (or fail) - but don't block server
+            await asyncio.wait_for(init_task, timeout=None)
+        except asyncio.TimeoutError:
+            print(f"[WORKER] Initialization timeout (this shouldn't happen)", flush=True)
+        except Exception as e:
+            print(f"[WORKER] Initialization error: {e}", flush=True)
+            logger.error("unexpected_error_in_main", error=str(e), exc_info=True)
+        
+        # Keep server running even if init fails
+        print(f"[WORKER] Server will continue running for health checks", flush=True)
+        logger.info("health_server_running", message="Server will continue running for health checks")
+        
+        # Wait indefinitely (until SIGTERM)
+        while True:
+            await asyncio.sleep(60.0)
+            
+    except Exception as e:
+        # Critical error - log and re-raise so Cloud Run sees the failure
+        print(f"[WORKER] CRITICAL ERROR: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        logger.error("critical_startup_error", error=str(e), exc_info=True)
+        raise
+    finally:
+        print(f"[WORKER] Shutting down...", flush=True)
+        try:
             await runner.cleanup()
-            logger.info("health_server_shutdown")
+        except:
+            pass
+        logger.info("health_server_shutdown")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # CRITICAL: Print immediately to ensure Cloud Run sees the process started
+    print("[WORKER] Python script starting...", flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("[WORKER] Interrupted by user", flush=True)
+    except Exception as e:
+        print(f"[WORKER] Fatal error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
