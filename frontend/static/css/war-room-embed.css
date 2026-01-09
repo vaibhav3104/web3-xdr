@@ -1,0 +1,245 @@
+/* War Room Embed Styles */
+/* Reuses existing CSS variables from logs.html */
+
+#war-room {
+    margin: 2rem 0;
+    background: var(--bg-card, #1a1f2e);
+    border: 1px solid var(--border-color, #1e293b);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+#war-room.collapsed {
+    padding: 1rem 1.5rem;
+}
+
+.war-room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+
+.war-room-header h2 {
+    color: var(--accent-green, #10b981);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.war-room-header p {
+    color: var(--text-secondary, #94a3b8);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.war-room-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    align-items: center;
+}
+
+.war-room-btn {
+    padding: 0.5rem 1rem;
+    background: var(--bg-hover, #252b3d);
+    border: 1px solid var(--border-color, #1e293b);
+    border-radius: 6px;
+    color: var(--text-primary, #f8fafc);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+}
+
+.war-room-btn:hover {
+    background: var(--accent-cyan, #06b6d4);
+    border-color: var(--accent-cyan, #06b6d4);
+    color: var(--bg-primary, #0a0e17);
+}
+
+.war-room-btn.primary {
+    background: var(--accent-green, #10b981);
+    border-color: var(--accent-green, #10b981);
+    color: white;
+}
+
+.war-room-btn.primary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.war-room-link {
+    color: var(--accent-blue, #3b82f6);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color 0.2s;
+}
+
+.war-room-link:hover {
+    color: var(--accent-cyan, #06b6d4);
+    text-decoration: underline;
+}
+
+.war-room-autoload {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary, #94a3b8);
+}
+
+.war-room-autoload input[type="checkbox"] {
+    cursor: pointer;
+    accent-color: var(--accent-green, #10b981);
+}
+
+#war-room-placeholder {
+    background: var(--bg-input, #0f1419);
+    border: 2px dashed var(--border-color, #1e293b);
+    border-radius: 8px;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: var(--text-secondary, #94a3b8);
+}
+
+#war-room-placeholder p {
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
+#war-room-frame-container {
+    position: relative;
+    width: 100%;
+    height: 780px;
+    border: 2px solid var(--accent-green, #10b981);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+    display: none;
+}
+
+#war-room-frame-container.loaded {
+    display: block;
+}
+
+#war-room-frame-container iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}
+
+.war-room-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.9);
+    color: var(--accent-green, #10b981);
+    z-index: 10;
+}
+
+.war-room-loading.hidden {
+    display: none;
+}
+
+.war-room-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color, #1e293b);
+    border-top-color: var(--accent-green, #10b981);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.war-room-error {
+    background: var(--bg-card, #1a1f2e);
+    border: 1px solid var(--accent-red, #ef4444);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-primary, #f8fafc);
+    display: none;
+}
+
+.war-room-error.show {
+    display: block;
+}
+
+.war-room-error p {
+    margin-bottom: 1rem;
+    color: var(--text-secondary, #94a3b8);
+}
+
+.war-room-error .error-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Fullscreen overlay fallback */
+.war-room-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    background: #000;
+    padding: 0;
+    margin: 0;
+}
+
+.war-room-overlay #war-room-frame-container {
+    width: 100vw;
+    height: 100vh;
+    border: none;
+    border-radius: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #war-room {
+        margin: 1rem 0;
+        padding: 1rem;
+    }
+
+    .war-room-header {
+        flex-direction: column;
+    }
+
+    .war-room-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .war-room-btn {
+        width: 100%;
+    }
+
+    #war-room-frame-container {
+        height: 500px;
+    }
+}
+
+/* Compact/Expanded toggle */
+#war-room-frame-container.compact {
+    height: 400px;
+}
+
+#war-room-frame-container.expanded {
+    height: 900px;
+}

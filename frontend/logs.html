@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Explorer - Sentinel3</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/war-room-embed.css">
     <style>
         :root {
             --bg-primary: #0a0e17;
@@ -825,9 +826,11 @@
         <div class="nav-links">
             <a href="index.html">Dashboard</a>
             <a href="logs.html" class="active">Log Explorer</a>
+            <a href="#war-room" id="nav-war-room" onclick="event.preventDefault(); window.warRoomEmbed.scrollTo(); return false;">War Room</a>
             <a href="admin.html">Rules</a>
             <a href="guardian.html">Guardian</a>
             <a href="analytics.html">Analytics</a>
+            <a href="war-room.html" style="font-size: 0.8rem; color: var(--text-muted);">(Full Page)</a>
         </div>
     </nav>
 
@@ -1655,99 +1658,38 @@
         }
     </script>
 
-    <!-- War Room Dashboard Panel -->
-    <section class="war-room-section" style="margin: 40px 20px; padding: 30px; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-color);">
-        <div class="war-room-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <!-- War Room Dashboard Panel (Lazy Loaded) -->
+    <section id="war-room" class="war-room-section collapsed">
+        <div class="war-room-header">
             <div>
-                <h2 style="color: var(--accent-green); font-family: 'JetBrains Mono', monospace; margin-bottom: 5px;">
-                    🎯 War Room - Real-Time Threat Monitoring
-                </h2>
-                <p style="color: var(--text-secondary); font-size: 0.875rem;">
-                    Live cross-chain threat visualization and 0-block detection
-                </p>
-            </div>
-            <button 
-                onclick="toggleWarRoomFullscreen()" 
-                style="background: var(--accent-green); color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
-                ⛶ Full Screen
-            </button>
-        </div>
-        
-        <div id="war-room-container" class="war-room-container">
-            <iframe 
-                id="war-room-iframe"
-                src="https://web3-xdr-production-worker-ipje7qz66q-uc.a.run.app/"
-                style="width: 100%; height: 700px; border: 2px solid var(--accent-green); border-radius: 8px; background: #000; display: block;"
-                frameborder="0"
-                allowfullscreen>
-            </iframe>
-        </div>
-        
-        <div class="war-room-footer" style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 0.75rem;">
-            <div>
-                <span style="color: var(--accent-green);">●</span> Connected to War Room
-            </div>
-            <div>
-                <a href="https://web3-xdr-production-worker-ipje7qz66q-uc.a.run.app/" target="_blank" style="color: var(--accent-blue); text-decoration: none;">
-                    Open in New Tab ↗
-                </a>
+                <h2>🎯 War Room</h2>
+                <p>Live runtime view (embedded)</p>
             </div>
         </div>
+
+        <div class="war-room-controls">
+            <button id="war-room-load-btn" class="war-room-btn primary">Show War Room</button>
+            <button id="war-room-hide-btn" class="war-room-btn" style="display: none;">Hide</button>
+            <button id="war-room-reload-btn" class="war-room-btn" style="display: none;">Reload</button>
+            <button id="war-room-fullscreen-btn" class="war-room-btn" style="display: none;">Fullscreen</button>
+            <div class="war-room-autoload">
+                <input type="checkbox" id="war-room-autoload-checkbox">
+                <label for="war-room-autoload-checkbox">Auto-load when visible</label>
+            </div>
+            <a href="war-room.html" class="war-room-link">Full Page</a>
+            <a href="https://web3-xdr-production-worker-ipje7qz66q-uc.a.run.app/" target="_blank" class="war-room-link">Open in New Tab ↗</a>
+        </div>
+
+        <div id="war-room-placeholder">
+            <p>War Room is not loaded yet to keep Logs fast.</p>
+            <button class="war-room-btn primary" onclick="window.warRoomEmbed.load()">Show War Room</button>
+        </div>
+
+        <div id="war-room-frame-container"></div>
     </section>
 
-    <style>
-        .war-room-container.fullscreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 9999;
-            background: #000;
-            padding: 0;
-            margin: 0;
-        }
-
-        .war-room-container.fullscreen iframe {
-            width: 100vw !important;
-            height: 100vh !important;
-            border: none !important;
-            border-radius: 0 !important;
-        }
-
-        .war-room-section button:hover {
-            opacity: 0.9;
-            transform: scale(1.05);
-        }
-
-        .war-room-section button:active {
-            transform: scale(0.98);
-        }
-    </style>
-
-    <script>
-        function toggleWarRoomFullscreen() {
-            const container = document.getElementById('war-room-container');
-            
-            if (!container.classList.contains('fullscreen')) {
-                container.classList.add('fullscreen');
-                document.body.style.overflow = 'hidden';
-            } else {
-                container.classList.remove('fullscreen');
-                document.body.style.overflow = 'auto';
-            }
-        }
-
-        // Exit fullscreen on ESC key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                const container = document.getElementById('war-room-container');
-                if (container.classList.contains('fullscreen')) {
-                    toggleWarRoomFullscreen();
-                }
-            }
-        });
-    </script>
+    <!-- War Room Embed Script -->
+    <script src="static/js/war-room-embed.js"></script>
 </body>
 </html>
 
