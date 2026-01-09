@@ -798,6 +798,53 @@ async def purge_old_data(
         return {"error": str(e), "status": "failed"}
 
 
+@router.get("/maintenance/verify-schema")
+async def verify_schema():
+    """
+    Verify database schema - check if status column exists.
+    """
+    try:
+        from sqlalchemy import text
+        from ..database.connection import DatabaseManager
+        
+        await DatabaseManager.initialize()
+        
+        async with DatabaseManager.get_session() as session:
+            # Check if status column exists
+            result = await session.execute(text("""
+                SELECT column_name, data_type, is_nullable, column_default
+                FROM information_schema.columns 
+                WHERE table_name = 'events' AND column_name = 'status'
+            """))
+            status_col = result.fetchone()
+            
+            # Get all columns
+            result = await session.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'events'
+                ORDER BY ordinal_position
+            """))
+            all_cols = [row[0] for row in result.fetchall()]
+            
+            return {
+                "status": "success",
+                "status_column_exists": status_col is not None,
+                "status_column_details": {
+                    "name": status_col[0] if status_col else None,
+                    "type": status_col[1] if status_col else None,
+                    "nullable": status_col[2] if status_col else None,
+                    "default": status_col[3] if status_col else None,
+                } if status_col else None,
+                "all_columns": all_cols,
+                "total_columns": len(all_cols)
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 @router.post("/maintenance/migrate-events")
 async def migrate_events_table():
     """
