@@ -52,6 +52,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY config/ ./config/
 COPY monitor.py .
+# Copy frontend directory (for logs.html and other static HTML files)
+COPY frontend/ ./frontend/
 
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /build/dist /app/static
