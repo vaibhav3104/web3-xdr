@@ -717,6 +717,23 @@ async def metrics_handler(request):
     )
 
 
+async def index_handler(request):
+    """
+    SPA catch-all handler - serves index.html for any unknown route.
+    This allows React Router to handle client-side routing.
+    """
+    static_dir = Path("/app/static")
+    index_file = static_dir / "index.html"
+    
+    if not index_file.exists():
+        return web.Response(
+            text="War Room UI not found. Build the frontend first.",
+            status=404
+        )
+    
+    return web.FileResponse(index_file)
+
+
 async def background_init():
     """
     Background initialization - all heavy startup logic goes here.
@@ -782,9 +799,21 @@ async def main():
         logger.info("binding_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
         
         app = web.Application()
-        app.router.add_get("/", root_handler)
+        
+        # API routes (defined BEFORE catch-all)
         app.router.add_get("/health", health_handler)
         app.router.add_get("/metrics", metrics_handler)
+        
+        # Static files for React app (JS/CSS/images)
+        static_dir = Path("/app/static")
+        if static_dir.exists():
+            app.router.add_static('/assets', static_dir / 'assets', name='assets')
+            logger.info("static_assets_configured", path="/assets")
+        
+        # SPA catch-all route (MUST be last)
+        # This serves index.html for any route not matched above
+        # Allows React Router to handle client-side routing
+        app.router.add_get('/{tail:.*}', index_handler)
         
         print(f"[WORKER] Setting up AppRunner...", flush=True)
         # Create site and bind to port immediately

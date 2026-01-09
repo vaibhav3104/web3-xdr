@@ -25,16 +25,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { motion } from 'framer-motion';
 
-interface ThreatMessage {
-  type: 'SCAN' | 'THREAT';
-  timestamp: number;
-  source_chain: string;
-  tx_hash: string;
-  contract: string;
-  risk_score: number;
-  status: 'Safe' | 'Simulating...' | 'MALICIOUS';
-  details?: any;
-}
+import { ThreatMessage } from '../hooks/useRealtimeFeed';
 
 interface CrossChainGraphProps {
   messages: ThreatMessage[];

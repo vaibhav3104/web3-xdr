@@ -1,7 +1,29 @@
 # ============================================================================
-# Web3 XDR - Production Dockerfile
+# Web3 XDR - Production Dockerfile (Multi-Stage Build)
 # ============================================================================
 
+# ============================================================================
+# Stage 1: Build React Frontend
+# ============================================================================
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /build
+
+# Copy frontend package files
+COPY frontend/war-room/package.json frontend/war-room/package-lock.json* ./
+
+# Install dependencies
+RUN npm install
+
+# Copy frontend source code
+COPY frontend/war-room/ ./
+
+# Build the React app
+RUN npm run build
+
+# ============================================================================
+# Stage 2: Python Backend + Bundled Frontend
+# ============================================================================
 FROM python:3.11-slim
 
 # Set environment variables
@@ -29,8 +51,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY src/ ./src/
 COPY config/ ./config/
-COPY frontend/ ./frontend/
 COPY monitor.py .
+
+# Copy built frontend from Stage 1
+COPY --from=frontend-builder /build/dist /app/static
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash xdr && \
@@ -41,13 +65,12 @@ USER xdr
 # Expose ports (API: 8080, Worker: 9090)
 EXPOSE 8080 9090
 
-# Health check (defaults to API port)
+# Health check (defaults to worker port 9090)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${HEALTH_PORT:-8080}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-9090}/health || exit 1
 
-# Default: Run API server
-# Override with: docker run -e PROC_TYPE=worker ...
-# Or use: CMD ["python", "-m", "src.worker.main"] for worker mode
+# Default: Run worker with bundled UI
+# Override with: docker run -e PROC_TYPE=api ... for API-only mode
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["if [ \"$PROC_TYPE\" = \"worker\" ]; then python -m src.worker.main; else python -m src.api.server; fi"]
+CMD ["if [ \"$PROC_TYPE\" = \"api\" ]; then python -m src.api.server; else python -m src.worker.main; fi"]
 

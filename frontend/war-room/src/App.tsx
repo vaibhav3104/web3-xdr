@@ -4,13 +4,13 @@
  */
 
 import React from 'react';
-import WarRoomDashboard from './components/WarRoomDashboard';
+import Index from './pages/Index';
 import './App.css';
 
 function App() {
   return (
     <div className="App">
-      <WarRoomDashboard />
+      <Index />
     </div>
   );
 }

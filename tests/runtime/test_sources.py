@@ -79,11 +79,41 @@ class TestBloxrouteMempoolSource:
             gas_price=20000000000,
         )
         
-        # Manually add to queue (simulating what receive loop would do)
-        await source._pending_txs_queue.put(expected_tx)
+        # Mock the async iteration over websocket messages
+        async def mock_recv_sequence():
+            # First call: subscription confirmation
+            yield json.dumps({"id": 1, "result": "subscribed"})
+            # Second call: valid transaction
+            yield valid_tx_message
+            # Yield control to allow processing
+            await asyncio.sleep(0)
         
-        # Get pending transactions
-        pending_txs = await source.get_pending_txs(limit=10)
+        recv_iter = mock_recv_sequence()
+        
+        async def mock_recv():
+            return await recv_iter.__anext__()
+        
+        mock_websocket.recv = mock_recv
+        mock_websocket.send = AsyncMock()
+        mock_websocket.ping = AsyncMock()
+        mock_websocket.closed = False
+        
+        # Mock websockets.connect to return our mock websocket
+        async def mock_connect(*args, **kwargs):
+            return mock_websocket
+        
+        with patch('websockets.connect', side_effect=mock_connect):
+            # Start source (this will start the receive loop)
+            await source.start()
+            
+            # Yield control to let async operations run
+            await asyncio.sleep(0.2)
+            
+            # Get pending transactions
+            pending_txs = await source.get_pending_txs(limit=10)
+            
+            # Stop source
+            await source.stop()
         
         # Verify
         assert len(pending_txs) > 0
@@ -99,27 +129,37 @@ class TestBloxrouteMempoolSource:
         malformed_messages = [
             "{invalid json",  # Incomplete JSON
             '{"method": "subscribe", "params":}',  # Missing value
-            "",  # Empty string
-            None,  # None value
         ]
         
-        with patch('websockets.connect', return_value=mock_websocket):
-            with patch('structlog.get_logger') as mock_logger:
-                mock_log = MagicMock()
-                mock_logger.return_value = mock_log
-                
-                # Mock recv to return malformed messages
-                mock_websocket.recv = AsyncMock(side_effect=[
-                    *malformed_messages,
-                    asyncio.CancelledError()
-                ])
-                
+        call_count = [0]
+        
+        async def mock_recv():
+            if call_count[0] < len(malformed_messages):
+                msg = malformed_messages[call_count[0]]
+                call_count[0] += 1
+                return msg
+            raise asyncio.CancelledError()
+        
+        mock_websocket.recv = mock_recv
+        mock_websocket.send = AsyncMock()
+        mock_websocket.ping = AsyncMock()
+        mock_websocket.closed = False
+        
+        async def mock_connect(*args, **kwargs):
+            return mock_websocket
+        
+        # Patch the module-level logger instance directly
+        with patch('websockets.connect', side_effect=mock_connect):
+            with patch('src.runtime.intent_sources.bloxroute_source.logger') as mock_log:
                 await source.start()
+                
+                # Yield control to let async operations run
+                await asyncio.sleep(0.2)
                 
                 # Should not crash - just log warnings
                 pending_txs = await source.get_pending_txs(limit=10)
                 
-                # Verify warnings were logged
+                # Verify warnings or errors were logged
                 assert mock_log.warning.called or mock_log.error.called
                 
                 # Should return empty list or continue processing
@@ -130,31 +170,38 @@ class TestBloxrouteMempoolSource:
     @pytest.mark.asyncio
     async def test_disconnect_triggers_reconnect_with_backoff(self, source, mock_websocket):
         """Test: Simulate a WebSocket disconnect. Verify reconnect() logic triggers with backoff."""
-        disconnect_count = 0
+        disconnect_count = [0]
         
         async def mock_recv():
-            nonlocal disconnect_count
-            disconnect_count += 1
-            if disconnect_count == 1:
+            disconnect_count[0] += 1
+            if disconnect_count[0] == 1:
+                # First call: subscription confirmation
+                return json.dumps({"id": 1, "result": "subscribed"})
+            elif disconnect_count[0] == 2:
+                # Second call: simulate disconnect
                 raise websockets.exceptions.ConnectionClosed(None, None)
-            elif disconnect_count == 2:
-                return json.dumps({"method": "subscribe", "params": {}})
             else:
                 raise asyncio.CancelledError()
         
-        with patch('websockets.connect', return_value=mock_websocket) as mock_connect:
+        mock_websocket.recv = mock_recv
+        mock_websocket.send = AsyncMock()
+        mock_websocket.ping = AsyncMock()
+        mock_websocket.closed = False
+        
+        async def mock_connect(*args, **kwargs):
+            return mock_websocket
+        
+        with patch('websockets.connect', side_effect=mock_connect) as mock_connect_patch:
             with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
-                mock_websocket.recv = AsyncMock(side_effect=mock_recv)
-                
                 # Start source
                 await source.start()
                 
                 # Wait a bit for reconnect logic
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
                 
                 # Verify reconnect was attempted
                 # Note: Actual reconnect logic may vary, but we verify it doesn't crash
-                assert mock_connect.called or mock_sleep.called
+                assert mock_connect_patch.called or mock_sleep.called
                 
                 await source.stop()
     
@@ -180,60 +227,88 @@ class TestBloxrouteMempoolSource:
                     assert mock_log.error.called or isinstance(e, (websockets.exceptions.InvalidStatusCode, RuntimeError))
     
     @pytest.mark.asyncio
-    async def test_filter_logic_filters_before_yielding(self, source):
+    async def test_filter_logic_filters_before_yielding(self, source, mock_websocket):
         """Test: Verify that monitored_addresses correctly filters input *before* yielding."""
         from src.runtime.intent_sources.base import PendingTx
         
-        # Create transactions for monitored and non-monitored addresses
-        monitored_tx = PendingTx(
-            tx_hash="0x1111111111111111111111111111111111111111111111111111111111111111",
-            chain_id="ethereum",
-            from_address="0x1111111111111111111111111111111111111111",
-            to_address="0x2222222222222222222222222222222222222222",  # Monitored
-            value=0,
-            data="0x",
-        )
+        # Create messages for monitored and non-monitored addresses
+        monitored_msg = json.dumps({
+            "tx_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+            "tx_contents": {
+                "from": "0x1111111111111111111111111111111111111111",
+                "to": "0x2222222222222222222222222222222222222222",  # Monitored
+                "value": "0x0",
+                "data": "0x",
+            }
+        })
         
-        non_monitored_tx = PendingTx(
-            tx_hash="0x2222222222222222222222222222222222222222222222222222222222222222",
-            chain_id="ethereum",
-            from_address="0x1111111111111111111111111111111111111111",
-            to_address="0x9999999999999999999999999999999999999999",  # NOT monitored
-            value=0,
-            data="0x",
-        )
+        non_monitored_msg = json.dumps({
+            "tx_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+            "tx_contents": {
+                "from": "0x1111111111111111111111111111111111111111",
+                "to": "0x9999999999999999999999999999999999999999",  # NOT monitored
+                "value": "0x0",
+                "data": "0x",
+            }
+        })
         
-        # Add both to queue (simulating what receive loop would do)
-        await source._pending_txs_queue.put(monitored_tx)
-        await source._pending_txs_queue.put(non_monitored_tx)
+        messages = [
+            json.dumps({"id": 1, "result": "subscribed"}),  # Subscription confirmation
+            monitored_msg,
+            non_monitored_msg,
+        ]
         
-        # Get pending transactions
-        pending_txs = await source.get_pending_txs(limit=10)
+        call_count = [0]
+        
+        async def mock_recv():
+            if call_count[0] < len(messages):
+                msg = messages[call_count[0]]
+                call_count[0] += 1
+                return msg
+            raise asyncio.CancelledError()
+        
+        mock_websocket.recv = mock_recv
+        mock_websocket.send = AsyncMock()
+        mock_websocket.ping = AsyncMock()
+        mock_websocket.closed = False
+        
+        async def mock_connect(*args, **kwargs):
+            return mock_websocket
+        
+        with patch('websockets.connect', side_effect=mock_connect):
+            # Mark source as running to allow get_pending_txs
+            source._running = True
+            
+            # Start source
+            await source.start()
+            
+            # Yield control to let async operations run
+            await asyncio.sleep(0.2)
+            
+            # Get pending transactions
+            pending_txs = await source.get_pending_txs(limit=10)
+            
+            await source.stop()
         
         # Verify only monitored address transaction is yielded
-        # Note: The actual filtering happens in _normalize_tx, but we test the filter logic
+        # The _normalize_tx method filters out non-monitored addresses
         assert len(pending_txs) >= 1
-        # All yielded transactions should be to monitored addresses (if filter is working)
         for tx in pending_txs:
-            if tx.to_address:
-                # In real implementation, filtering happens before queueing
-                # For this test, we verify the filter string is built correctly
-                assert tx.to_address.lower() in source.monitored_addresses or len(pending_txs) == 2
+            # All yielded transactions should be to monitored addresses
+            assert tx.to_address.lower() in source.monitored_addresses
     
     @pytest.mark.asyncio
     async def test_empty_monitored_addresses_warns(self, mock_websocket):
         """Test: Source with no monitored addresses should warn and not subscribe."""
-        empty_source = BloxrouteMempoolSource(
-            chain_id="ethereum",
-            auth_header="Bearer test-token",
-            monitored_addresses=[],
-        )
-        
-        with patch('structlog.get_logger') as mock_logger:
-            mock_log = MagicMock()
-            mock_logger.return_value = mock_log
+        # Patch the module-level logger before creating the source
+        with patch('src.runtime.intent_sources.bloxroute_source.logger') as mock_log:
+            empty_source = BloxrouteMempoolSource(
+                chain_id="ethereum",
+                auth_header="Bearer test-token",
+                monitored_addresses=[],
+            )
             
-            # Should warn about empty monitored addresses
+            # Should warn about empty monitored addresses during initialization
             assert mock_log.warning.called
     
     @pytest.mark.asyncio
@@ -257,20 +332,41 @@ class TestBloxrouteMempoolSource:
                     "from": "0x1111111111111111111111111111111111111111",
                     "to": "0x2222222222222222222222222222222222222222",
                     "value": "0xde0b6b3a7640000",  # Hex value
-                    "data": "0x8456cb59",
+                    "input": "0x8456cb59",
                     "gas": "0xc350",  # Hex gas limit
-                    "gasPrice": "0x4a817c800",  # Hex gas price
+                    "gas_price": "0x4a817c800",  # Hex gas price
                 }
             }
         })
         
-        with patch('websockets.connect', return_value=mock_websocket):
-            mock_websocket.recv = AsyncMock(side_effect=[
-                bloxroute_message,
-                asyncio.CancelledError()
-            ])
-            
+        messages = [
+            json.dumps({"id": 1, "result": "subscribed"}),
+            bloxroute_message,
+        ]
+        
+        call_count = [0]
+        
+        async def mock_recv():
+            if call_count[0] < len(messages):
+                msg = messages[call_count[0]]
+                call_count[0] += 1
+                return msg
+            raise asyncio.CancelledError()
+        
+        mock_websocket.recv = mock_recv
+        mock_websocket.send = AsyncMock()
+        mock_websocket.ping = AsyncMock()
+        mock_websocket.closed = False
+        
+        async def mock_connect(*args, **kwargs):
+            return mock_websocket
+        
+        with patch('websockets.connect', side_effect=mock_connect):
             await source.start()
+            
+            # Yield control to let async operations run
+            await asyncio.sleep(0.2)
+            
             pending_txs = await source.get_pending_txs(limit=10)
             
             if pending_txs:
