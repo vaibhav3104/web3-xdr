@@ -798,6 +798,75 @@ async def purge_old_data(
         return {"error": str(e), "status": "failed"}
 
 
+@router.post("/maintenance/migrate-events")
+async def migrate_events_table():
+    """
+    Migrate events table to add missing columns (status, block_hash, etc.).
+    This fixes the schema mismatch between EventModel and the database table.
+    """
+    try:
+        from sqlalchemy import text
+        from ..database.connection import DatabaseManager
+        
+        await DatabaseManager.initialize()
+        
+        async with DatabaseManager.get_session() as session:
+            # Add status column
+            await session.execute(text("""
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'events' AND column_name = 'status'
+                    ) THEN
+                        ALTER TABLE events ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'PENDING';
+                        CREATE INDEX IF NOT EXISTS ix_events_status ON events(status, chain_id);
+                    END IF;
+                END $$;
+            """))
+            
+            # Add other missing columns
+            for col_name, col_def in [
+                ("block_hash", "VARCHAR(128)"),
+                ("canonical_event_hash", "VARCHAR(128)"),
+                ("confirmed_at", "TIMESTAMP WITH TIME ZONE"),
+                ("log_index", "INTEGER"),
+                ("topics", "VARCHAR(128)[]"),
+                ("asset_type", "VARCHAR(32)"),
+                ("asset_address", "VARCHAR(128)"),
+            ]:
+                await session.execute(text(f"""
+                    DO $$ 
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name = 'events' AND column_name = '{col_name}'
+                        ) THEN
+                            ALTER TABLE events ADD COLUMN {col_name} {col_def};
+                        END IF;
+                    END $$;
+                """))
+            
+            # Add indexes
+            await session.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_events_block_hash ON events(block_hash);
+                CREATE INDEX IF NOT EXISTS ix_events_canonical_event_hash ON events(canonical_event_hash);
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_events_unique_key ON events(chain_id, tx_hash, log_index);
+            """))
+            
+            await session.commit()
+            
+            return {
+                "status": "success",
+                "message": "Events table migration completed successfully",
+                "columns_added": ["status", "block_hash", "canonical_event_hash", "confirmed_at", "log_index", "topics", "asset_type", "asset_address"]
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 @router.post("/maintenance/init-db")
 async def initialize_database():
     """
