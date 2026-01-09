@@ -344,9 +344,17 @@ async def list_events(
         # e is already a dict from get_events
         block_timestamp = e.get('block_timestamp')
         if isinstance(block_timestamp, datetime):
+            # Ensure timezone-aware
+            if block_timestamp.tzinfo is None:
+                from datetime import timezone
+                block_timestamp = block_timestamp.replace(tzinfo=timezone.utc)
             timestamp_str = block_timestamp.isoformat()
         elif isinstance(block_timestamp, str):
-            timestamp_str = block_timestamp
+            # If string, ensure it has timezone info
+            if not block_timestamp.endswith('Z') and '+' not in block_timestamp:
+                timestamp_str = block_timestamp + '+00:00'
+            else:
+                timestamp_str = block_timestamp
         else:
             timestamp_str = None
         
