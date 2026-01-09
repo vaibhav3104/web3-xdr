@@ -1346,16 +1346,33 @@
             const severityFilter = document.getElementById('severityFilter').value;
             const eventTypeFilter = document.getElementById('eventTypeFilter').value;
             
-            // Parse time inputs - datetime-local inputs are in local timezone
+            // Parse time inputs - datetime-local inputs are timezone-naive (local time)
+            // We need to convert them to UTC for comparison with event timestamps (which are in UTC)
             const startTimeInput = document.getElementById('startTime').value;
             const endTimeInput = document.getElementById('endTime').value;
-            const startTime = startTimeInput ? new Date(startTimeInput) : null;
-            const endTime = endTimeInput ? new Date(endTimeInput) : null;
+            
+            let startTime = null;
+            let endTime = null;
+            
+            if (startTimeInput) {
+                // datetime-local is in local timezone, convert to UTC
+                const localStart = new Date(startTimeInput);
+                startTime = new Date(localStart.getTime() - localStart.getTimezoneOffset() * 60000);
+            }
+            
+            if (endTimeInput) {
+                // datetime-local is in local timezone, convert to UTC
+                const localEnd = new Date(endTimeInput);
+                endTime = new Date(localEnd.getTime() - localEnd.getTimezoneOffset() * 60000);
+            }
             
             console.log('Applying filters:', {
                 allEvents: allEvents.length,
+                startTimeInput,
+                endTimeInput,
                 startTime: startTime ? startTime.toISOString() : 'none',
-                endTime: endTime ? endTime.toISOString() : 'none'
+                endTime: endTime ? endTime.toISOString() : 'none',
+                timezoneOffset: new Date().getTimezoneOffset()
             });
 
             // If Lucene query was used, server already filtered, just apply time and dropdown filters
