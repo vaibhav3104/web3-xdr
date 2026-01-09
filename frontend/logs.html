@@ -1173,21 +1173,27 @@
             document.querySelectorAll('.quick-time-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
 
+            // Use UTC time to avoid timezone issues
             const now = new Date();
-            let start;
+            const nowUTC = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+            let startUTC;
 
             switch(range) {
-                case '5m': start = new Date(now.getTime() - 5 * 60 * 1000); break;
-                case '15m': start = new Date(now.getTime() - 15 * 60 * 1000); break;
-                case '1h': start = new Date(now.getTime() - 60 * 60 * 1000); break;
-                case '6h': start = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
-                case '24h': start = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
-                case '7d': start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+                case '5m': startUTC = new Date(nowUTC.getTime() - 5 * 60 * 1000); break;
+                case '15m': startUTC = new Date(nowUTC.getTime() - 15 * 60 * 1000); break;
+                case '1h': startUTC = new Date(nowUTC.getTime() - 60 * 60 * 1000); break;
+                case '6h': startUTC = new Date(nowUTC.getTime() - 6 * 60 * 60 * 1000); break;
+                case '24h': startUTC = new Date(nowUTC.getTime() - 24 * 60 * 60 * 1000); break;
+                case '7d': startUTC = new Date(nowUTC.getTime() - 7 * 24 * 60 * 60 * 1000); break;
                 case 'custom': return; // Don't change inputs
             }
 
-            document.getElementById('endTime').value = formatDateTimeLocal(now);
-            document.getElementById('startTime').value = formatDateTimeLocal(start);
+            // Convert UTC back to local for datetime-local input display
+            const startLocal = new Date(startUTC.getTime() - startUTC.getTimezoneOffset() * 60000);
+            const endLocal = new Date(nowUTC.getTime() - nowUTC.getTimezoneOffset() * 60000);
+            
+            document.getElementById('endTime').value = formatDateTimeLocal(endLocal);
+            document.getElementById('startTime').value = formatDateTimeLocal(startLocal);
             
             searchLogs();
         }
