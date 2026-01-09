@@ -74,12 +74,81 @@ try:
     try:
         from src.runtime.intent_sources.bloxroute_source import BloxrouteMempoolSource
         BLOXROUTE_AVAILABLE = True
-    except ImportError:
+    except ImportError as blox_import_error:
         BLOXROUTE_AVAILABLE = False
         BloxrouteMempoolSource = None
+        # Use print for early logging before logger is guaranteed to be initialized
+        import sys
+        print(f"[DEBUG] bloXroute source not available: {blox_import_error}", file=sys.stderr)
     
     RUNTIME_AVAILABLE = True
-except ImportError:
+    # Use print for early logging
+    import sys
+    print("[INFO] Runtime Security Plane imports successful", file=sys.stderr)
+except ImportError as import_error:
+    # CRITICAL: Log the full import error with stack trace
+    # Use print() directly since logger may not be initialized yet
+    import traceback
+    import sys
+    error_trace = traceback.format_exc()
+    
+    # Print to stderr (Cloud Run captures this)
+    print("=" * 80, file=sys.stderr)
+    print("CRITICAL RUNTIME IMPORT FAILURE", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    print(f"Error Type: {type(import_error).__name__}", file=sys.stderr)
+    print(f"Error Message: {str(import_error)}", file=sys.stderr)
+    print("\nFull Traceback:", file=sys.stderr)
+    print(error_trace, file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    
+    # Try to log with structlog if available (may fail if structlog import also failed)
+    try:
+        import structlog
+        temp_logger = structlog.get_logger(__name__)
+        temp_logger.error(
+            "CRITICAL_RUNTIME_IMPORT_FAILURE",
+            error_type=type(import_error).__name__,
+            error_message=str(import_error),
+            error_traceback=error_trace,
+            message="Runtime Security Plane imports failed - this will disable all runtime threat detection"
+        )
+    except:
+        pass  # If logging fails, we already printed to stderr
+    
+    RUNTIME_AVAILABLE = False
+    BLOXROUTE_AVAILABLE = False
+    BloxrouteMempoolSource = None
+except Exception as unexpected_error:
+    # Catch any other unexpected errors (circular imports, syntax errors, etc.)
+    import traceback
+    import sys
+    error_trace = traceback.format_exc()
+    
+    # Print to stderr (Cloud Run captures this)
+    print("=" * 80, file=sys.stderr)
+    print("CRITICAL RUNTIME IMPORT UNEXPECTED ERROR", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    print(f"Error Type: {type(unexpected_error).__name__}", file=sys.stderr)
+    print(f"Error Message: {str(unexpected_error)}", file=sys.stderr)
+    print("\nFull Traceback:", file=sys.stderr)
+    print(error_trace, file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    
+    # Try to log with structlog if available
+    try:
+        import structlog
+        temp_logger = structlog.get_logger(__name__)
+        temp_logger.error(
+            "CRITICAL_RUNTIME_IMPORT_UNEXPECTED_ERROR",
+            error_type=type(unexpected_error).__name__,
+            error_message=str(unexpected_error),
+            error_traceback=error_trace,
+            message="Unexpected error during runtime imports (not ImportError - could be circular import, syntax error, etc.)"
+        )
+    except:
+        pass  # If logging fails, we already printed to stderr
+    
     RUNTIME_AVAILABLE = False
     BLOXROUTE_AVAILABLE = False
     BloxrouteMempoolSource = None
