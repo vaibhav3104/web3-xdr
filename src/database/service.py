@@ -121,13 +121,36 @@ class DatabaseService:
                     else:
                         block_timestamp = datetime.now(timezone.utc)
                     
+                    # Handle amount/amount_usd - convert to Decimal or None
+                    def to_decimal_or_none(val):
+                        if val is None or val == '':
+                            return None
+                        if isinstance(val, (int, float)):
+                            return Decimal(str(val))
+                        if isinstance(val, str):
+                            try:
+                                return Decimal(val) if val.strip() else None
+                            except:
+                                return None
+                        return None
+                    
+                    amount = to_decimal_or_none(event.get('amount'))
+                    amount_usd = to_decimal_or_none(event.get('amount_usd'))
+                    
+                    # Convert block_number to int with validation
+                    try:
+                        block_number_int = int(block_number)
+                    except (ValueError, TypeError):
+                        errors.append(f"Invalid block_number: {block_number}")
+                        continue
+                    
                     insert_sql = text("""
                         INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
                             block_timestamp, contract_address, severity, amount, amount_usd,
                             from_address, to_address, raw_data)
                         VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
                             :block_timestamp, :contract_address, :severity, 
-                            CAST(:amount AS NUMERIC), CAST(:amount_usd AS NUMERIC),
+                            :amount, :amount_usd,
                             :from_address, :to_address, CAST(:raw_data AS JSONB))
                         ON CONFLICT (event_id) DO NOTHING
                     """)
@@ -138,21 +161,21 @@ class DatabaseService:
                         'chain_id': str(event.get('chain_id') or 'unknown'),
                         'event_type': str(event.get('event_type') or 'unknown'),
                         'tx_hash': str(tx_hash),
-                        'block_number': int(block_number),
-                        'block_timestamp': block_timestamp,  # Pass datetime object directly
+                        'block_number': block_number_int,
+                        'block_timestamp': block_timestamp,
                         'contract_address': str(event.get('contract_address') or ''),
                         'severity': str((event.get('severity') or 'LOW').upper()),
-                        'amount': event.get('amount'),
-                        'amount_usd': event.get('amount_usd'),
-                        'from_address': event.get('from_address'),
-                        'to_address': event.get('to_address'),
+                        'amount': amount,  # Decimal or None - asyncpg handles conversion
+                        'amount_usd': amount_usd,  # Decimal or None
+                        'from_address': event.get('from_address') or None,
+                        'to_address': event.get('to_address') or None,
                         'raw_data': raw_json,
                     })
                     saved += 1
                 except Exception as e:
                     error_msg = str(e)
                     errors.append(f"event_id={event.get('event_id', 'N/A')}: {error_msg[:200]}")
-                    logger.warning("event_insert_failed", event_id=event.get('event_id'), error=error_msg[:300], exc_info=True)
+                    logger.warning("event_insert_failed", event_id=event.get('event_id'), error=error_msg[:500], exc_info=True)
             
             # get_session context manager auto-commits on success
         if saved > 0:
