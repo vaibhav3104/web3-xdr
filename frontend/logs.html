@@ -1356,14 +1356,18 @@
             
             if (startTimeInput) {
                 // datetime-local is in local timezone, convert to UTC
+                // getTimezoneOffset() returns negative for timezones ahead of UTC (e.g., IST = -330)
+                // To convert local to UTC: UTC = Local - Offset
+                // Since offset is negative: UTC = Local - (-offset) = Local + offset
+                // But we need: UTC = Local - |offset|, so we ADD the offset (which is negative)
                 const localStart = new Date(startTimeInput);
-                startTime = new Date(localStart.getTime() - localStart.getTimezoneOffset() * 60000);
+                startTime = new Date(localStart.getTime() + localStart.getTimezoneOffset() * 60000);
             }
             
             if (endTimeInput) {
                 // datetime-local is in local timezone, convert to UTC
                 const localEnd = new Date(endTimeInput);
-                endTime = new Date(localEnd.getTime() - localEnd.getTimezoneOffset() * 60000);
+                endTime = new Date(localEnd.getTime() + localEnd.getTimezoneOffset() * 60000);
             }
             
             console.log('Applying filters:', {
