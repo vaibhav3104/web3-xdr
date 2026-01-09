@@ -337,28 +337,38 @@ async def list_events(
             "events": []
         }
     
-    # Convert EventModel to dict format expected by frontend
+    # Convert events to dict format expected by frontend
+    # get_events now returns dicts directly, so just format them
     event_dicts = []
     for e in db_events:
+        # e is already a dict from get_events
+        block_timestamp = e.get('block_timestamp')
+        if isinstance(block_timestamp, datetime):
+            timestamp_str = block_timestamp.isoformat()
+        elif isinstance(block_timestamp, str):
+            timestamp_str = block_timestamp
+        else:
+            timestamp_str = None
+        
         event_dict = {
-            "id": str(e.id),
-            "event_id": e.event_id,
-            "chain": e.chain_id,
-            "chain_id": e.chain_id,
-            "event_type": e.event_type,
-            "tx_hash": e.tx_hash,
-            "block": e.block_number,
-            "block_number": e.block_number,
-            "contract": e.contract_address,
-            "contract_address": e.contract_address,
-            "from_address": e.from_address,
-            "to_address": e.to_address,
-            "severity": e.severity.lower() if e.severity else "low",
-            "timestamp": e.block_timestamp.isoformat() if e.block_timestamp else None,
-            "amount": float(e.amount) if e.amount else None,
-            "amount_usd": float(e.amount_usd) if e.amount_usd else None,
-            "data": e.raw_data or {},
-            **(e.raw_data or {})  # Flatten raw_data fields for searching
+            "id": e.get('id'),
+            "event_id": e.get('event_id'),
+            "chain": e.get('chain_id'),
+            "chain_id": e.get('chain_id'),
+            "event_type": e.get('event_type'),
+            "tx_hash": e.get('tx_hash'),
+            "block": e.get('block_number'),
+            "block_number": e.get('block_number'),
+            "contract": e.get('contract_address'),
+            "contract_address": e.get('contract_address'),
+            "from_address": e.get('from_address'),
+            "to_address": e.get('to_address'),
+            "severity": (e.get('severity') or 'LOW').lower(),
+            "timestamp": timestamp_str,
+            "amount": e.get('amount'),
+            "amount_usd": e.get('amount_usd'),
+            "data": e.get('raw_data') or {},
+            **(e.get('raw_data') or {})  # Flatten raw_data fields for searching
         }
         event_dicts.append(event_dict)
     

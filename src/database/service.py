@@ -102,35 +102,75 @@ class DatabaseService:
         severity: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[EventModel]:
+    ) -> List[Dict[str, Any]]:
         """
-        Query events with optional filters.
+        Query events with optional filters using raw SQL to avoid ORM schema issues.
+        Returns list of dicts instead of EventModel objects.
         """
         async with DatabaseManager.get_session() as session:
-            query = select(EventModel)
+            # Build WHERE clause
+            where_parts = []
+            params = {}
             
-            conditions = []
             if chain_id:
-                conditions.append(EventModel.chain_id == chain_id)
+                where_parts.append("chain_id = :chain_id")
+                params['chain_id'] = chain_id
             if event_type:
-                conditions.append(EventModel.event_type == event_type)
+                where_parts.append("event_type = :event_type")
+                params['event_type'] = event_type
             if contract_address:
-                conditions.append(EventModel.contract_address == contract_address)
+                where_parts.append("contract_address = :contract_address")
+                params['contract_address'] = contract_address
             if start_time:
-                conditions.append(EventModel.block_timestamp >= start_time)
+                where_parts.append("block_timestamp >= :start_time")
+                params['start_time'] = start_time
             if end_time:
-                conditions.append(EventModel.block_timestamp <= end_time)
+                where_parts.append("block_timestamp <= :end_time")
+                params['end_time'] = end_time
             if severity:
-                conditions.append(EventModel.severity == severity)
+                where_parts.append("severity = :severity")
+                params['severity'] = severity.upper()
             
-            if conditions:
-                query = query.where(and_(*conditions))
+            where_clause = " AND ".join(where_parts) if where_parts else "1=1"
             
-            query = query.order_by(desc(EventModel.block_timestamp))
-            query = query.limit(limit).offset(offset)
+            # Query using raw SQL - only select columns that definitely exist
+            sql = f"""
+                SELECT id, event_id, chain_id, event_type, tx_hash, block_number,
+                       block_timestamp, contract_address, severity, amount, amount_usd,
+                       from_address, to_address, raw_data, created_at
+                FROM events
+                WHERE {where_clause}
+                ORDER BY block_timestamp DESC
+                LIMIT :limit OFFSET :offset
+            """
+            params['limit'] = limit
+            params['offset'] = offset
             
-            result = await session.execute(query)
-            return result.scalars().all()
+            result = await session.execute(text(sql), params)
+            rows = result.fetchall()
+            
+            # Convert rows to dicts
+            events = []
+            for row in rows:
+                events.append({
+                    'id': str(row[0]),
+                    'event_id': row[1],
+                    'chain_id': row[2],
+                    'event_type': row[3],
+                    'tx_hash': row[4],
+                    'block_number': row[5],
+                    'block_timestamp': row[6],
+                    'contract_address': row[7],
+                    'severity': row[8],
+                    'amount': float(row[9]) if row[9] else None,
+                    'amount_usd': float(row[10]) if row[10] else None,
+                    'from_address': row[11],
+                    'to_address': row[12],
+                    'raw_data': row[13] if isinstance(row[13], dict) else (json.loads(row[13]) if row[13] else {}),
+                    'created_at': row[14],
+                })
+            
+            return events
     
     @staticmethod
     async def count_events(
