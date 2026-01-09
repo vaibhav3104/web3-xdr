@@ -677,7 +677,7 @@ worker_instance: Optional[Sentinel3Worker] = None
 
 @health_app.get("/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint - always returns 200 to pass Cloud Run health checks."""
     if worker_instance and worker_instance.running:
         return JSONResponse(content={
             "status": "healthy",
@@ -685,7 +685,8 @@ async def health():
             "chains_monitored": len(worker_instance.listeners),
             "bus_type": type(worker_instance.bus).__name__ if worker_instance.bus else "none"
         })
-    return JSONResponse(content={"status": "starting"}, status_code=503)
+    # Return 200 even if starting - Cloud Run just needs the port to be listening
+    return JSONResponse(content={"status": "starting", "message": "Worker initialization in progress"})
 
 
 @health_app.get("/metrics")
@@ -696,7 +697,7 @@ async def metrics():
 
 async def main():
     """Main entry point."""
-    global worker_instance
+    global worker_instance, worker_ready
     
     # Handle graceful shutdown
     def signal_handler(sig, frame):
@@ -707,10 +708,8 @@ async def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     
-    # Create worker
-    worker_instance = Sentinel3Worker()
-    
-    # Start health server
+    # Start health server FIRST (before any initialization)
+    logger.info("starting_health_server", port=WORKER_HEALTH_PORT)
     config = uvicorn.Config(
         health_app,
         host="0.0.0.0",
@@ -720,16 +719,38 @@ async def main():
     server = uvicorn.Server(config)
     health_server_task = asyncio.create_task(server.serve())
     
-    # Start worker
+    # Give health server a moment to start
+    await asyncio.sleep(0.5)
+    logger.info("health_server_started")
+    
+    # Create and start worker (initialization happens here)
     try:
+        worker_instance = Sentinel3Worker()
+        logger.info("worker_instance_created", starting_initialization=True)
+        
+        # Start worker (this will initialize and run loops)
         await worker_instance.start()
+        worker_ready = True
+        logger.info("worker_fully_started")
+        
+        # Keep running until shutdown
+        while worker_instance.running:
+            await asyncio.sleep(1.0)
+            
+    except Exception as e:
+        logger.error("worker_startup_failed", error=str(e), exc_info=True)
+        # Health server will still respond, but status will be "starting"
+        raise
     finally:
-        await worker_instance.stop()
+        worker_ready = False
+        if worker_instance:
+            await worker_instance.stop()
         health_server_task.cancel()
         try:
             await health_server_task
         except asyncio.CancelledError:
             pass
+        logger.info("worker_shutdown_complete")
 
 
 if __name__ == "__main__":
