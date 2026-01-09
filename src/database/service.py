@@ -9,9 +9,8 @@ from typing import List, Optional, Dict, Any
 import uuid
 
 import structlog
-from sqlalchemy import select, func, delete, update, and_, or_, desc
+from sqlalchemy import select, func, delete, update, and_, or_, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert
 
 from .connection import DatabaseManager
 from .models import (
@@ -80,7 +79,6 @@ class DatabaseService:
         if not events:
             return 0
         
-        from sqlalchemy import text
         import json
         
         saved = 0
