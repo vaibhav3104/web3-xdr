@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 import uuid
+import json
 
 import structlog
 from sqlalchemy import select, func, delete, update, and_, or_, desc, text
