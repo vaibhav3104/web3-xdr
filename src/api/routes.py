@@ -310,6 +310,13 @@ async def list_events(
             pass
     
     # Query events from PostgreSQL database
+    logger.info("api_querying_database_for_events", 
+                chain_id=chain_id, 
+                event_type=event_type, 
+                severity=severity,
+                start_time=str(start_dt) if start_dt else None,
+                end_time=str(end_dt) if end_dt else None,
+                limit=limit)
     try:
         db_events = await DatabaseService.get_events(
             chain_id=chain_id,
@@ -320,8 +327,9 @@ async def list_events(
             limit=min(limit * 2, 2000),  # Fetch more for filtering/search
             offset=0
         )
+        logger.info("api_database_query_successful", events_count=len(db_events))
     except Exception as e:
-        logger.error("database_query_failed", error=str(e))
+        logger.error("database_query_failed", error=str(e), exc_info=True)
         # Fallback to empty result
         return {
             "total": 0,
