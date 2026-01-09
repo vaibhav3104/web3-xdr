@@ -129,15 +129,15 @@ class DatabaseService:
                     raw = event.get('raw_data') or event
                     raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
                     
-                    # Simple INSERT - PostgreSQL handles type conversion
+                    # Simple INSERT - pass correct Python types, let asyncpg handle conversion
                     await session.execute(text("""
                         INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
                             block_timestamp, contract_address, severity, amount, amount_usd,
                             from_address, to_address, raw_data)
-                        VALUES (:id::uuid, :event_id, :chain_id, :event_type, :tx_hash, :block_number,
+                        VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
                             :block_timestamp, :contract_address, :severity, 
                             :amount, :amount_usd,
-                            :from_address, :to_address, :raw_data::jsonb)
+                            :from_address, :to_address, CAST(:raw_data AS JSONB))
                         ON CONFLICT (event_id) DO NOTHING
                     """), {
                         'id': str(uuid.uuid4()),
