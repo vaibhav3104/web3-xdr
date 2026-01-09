@@ -123,11 +123,29 @@ class DatabaseService:
                 where_parts.append("contract_address = :contract_address")
                 params['contract_address'] = contract_address
             if start_time:
-                where_parts.append("block_timestamp >= :start_time")
-                params['start_time'] = start_time
+                # Convert datetime to ISO string to avoid asyncpg timezone issues
+                if isinstance(start_time, datetime):
+                    if start_time.tzinfo is None:
+                        start_time = start_time.replace(tzinfo=timezone.utc)
+                    else:
+                        start_time = start_time.astimezone(timezone.utc)
+                    start_time_str = start_time.isoformat()
+                else:
+                    start_time_str = str(start_time)
+                where_parts.append("block_timestamp >= CAST(:start_time AS TIMESTAMP WITH TIME ZONE)")
+                params['start_time'] = start_time_str
             if end_time:
-                where_parts.append("block_timestamp <= :end_time")
-                params['end_time'] = end_time
+                # Convert datetime to ISO string to avoid asyncpg timezone issues
+                if isinstance(end_time, datetime):
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=timezone.utc)
+                    else:
+                        end_time = end_time.astimezone(timezone.utc)
+                    end_time_str = end_time.isoformat()
+                else:
+                    end_time_str = str(end_time)
+                where_parts.append("block_timestamp <= CAST(:end_time AS TIMESTAMP WITH TIME ZONE)")
+                params['end_time'] = end_time_str
             if severity:
                 where_parts.append("severity = :severity")
                 params['severity'] = severity.upper()
