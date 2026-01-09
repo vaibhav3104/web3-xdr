@@ -1245,8 +1245,19 @@
                     if (eventTypeFilter) params.append('event_type', eventTypeFilter);
                 }
                 
-                if (startTimeVal) params.append('start_time', new Date(startTimeVal).toISOString());
-                if (endTimeVal) params.append('end_time', new Date(endTimeVal).toISOString());
+                if (startTimeVal) {
+                    // datetime-local is timezone-naive (local time)
+                    // Convert to UTC properly before sending to API
+                    const localStart = new Date(startTimeVal);
+                    // getTime() returns UTC milliseconds, create UTC Date
+                    const utcStart = new Date(localStart.getTime());
+                    params.append('start_time', utcStart.toISOString());
+                }
+                if (endTimeVal) {
+                    const localEnd = new Date(endTimeVal);
+                    const utcEnd = new Date(localEnd.getTime());
+                    params.append('end_time', utcEnd.toISOString());
+                }
                 
                 const response = await fetch(`${API_BASE}/api/events?${params.toString()}`);
                 
