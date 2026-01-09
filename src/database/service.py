@@ -95,38 +95,24 @@ class DatabaseService:
                     
                     block_number_int = int(block_number)
                     
-                    # Timestamp: worker sends ISO string - convert to UTC datetime
-                    # CRITICAL: Must be timezone-aware UTC for asyncpg
+                    # Timestamp: Pass ISO string directly, let PostgreSQL CAST handle it
+                    # This avoids asyncpg datetime timezone issues
                     ts_str = event.get('block_timestamp') or event.get('timestamp')
                     if isinstance(ts_str, str):
-                        try:
-                            # Normalize Z to +00:00
-                            if ts_str.endswith('Z'):
-                                ts_str = ts_str[:-1] + '+00:00'
-                            # Parse ISO string
-                            dt = datetime.fromisoformat(ts_str)
-                            # Ensure UTC timezone-aware
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=timezone.utc)
-                            elif dt.tzinfo != timezone.utc:
-                                dt = dt.astimezone(timezone.utc)
-                        except Exception as e:
-                            logger.debug("timestamp_parse_error", ts=ts_str, error=str(e))
-                            dt = datetime.now(timezone.utc)
+                        # Normalize Z to +00:00 for PostgreSQL
+                        if ts_str.endswith('Z'):
+                            ts_str = ts_str[:-1] + '+00:00'
+                        # Use string directly - PostgreSQL CAST handles conversion
+                        block_timestamp_val = ts_str
                     elif isinstance(ts_str, datetime):
-                        # Normalize existing datetime to UTC
+                        # Convert datetime to ISO string with UTC timezone
                         if ts_str.tzinfo is None:
-                            dt = ts_str.replace(tzinfo=timezone.utc)
+                            ts_str = ts_str.replace(tzinfo=timezone.utc)
                         elif ts_str.tzinfo != timezone.utc:
-                            dt = ts_str.astimezone(timezone.utc)
-                        else:
-                            dt = ts_str
+                            ts_str = ts_str.astimezone(timezone.utc)
+                        block_timestamp_val = ts_str.isoformat()
                     else:
-                        dt = datetime.now(timezone.utc)
-                    
-                    # Final check - must be UTC timezone-aware
-                    if not isinstance(dt, datetime) or dt.tzinfo is None or dt.tzinfo != timezone.utc:
-                        dt = datetime.now(timezone.utc)
+                        block_timestamp_val = datetime.now(timezone.utc).isoformat()
                     
                     # Amounts: simple conversion
                     def to_decimal(val):
@@ -144,13 +130,13 @@ class DatabaseService:
                     raw = event.get('raw_data') or event
                     raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
                     
-                    # Simple INSERT - pass correct Python types, let asyncpg handle conversion
+                    # Simple INSERT - pass ISO string for timestamp, let PostgreSQL CAST handle it
                     await session.execute(text("""
                         INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
                             block_timestamp, contract_address, severity, amount, amount_usd,
                             from_address, to_address, raw_data)
                         VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                            :block_timestamp, :contract_address, :severity, 
+                            CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), :contract_address, :severity, 
                             :amount, :amount_usd,
                             :from_address, :to_address, CAST(:raw_data AS JSONB))
                         ON CONFLICT (event_id) DO NOTHING
@@ -161,7 +147,7 @@ class DatabaseService:
                         'event_type': str(event.get('event_type') or 'Unknown'),
                         'tx_hash': tx_hash,
                         'block_number': block_number_int,
-                        'block_timestamp': dt,
+                        'block_timestamp': block_timestamp_val,
                         'contract_address': str(event.get('contract_address') or ''),
                         'severity': str((event.get('severity') or 'LOW').upper()),
                         'amount': amount,
