@@ -94,9 +94,22 @@ class DatabaseService:
                 return count
             except Exception as e:
                 error_str = str(e)
+                error_type = type(e).__name__
+                # Check exception chain for UndefinedColumnError
+                cause = getattr(e, '__cause__', None)
+                cause_str = str(cause) if cause else ""
+                
                 # If status column doesn't exist, retry without it
-                if "column \"status\" of relation \"events\" does not exist" in error_str or \
-                   "UndefinedColumnError" in error_str and "status" in error_str:
+                # Check for various error formats from asyncpg/SQLAlchemy
+                is_status_error = (
+                    "column \"status\" of relation \"events\" does not exist" in error_str or
+                    "UndefinedColumnError" in error_str or
+                    "UndefinedColumnError" in error_type or
+                    ("status" in error_str.lower() and ("does not exist" in error_str.lower() or "undefined" in error_str.lower())) or
+                    ("status" in cause_str.lower() and "undefined" in cause_str.lower())
+                )
+                
+                if is_status_error:
                     logger.warning("schema_mismatch_retrying_without_status", error=error_str)
                     # Filter out status and other new columns that might not exist
                     filtered_events = []
