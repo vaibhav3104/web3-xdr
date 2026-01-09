@@ -83,6 +83,16 @@ def create_app(
         redoc_url="/api/redoc",
     )
     
+    # Initialize database on startup
+    @app.on_event("startup")
+    async def startup_event():
+        try:
+            from ..database.connection import DatabaseManager
+            await DatabaseManager.initialize()
+            logger.info("database_initialized_on_startup")
+        except Exception as e:
+            logger.error("database_initialization_failed", error=str(e))
+    
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
