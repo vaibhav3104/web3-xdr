@@ -87,9 +87,9 @@ class DatabaseService:
                 INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
                     block_timestamp, contract_address, severity, amount, amount_usd,
                     from_address, to_address, raw_data)
-                VALUES (:id::uuid, :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                    :block_timestamp::timestamptz, :contract_address, :severity, :amount, :amount_usd,
-                    :from_address, :to_address, :raw_data::jsonb)
+                VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
+                    CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), :contract_address, :severity, :amount, :amount_usd,
+                    :from_address, :to_address, CAST(:raw_data AS JSONB))
                 ON CONFLICT (event_id) DO NOTHING
             """)
             for event in events:
