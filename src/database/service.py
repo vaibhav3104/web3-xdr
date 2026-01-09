@@ -74,118 +74,53 @@ class DatabaseService:
     @staticmethod
     async def save_events_batch(events: List[Dict[str, Any]]) -> int:
         """
-        Save multiple events in a single transaction.
-        Uses INSERT ON CONFLICT DO NOTHING for idempotency.
-        Returns count of inserted events.
-        
-        Uses legacy-compatible columns (no status column) for production DB
-        that may not have been migrated yet. Run /api/maintenance/migrate-events
-        to add status column, then EventModel insert will work.
+        Save events to DB using raw SQL with base columns only.
+        Compatible with events table that may lack status/block_hash columns.
         """
         if not events:
             return 0
         
-        # Legacy columns that exist in older schema (no status, block_hash, etc.)
-        LEGACY_COLUMNS = [
-            'event_id', 'chain_id', 'event_type', 'tx_hash', 'block_number',
-            'block_timestamp', 'contract_address', 'severity', 'amount', 'amount_usd',
-            'from_address', 'to_address', 'raw_data'
-        ]
+        from sqlalchemy import text
+        import json
         
+        saved = 0
         async with DatabaseManager.get_session() as session:
-            # Strategy 1: Try legacy insert first (compatible with unmigrated DB)
-            # This avoids status column error when DB schema is old
-            try:
-                from sqlalchemy import text
-                import json
-                
-                # Filter to legacy columns only
-                filtered_events = []
-                for event in events:
-                    filtered = {k: event.get(k) for k in LEGACY_COLUMNS if event.get(k) is not None or k in event}
-                    # Ensure required fields exist
-                    filtered['event_id'] = event.get('event_id')
-                    filtered['chain_id'] = event.get('chain_id', 'unknown')
-                    filtered['event_type'] = event.get('event_type', 'unknown')
-                    filtered['tx_hash'] = event.get('tx_hash')
-                    filtered['block_number'] = event.get('block_number')
-                    filtered['block_timestamp'] = event.get('block_timestamp')
-                    filtered['contract_address'] = event.get('contract_address', '')
-                    filtered['severity'] = event.get('severity', 'LOW')
-                    filtered['raw_data'] = event.get('raw_data') or event
-                    filtered_events.append(filtered)
-                
-                # Build batch INSERT using execute_values for efficiency
-                values_list = []
-                for event in filtered_events:
-                    raw_data_val = event.get('raw_data')
-                    if isinstance(raw_data_val, (dict, list)):
-                        raw_data_json = json.dumps(raw_data_val)
-                    else:
-                        raw_data_json = json.dumps({})
-                    values_list.append((
-                        str(uuid.uuid4()),
-                        event.get('event_id'),
-                        event.get('chain_id', 'unknown'),
-                        event.get('event_type', 'unknown'),
-                        event.get('tx_hash'),
-                        event.get('block_number'),
-                        event.get('block_timestamp'),
-                        event.get('contract_address', ''),
-                        event.get('severity', 'LOW'),
-                        event.get('amount'),
-                        event.get('amount_usd'),
-                        event.get('from_address'),
-                        event.get('to_address'),
-                        raw_data_json,
-                    ))
-                
-                # Build multi-row VALUES insert (legacy schema - no status column)
-                values_placeholders = []
-                params = {}
-                for idx, vals in enumerate(values_list):
-                    # Use CAST() instead of :: syntax for better compatibility with sqlalchemy text()
-                    values_placeholders.append(f"""(
-                        CAST(:id_{idx} AS UUID), :event_id_{idx}, :chain_id_{idx}, :event_type_{idx},
-                        :tx_hash_{idx}, :block_number_{idx}, CAST(:block_timestamp_{idx} AS TIMESTAMP WITH TIME ZONE),
-                        :contract_address_{idx}, :severity_{idx}, :amount_{idx}, :amount_usd_{idx},
-                        :from_address_{idx}, :to_address_{idx}, CAST(:raw_data_{idx} AS JSONB)
-                    )""")
-                    params[f'id_{idx}'] = vals[0]
-                    params[f'event_id_{idx}'] = vals[1]
-                    params[f'chain_id_{idx}'] = vals[2]
-                    params[f'event_type_{idx}'] = vals[3]
-                    params[f'tx_hash_{idx}'] = vals[4]
-                    params[f'block_number_{idx}'] = vals[5]
-                    params[f'block_timestamp_{idx}'] = vals[6]
-                    params[f'contract_address_{idx}'] = vals[7]
-                    params[f'severity_{idx}'] = vals[8]
-                    params[f'amount_{idx}'] = vals[9]
-                    params[f'amount_usd_{idx}'] = vals[10]
-                    params[f'from_address_{idx}'] = vals[11]
-                    params[f'to_address_{idx}'] = vals[12]
-                    params[f'raw_data_{idx}'] = vals[13]  # raw_data_json at index 13
-                
-                insert_sql = text(f"""
-                    INSERT INTO events (
-                        id, event_id, chain_id, event_type, tx_hash, block_number, 
-                        block_timestamp, contract_address, severity, amount, amount_usd,
-                        from_address, to_address, raw_data
-                    ) VALUES {', '.join(values_placeholders)}
-                    ON CONFLICT (event_id) DO NOTHING
-                """)
-                result = await session.execute(insert_sql, params)
-                await session.commit()
-                count = result.rowcount
-                logger.info("events_batch_saved", count=count, total=len(events))
-                return count if count and count > 0 else len(events)  # rowcount may not be accurate for batch
-                    
-            except Exception as legacy_error:
-                # Log as warning so it's visible - legacy should work with base schema
-                logger.warning("legacy_insert_failed", error=str(legacy_error)[:300], count=len(events))
-                # Don't try Strategy 2 (full EventModel) - it requires status column which doesn't exist
-                # in production DB yet. Just re-raise so caller knows save failed.
-                raise
+            insert_sql = text("""
+                INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
+                    block_timestamp, contract_address, severity, amount, amount_usd,
+                    from_address, to_address, raw_data)
+                VALUES (:id::uuid, :event_id, :chain_id, :event_type, :tx_hash, :block_number,
+                    :block_timestamp::timestamptz, :contract_address, :severity, :amount, :amount_usd,
+                    :from_address, :to_address, :raw_data::jsonb)
+                ON CONFLICT (event_id) DO NOTHING
+            """)
+            for event in events:
+                try:
+                    raw = event.get('raw_data') or event
+                    raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
+                    await session.execute(insert_sql, {
+                        'id': str(uuid.uuid4()),
+                        'event_id': event.get('event_id'),
+                        'chain_id': event.get('chain_id') or 'unknown',
+                        'event_type': event.get('event_type') or 'unknown',
+                        'tx_hash': event.get('tx_hash'),
+                        'block_number': event.get('block_number'),
+                        'block_timestamp': event.get('block_timestamp') or datetime.utcnow().isoformat(),
+                        'contract_address': event.get('contract_address') or '',
+                        'severity': (event.get('severity') or 'LOW').upper(),
+                        'amount': event.get('amount'),
+                        'amount_usd': event.get('amount_usd'),
+                        'from_address': event.get('from_address'),
+                        'to_address': event.get('to_address'),
+                        'raw_data': raw_json,
+                    })
+                    saved += 1
+                except Exception as e:
+                    logger.debug("event_insert_skipped", event_id=event.get('event_id'), error=str(e)[:100])
+            # get_session context manager auto-commits on success
+        if saved > 0:
+            logger.info("events_batch_saved", count=saved, total=len(events))
+        return saved
     
     @staticmethod
     async def get_events(
