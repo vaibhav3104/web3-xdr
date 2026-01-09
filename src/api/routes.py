@@ -5,7 +5,7 @@ Connected to real-time monitor data.
 
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 import structlog
 
@@ -842,10 +842,12 @@ async def purge_old_data(
 
 
 @router.get("/maintenance/verify-schema")
-async def verify_schema():
+async def verify_schema(user_info: dict = Depends(lambda: __import__("src.api.maintenance_auth", fromlist=["require_maintenance_access"]).require_maintenance_access())):
     """
     Verify database schema - check if status column exists.
+    Requires maintenance access (admin role or MAINTENANCE_TOKEN).
     """
+    from ..api.maintenance_auth import log_maintenance_action, require_maintenance_access
     try:
         from sqlalchemy import text
         from ..database.connection import DatabaseManager
@@ -882,17 +884,39 @@ async def verify_schema():
                 "all_columns": all_cols,
                 "total_columns": len(all_cols)
             }
+        
+        # Log audit
+        await log_maintenance_action(
+            action_type="VERIFY_SCHEMA",
+            user_info=user_info,
+            payload={},
+            outcome="success"
+        )
+        
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
+        # Log audit
+        await log_maintenance_action(
+            action_type="VERIFY_SCHEMA",
+            user_info=user_info,
+            payload={},
+            outcome="error",
+            error_message=str(e)
+        )
         return {
             "status": "error",
             "error": str(e)
         }
 
 @router.post("/maintenance/migrate-events")
-async def migrate_events_table():
+async def migrate_events_table(user_info: dict = Depends(lambda: __import__("src.api.maintenance_auth", fromlist=["require_maintenance_access"]).require_maintenance_access())):
     """
     Migrate events table to add missing columns (status, block_hash, etc.).
     This fixes the schema mismatch between EventModel and the database table.
+    
+    Requires maintenance access (admin role or MAINTENANCE_TOKEN).
     
     Handles all edge cases:
     - Creates columns only if they don't exist
@@ -900,6 +924,7 @@ async def migrate_events_table():
     - Handles NULL values in unique index
     - Provides detailed error reporting
     """
+    from ..api.maintenance_auth import log_maintenance_action
     try:
         from sqlalchemy import text
         from ..database.connection import DatabaseManager
@@ -982,6 +1007,16 @@ async def migrate_events_table():
             "type": type(e).__name__,
         }
         logger.error("migration_failed", **error_details, exc_info=True)
+        
+        # Log audit
+        await log_maintenance_action(
+            action_type="MIGRATE_EVENTS",
+            user_info=user_info,
+            payload={},
+            outcome="error",
+            error_message=str(e)
+        )
+        
         return {
             "status": "error",
             **error_details

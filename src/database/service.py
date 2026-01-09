@@ -74,10 +74,40 @@ class DatabaseService:
     @staticmethod
     async def save_events_batch(events: List[Dict[str, Any]]) -> int:
         """
-        ROCK SOLID: Use the proven sync_service that works.
-        Call it from async using asyncio.to_thread - no datetime issues.
+        Save events with idempotency checks.
+        Uses the proven sync_service that works.
         """
         if not events:
+            return 0
+        
+        from .idempotency import IdempotencyService, generate_idempotency_key
+        
+        # Filter out already processed events using idempotency table
+        events_to_save = []
+        for event in events:
+            # Generate idempotency key
+            idempotency_key = generate_idempotency_key(
+                chain_id=event.get("chain_id", ""),
+                tx_hash=event.get("tx_hash", ""),
+                log_index=event.get("log_index")
+            )
+            
+            # Check if already processed
+            existing = await IdempotencyService.check_idempotency(idempotency_key)
+            if existing and existing.get("status") == "PROCESSED":
+                logger.debug("event_already_processed", key=idempotency_key[:16])
+                continue
+            
+            # Mark as processing
+            await IdempotencyService.mark_processing(
+                idempotency_key=idempotency_key,
+                status="PENDING"
+            )
+            
+            events_to_save.append(event)
+        
+        if not events_to_save:
+            logger.debug("all_events_already_processed", total=len(events))
             return 0
         
         import asyncio
@@ -85,12 +115,40 @@ class DatabaseService:
         
         # Use the sync service that already works - run it in thread pool
         try:
-            saved = await asyncio.to_thread(save_events_batch_sync, events)
+            saved = await asyncio.to_thread(save_events_batch_sync, events_to_save)
+            
+            # Mark successfully saved events as processed
             if saved > 0:
-                logger.info("events_batch_saved", count=saved, total=len(events))
+                for i, event in enumerate(events_to_save[:saved]):
+                    idempotency_key = generate_idempotency_key(
+                        chain_id=event.get("chain_id", ""),
+                        tx_hash=event.get("tx_hash", ""),
+                        log_index=event.get("log_index")
+                    )
+                    event_id = event.get("event_id")
+                    await IdempotencyService.mark_processed(
+                        idempotency_key=idempotency_key,
+                        event_id=event_id
+                    )
+                
+                logger.info("events_batch_saved", count=saved, total=len(events), filtered=len(events) - len(events_to_save))
+            
             return saved
         except Exception as e:
-            logger.error("events_batch_save_failed", error=str(e), count=len(events))
+            logger.error("events_batch_save_failed", error=str(e), count=len(events_to_save))
+            
+            # Mark failed events
+            for event in events_to_save:
+                idempotency_key = generate_idempotency_key(
+                    chain_id=event.get("chain_id", ""),
+                    tx_hash=event.get("tx_hash", ""),
+                    log_index=event.get("log_index")
+                )
+                await IdempotencyService.mark_failed(
+                    idempotency_key=idempotency_key,
+                    error_message=str(e)
+                )
+            
             return 0
     
     @staticmethod
@@ -350,13 +408,64 @@ class DatabaseService:
     @staticmethod
     async def save_incident(incident_data: Dict[str, Any]) -> Optional[str]:
         """
-        Save an incident to the database.
+        Save an incident to the database with idempotency.
+        Uses cluster_key (dedupe_key) for deduplication.
         Returns the incident_id on success.
         """
+        from .idempotency import IdempotencyService, generate_incident_dedupe_key
+        
+        # Generate or use provided dedupe key
+        dedupe_key = incident_data.get("cluster_key") or incident_data.get("dedupe_key")
+        if not dedupe_key:
+            # Generate from incident data
+            dedupe_key = generate_incident_dedupe_key(
+                incident_type=incident_data.get("attack_type", "UNKNOWN"),
+                protocol_id=incident_data.get("protocol_id", ""),
+                primary_chain=incident_data.get("affected_chains", [""])[0] if incident_data.get("affected_chains") else "",
+                attacker_cluster=incident_data.get("attacker_cluster"),
+                time_bucket=incident_data.get("time_bucket")
+            )
+        
+        # Check idempotency
+        existing = await IdempotencyService.check_idempotency(dedupe_key)
+        if existing and existing.get("status") == "PROCESSED" and existing.get("incident_id"):
+            logger.debug("incident_already_processed", dedupe_key=dedupe_key[:16], incident_id=existing.get("incident_id"))
+            return existing.get("incident_id")
+        
         async with DatabaseManager.get_session() as session:
             try:
+                incident_id = incident_data.get("incident_id") or incident_data.get("id")
+                
+                # Try to get existing incident by cluster_key
+                if dedupe_key:
+                    result = await session.execute(
+                        select(IncidentModel).where(IncidentModel.cluster_key == dedupe_key)
+                    )
+                    existing_incident = result.scalar_one_or_none()
+                    
+                    if existing_incident:
+                        # Update existing incident
+                        existing_incident.status = incident_data.get("status", existing_incident.status).upper()
+                        existing_incident.event_ids = incident_data.get("event_ids", existing_incident.event_ids) or []
+                        existing_incident.event_count = len(existing_incident.event_ids) if existing_incident.event_ids else 0
+                        await session.commit()
+                        
+                        # Mark as processed
+                        await IdempotencyService.mark_processed(
+                            idempotency_key=dedupe_key,
+                            incident_id=existing_incident.incident_id
+                        )
+                        
+                        logger.debug("incident_updated", incident_id=existing_incident.incident_id)
+                        return existing_incident.incident_id
+                
+                # Create new incident
+                if not incident_id:
+                    incident_id = f"inc_{dedupe_key[:16]}_{int(datetime.now(timezone.utc).timestamp())}"
+                
                 incident = IncidentModel(
-                    incident_id=incident_data.get("incident_id") or incident_data.get("id"),
+                    incident_id=incident_id,
+                    cluster_key=dedupe_key,
                     title=incident_data.get("title"),
                     summary=incident_data.get("summary", incident_data.get("title")),
                     severity=incident_data.get("severity", "LOW").upper(),
@@ -369,13 +478,29 @@ class DatabaseService:
                     violation_ids=incident_data.get("violation_ids", []),
                     rule_ids=incident_data.get("rule_ids", []),
                     recommended_actions=incident_data.get("recommended_actions", []),
+                    event_count=len(incident_data.get("event_ids", []))
                 )
                 session.add(incident)
                 await session.flush()
+                
+                # Mark as processed
+                await IdempotencyService.mark_processed(
+                    idempotency_key=dedupe_key,
+                    incident_id=incident.incident_id
+                )
+                
+                await session.commit()
                 logger.debug("incident_saved", incident_id=incident.incident_id)
                 return incident.incident_id
             except Exception as e:
                 logger.error("incident_save_failed", error=str(e), incident_id=incident_data.get("incident_id"))
+                await session.rollback()
+                
+                # Mark as failed
+                await IdempotencyService.mark_failed(
+                    idempotency_key=dedupe_key,
+                    error_message=str(e)
+                )
                 raise
     
     @staticmethod
