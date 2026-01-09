@@ -489,34 +489,7 @@ class Sentinel3Worker:
                 )
                 
         except Exception as e:
-            logger.error("failed_to_store_predicted_incident", error=str(e))
-                    # Update existing
-                    existing_incident.updated_at = datetime.now(timezone.utc)
-                    existing_incident.explanation_json = incident.explanation_json
-                    existing_incident.evidence_json = incident.evidence_json
-                    existing_incident.confidence = incident.confidence
-                    logger.debug("predicted_incident_updated", incident_id=str(existing_incident.id))
-                else:
-                    # Create new
-                    db_incident = PredictedIncidentModel(
-                        chain_id=incident.chain_id,
-                        tx_hash=incident.tx_hash,
-                        protocol_id=incident.protocol_id,
-                        predicted_type=incident.predicted_type,
-                        severity=incident.severity,
-                        confidence=incident.confidence,
-                        status=incident.status.value,
-                        dedupe_key=incident.dedupe_key,
-                        explanation_json=incident.explanation_json,
-                        evidence_json=incident.evidence_json,
-                        linked_simulation_run_id=incident.linked_simulation_run_id,
-                    )
-                    session.add(db_incident)
-                    await session.commit()
-                    logger.info("predicted_incident_stored", incident_id=str(db_incident.id))
-        
-        except Exception as e:
-            logger.error("failed_to_store_predicted_incident", error=str(e))
+            logger.error("failed_to_store_predicted_incident", error=str(e), exc_info=True)
     
     async def _publish_predicted_incident(self, incident: PredictedIncident):
         """Publish predicted incident to event bus with PREDICTED flag."""
