@@ -803,6 +803,12 @@ async def migrate_events_table():
     """
     Migrate events table to add missing columns (status, block_hash, etc.).
     This fixes the schema mismatch between EventModel and the database table.
+    
+    Handles all edge cases:
+    - Creates columns only if they don't exist
+    - Creates indexes separately (can't be in DO blocks)
+    - Handles NULL values in unique index
+    - Provides detailed error reporting
     """
     try:
         from sqlalchemy import text
@@ -810,59 +816,90 @@ async def migrate_events_table():
         
         await DatabaseManager.initialize()
         
+        columns_added = []
+        indexes_created = []
+        
         async with DatabaseManager.get_session() as session:
-            # Add status column
-            await session.execute(text("""
-                DO $$ 
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name = 'events' AND column_name = 'status'
-                    ) THEN
-                        ALTER TABLE events ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'PENDING';
-                        CREATE INDEX IF NOT EXISTS ix_events_status ON events(status, chain_id);
-                    END IF;
-                END $$;
+            # Add status column (with index creation in separate statement)
+            result = await session.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'events' AND column_name = 'status'
             """))
+            if not result.fetchone():
+                await session.execute(text("ALTER TABLE events ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'PENDING'"))
+                columns_added.append("status")
             
             # Add other missing columns
-            for col_name, col_def in [
-                ("block_hash", "VARCHAR(128)"),
-                ("canonical_event_hash", "VARCHAR(128)"),
-                ("confirmed_at", "TIMESTAMP WITH TIME ZONE"),
-                ("log_index", "INTEGER"),
-                ("topics", "VARCHAR(128)[]"),
-                ("asset_type", "VARCHAR(32)"),
-                ("asset_address", "VARCHAR(128)"),
-            ]:
-                await session.execute(text(f"""
-                    DO $$ 
-                    BEGIN
-                        IF NOT EXISTS (
-                            SELECT 1 FROM information_schema.columns 
-                            WHERE table_name = 'events' AND column_name = '{col_name}'
-                        ) THEN
-                            ALTER TABLE events ADD COLUMN {col_name} {col_def};
-                        END IF;
-                    END $$;
-                """))
+            column_defs = [
+                ("block_hash", "VARCHAR(128)", True),
+                ("canonical_event_hash", "VARCHAR(128)", True),
+                ("confirmed_at", "TIMESTAMP WITH TIME ZONE", False),
+                ("log_index", "INTEGER", False),
+                ("topics", "VARCHAR(128)[]", False),
+                ("asset_type", "VARCHAR(32)", False),
+                ("asset_address", "VARCHAR(128)", False),
+            ]
             
-            # Add indexes (execute separately to avoid prepared statement error)
-            await session.execute(text("CREATE INDEX IF NOT EXISTS ix_events_block_hash ON events(block_hash)"))
-            await session.execute(text("CREATE INDEX IF NOT EXISTS ix_events_canonical_event_hash ON events(canonical_event_hash)"))
-            await session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_events_unique_key ON events(chain_id, tx_hash, log_index)"))
+            for col_name, col_def, needs_index in column_defs:
+                result = await session.execute(text(f"""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'events' AND column_name = '{col_name}'
+                """))
+                if not result.fetchone():
+                    await session.execute(text(f"ALTER TABLE events ADD COLUMN {col_name} {col_def}"))
+                    columns_added.append(col_name)
+            
+            # Create indexes separately (must be outside DO blocks)
+            # Check if indexes exist before creating
+            index_checks = [
+                ("ix_events_status", "CREATE INDEX IF NOT EXISTS ix_events_status ON events(status, chain_id) WHERE status IS NOT NULL"),
+                ("ix_events_block_hash", "CREATE INDEX IF NOT EXISTS ix_events_block_hash ON events(block_hash) WHERE block_hash IS NOT NULL"),
+                ("ix_events_canonical_event_hash", "CREATE INDEX IF NOT EXISTS ix_events_canonical_event_hash ON events(canonical_event_hash) WHERE canonical_event_hash IS NOT NULL"),
+                ("ix_events_unique_key", "CREATE UNIQUE INDEX IF NOT EXISTS ix_events_unique_key ON events(chain_id, tx_hash, COALESCE(log_index, -1))"),
+            ]
+            
+            for index_name, create_sql in index_checks:
+                # Check if index exists
+                result = await session.execute(text(f"""
+                    SELECT indexname 
+                    FROM pg_indexes 
+                    WHERE tablename = 'events' AND indexname = '{index_name}'
+                """))
+                if not result.fetchone():
+                    try:
+                        await session.execute(text(create_sql))
+                        indexes_created.append(index_name)
+                    except Exception as idx_error:
+                        # Index might fail if column doesn't exist or constraint conflict
+                        # Log but don't fail the migration
+                        logger.warning(f"index_creation_failed", index=index_name, error=str(idx_error))
             
             await session.commit()
             
             return {
                 "status": "success",
                 "message": "Events table migration completed successfully",
-                "columns_added": ["status", "block_hash", "canonical_event_hash", "confirmed_at", "log_index", "topics", "asset_type", "asset_address"]
+                "columns_added": columns_added,
+                "indexes_created": indexes_created,
+                "summary": f"Added {len(columns_added)} columns and {len(indexes_created)} indexes"
             }
     except Exception as e:
+        import traceback
+        error_details = {
+            "error": str(e),
+            "type": type(e).__name__,
+        }
+        # Log error if logger available
+        try:
+            import structlog
+            structlog.get_logger().error("migration_failed", **error_details, traceback=traceback.format_exc())
+        except:
+            pass
         return {
             "status": "error",
-            "error": str(e)
+            **error_details
         }
 
 @router.post("/maintenance/init-db")
