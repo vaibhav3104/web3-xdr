@@ -60,13 +60,21 @@ class DatabaseManager:
         return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
     
     @classmethod
-    async def initialize(cls, database_url: Optional[str] = None) -> None:
+    async def initialize(cls, database_url: Optional[str] = None, force_reconnect: bool = False) -> None:
         """
         Initialize the database engine and session factory.
+        
+        Args:
+            database_url: Optional database URL. If not provided, uses get_database_url().
+            force_reconnect: If True, closes existing connections and reinitializes.
         """
-        if cls._engine is not None:
+        if cls._engine is not None and not force_reconnect:
             logger.warning("database_already_initialized")
             return
+        
+        # Close existing connections if forcing reconnect
+        if force_reconnect and cls._engine is not None:
+            await cls.close()
         
         url = database_url or cls.get_database_url()
         

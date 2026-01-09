@@ -77,12 +77,15 @@ class DatabaseService:
         Save multiple events in a single transaction.
         Uses INSERT ON CONFLICT DO NOTHING for idempotency.
         Returns count of inserted events.
+        
+        Handles schema mismatch by filtering out columns that don't exist in DB.
         """
         if not events:
             return 0
         
         async with DatabaseManager.get_session() as session:
             try:
+                # Try with full EventModel first (includes status column)
                 stmt = insert(EventModel).values(events)
                 stmt = stmt.on_conflict_do_nothing(index_elements=['event_id'])
                 result = await session.execute(stmt)
@@ -90,8 +93,68 @@ class DatabaseService:
                 logger.info("events_batch_saved", count=count)
                 return count
             except Exception as e:
-                logger.error("events_batch_save_failed", error=str(e), count=len(events))
-                raise
+                error_str = str(e)
+                # If status column doesn't exist, retry without it
+                if "column \"status\" of relation \"events\" does not exist" in error_str or \
+                   "UndefinedColumnError" in error_str and "status" in error_str:
+                    logger.warning("schema_mismatch_retrying_without_status", error=error_str)
+                    # Filter out status and other new columns that might not exist
+                    filtered_events = []
+                    for event in events:
+                        filtered_event = {k: v for k, v in event.items() 
+                                        if k not in ['status', 'block_hash', 'canonical_event_hash', 
+                                                    'confirmed_at', 'topics', 'asset_type', 'asset_address']}
+                        filtered_events.append(filtered_event)
+                    
+                    # Use raw SQL to insert without status column
+                    from sqlalchemy import text
+                    try:
+                        # Build INSERT statement without status column
+                        insert_sql = """
+                            INSERT INTO events (
+                                id, event_id, chain_id, event_type, tx_hash, block_number, 
+                                block_timestamp, contract_address, severity, amount, amount_usd,
+                                from_address, to_address, raw_data
+                            ) VALUES (
+                                :id, :event_id, :chain_id, :event_type, :tx_hash, :block_number,
+                                :block_timestamp, :contract_address, :severity, :amount, :amount_usd,
+                                :from_address, :to_address, :raw_data::jsonb
+                            )
+                            ON CONFLICT (event_id) DO NOTHING
+                        """
+                        
+                        import uuid
+                        import json
+                        count = 0
+                        for event in filtered_events:
+                            result = await session.execute(text(insert_sql), {
+                                'id': str(uuid.uuid4()),
+                                'event_id': event.get('event_id'),
+                                'chain_id': event.get('chain_id'),
+                                'event_type': event.get('event_type', 'unknown'),
+                                'tx_hash': event.get('tx_hash'),
+                                'block_number': event.get('block_number'),
+                                'block_timestamp': event.get('block_timestamp'),
+                                'contract_address': event.get('contract_address'),
+                                'severity': event.get('severity', 'LOW'),
+                                'amount': event.get('amount'),
+                                'amount_usd': event.get('amount_usd'),
+                                'from_address': event.get('from_address'),
+                                'to_address': event.get('to_address'),
+                                'raw_data': json.dumps(event.get('raw_data', {}))
+                            })
+                            if result.rowcount > 0:
+                                count += 1
+                        
+                        await session.commit()
+                        logger.info("events_batch_saved_fallback", count=count, total=len(events))
+                        return count
+                    except Exception as fallback_error:
+                        logger.error("events_batch_save_fallback_failed", error=str(fallback_error))
+                        raise
+                else:
+                    logger.error("events_batch_save_failed", error=error_str, count=len(events))
+                    raise
     
     @staticmethod
     async def get_events(
