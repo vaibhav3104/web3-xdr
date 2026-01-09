@@ -1,0 +1,125 @@
+# =============================================================================
+# Update Worker to Latest Image
+# =============================================================================
+# Manual workflow to update the production worker to use the latest Docker image.
+# Use this when:
+#   - Worker needs to pick up latest code but full deployment hasn't completed
+#   - Fixing schema mismatch (worker needs fallback code)
+#   - Worker is stuck on old revision
+#
+# Trigger: Manual (workflow_dispatch) or on push to main (if worker needs refresh)
+# =============================================================================
+
+name: Update Worker to Latest
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to update'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+  
+  # Also allow manual trigger via repository_dispatch
+  repository_dispatch:
+    types: [update-worker]
+
+env:
+  GCP_REGION: us-central1
+  GCP_PROJECT: web3-xdr
+
+jobs:
+  update-worker:
+    name: Update Worker Service
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+      
+      - name: Determine Service Name
+        id: vars
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
+            echo "SERVICE_NAME=web3-xdr-worker" >> $GITHUB_OUTPUT
+          else
+            echo "SERVICE_NAME=web3-xdr-production-worker" >> $GITHUB_OUTPUT
+          fi
+          # Use the image that was built in the latest deploy (from main branch)
+          # Get latest image tag from Artifact Registry
+          IMAGE_TAG=$(gcloud container images list-tags \
+            ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/web3-xdr-repo/web3-xdr \
+            --limit=1 \
+            --sort-by=~timestamp \
+            --format="get(tags)" 2>/dev/null | tr -d '[]' | cut -d',' -f1 | tr -d ' ' || echo "latest")
+          
+          # If we got multiple tags or empty, try to get commit-like tag
+          if [ -z "$IMAGE_TAG" ] || [ "$IMAGE_TAG" = "latest" ]; then
+            IMAGE_TAG="latest"
+          fi
+          
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "Full image: ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/web3-xdr-repo/web3-xdr:${IMAGE_TAG}"
+      
+      - name: Get Current Revision
+        id: current
+        run: |
+          CURRENT=$(gcloud run services describe ${{ steps.vars.outputs.SERVICE_NAME }} \
+            --region ${{ env.GCP_REGION }} \
+            --format="value(status.latestReadyRevisionName)" 2>/dev/null || echo "unknown")
+          echo "CURRENT_REVISION=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current revision: $CURRENT"
+      
+      - name: Update Worker to Latest Image
+        run: |
+          gcloud run services update ${{ steps.vars.outputs.SERVICE_NAME }} \
+            --region ${{ env.GCP_REGION }} \
+            --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ steps.vars.outputs.IMAGE_TAG }} \
+            --quiet
+          echo "Worker service updated successfully"
+      
+      - name: Wait for New Revision
+        run: |
+          echo "Waiting 45 seconds for new revision to be ready..."
+          sleep 45
+      
+      - name: Verify New Revision
+        id: verify
+        run: |
+          NEW_REVISION=$(gcloud run services describe ${{ steps.vars.outputs.SERVICE_NAME }} \
+            --region ${{ env.GCP_REGION }} \
+            --format="value(status.latestReadyRevisionName)" 2>/dev/null || echo "unknown")
+          echo "NEW_REVISION=$NEW_REVISION" >> $GITHUB_OUTPUT
+          echo "New revision: $NEW_REVISION"
+          
+          if [ "${{ steps.current.outputs.CURRENT_REVISION }}" != "$NEW_REVISION" ]; then
+            echo "✅ New revision deployed successfully"
+          else
+            echo "⚠️ Revision unchanged - worker may already be on latest image"
+          fi
+      
+      - name: Summary
+        run: |
+          echo "## 🔄 Worker Update Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** ${{ steps.vars.outputs.SERVICE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ steps.vars.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Previous Revision:** ${{ steps.current.outputs.CURRENT_REVISION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**New Revision:** ${{ steps.verify.outputs.NEW_REVISION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Log Explorer:** https://web3-xdr-production-api-ipje7qz66q-uc.a.run.app/frontend/logs.html" >> $GITHUB_STEP_SUMMARY
