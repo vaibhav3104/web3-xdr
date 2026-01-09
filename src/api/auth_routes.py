@@ -5,7 +5,7 @@ Authentication API routes for Sentinel3.
 from typing import List
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 import structlog
 
 from ..auth.jwt_handler import jwt_handler, require_auth, require_role
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, http_request: Request):
     """
     Authenticate user and return JWT token.
     
@@ -29,14 +29,18 @@ async def login(request: LoginRequest):
     - viewer/viewer123 (read-only)
     """
     from ..database.audit import AuditLogger, ActionType
-    from fastapi import Request
     
     user = jwt_handler.authenticate_user(request.username, request.password)
     
-    # Get client IP
-    if not client_ip:
-        # Try to get from request headers (if available)
-        client_ip = None  # Would need Request object
+    # Get client IP from request
+    client_ip = None
+    # Try X-Forwarded-For header (Cloud Run)
+    forwarded_for = http_request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    if not client_ip and http_request.client:
+        # Fallback to direct client IP
+        client_ip = http_request.client.host
     
     if not user:
         # Log failed login
