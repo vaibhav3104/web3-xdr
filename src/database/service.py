@@ -73,96 +73,24 @@ class DatabaseService:
     @staticmethod
     async def save_events_batch(events: List[Dict[str, Any]]) -> int:
         """
-        BULLETPROOF event saving - simple, reliable, handles worker data format.
-        Worker sends: ISO timestamp strings, int block_number, string/None amounts.
+        ROCK SOLID: Use the proven sync_service that works.
+        Call it from async using asyncio.to_thread - no datetime issues.
         """
         if not events:
             return 0
         
-        import json
+        import asyncio
+        from .sync_service import save_events_batch_sync
         
-        saved = 0
-        async with DatabaseManager.get_session() as session:
-            for event in events:
-                try:
-                    # Required fields
-                    event_id = str(event.get('event_id') or uuid.uuid4())
-                    tx_hash = str(event.get('tx_hash') or '')
-                    block_number = event.get('block_number')
-                    
-                    if not tx_hash or block_number is None:
-                        continue
-                    
-                    block_number_int = int(block_number)
-                    
-                    # Timestamp: Pass ISO string directly, let PostgreSQL CAST handle it
-                    # This avoids asyncpg datetime timezone issues
-                    ts_str = event.get('block_timestamp') or event.get('timestamp')
-                    if isinstance(ts_str, str):
-                        # Normalize Z to +00:00 for PostgreSQL
-                        if ts_str.endswith('Z'):
-                            ts_str = ts_str[:-1] + '+00:00'
-                        # Use string directly - PostgreSQL CAST handles conversion
-                        block_timestamp_val = ts_str
-                    elif isinstance(ts_str, datetime):
-                        # Convert datetime to ISO string with UTC timezone
-                        if ts_str.tzinfo is None:
-                            ts_str = ts_str.replace(tzinfo=timezone.utc)
-                        elif ts_str.tzinfo != timezone.utc:
-                            ts_str = ts_str.astimezone(timezone.utc)
-                        block_timestamp_val = ts_str.isoformat()
-                    else:
-                        block_timestamp_val = datetime.now(timezone.utc).isoformat()
-                    
-                    # Amounts: simple conversion
-                    def to_decimal(val):
-                        if val is None or val == '' or val == '0':
-                            return None
-                        try:
-                            return Decimal(str(val))
-                        except:
-                            return None
-                    
-                    amount = to_decimal(event.get('amount'))
-                    amount_usd = to_decimal(event.get('amount_usd'))
-                    
-                    # Raw data
-                    raw = event.get('raw_data') or event
-                    raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
-                    
-                    # Simple INSERT - pass ISO string for timestamp, let PostgreSQL CAST handle it
-                    await session.execute(text("""
-                        INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
-                            block_timestamp, contract_address, severity, amount, amount_usd,
-                            from_address, to_address, raw_data)
-                        VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                            CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), :contract_address, :severity, 
-                            :amount, :amount_usd,
-                            :from_address, :to_address, CAST(:raw_data AS JSONB))
-                        ON CONFLICT (event_id) DO NOTHING
-                    """), {
-                        'id': str(uuid.uuid4()),
-                        'event_id': event_id,
-                        'chain_id': str(event.get('chain_id') or 'unknown'),
-                        'event_type': str(event.get('event_type') or 'Unknown'),
-                        'tx_hash': tx_hash,
-                        'block_number': block_number_int,
-                        'block_timestamp': block_timestamp_val,
-                        'contract_address': str(event.get('contract_address') or ''),
-                        'severity': str((event.get('severity') or 'LOW').upper()),
-                        'amount': amount,
-                        'amount_usd': amount_usd,
-                        'from_address': event.get('from_address'),
-                        'to_address': event.get('to_address'),
-                        'raw_data': raw_json,
-                    })
-                    saved += 1
-                except Exception as e:
-                    logger.warning("event_save_skipped", event_id=event.get('event_id'), error=str(e)[:200])
-            
-        if saved > 0:
-            logger.info("events_batch_saved", count=saved, total=len(events))
-        return saved
+        # Use the sync service that already works - run it in thread pool
+        try:
+            saved = await asyncio.to_thread(save_events_batch_sync, events)
+            if saved > 0:
+                logger.info("events_batch_saved", count=saved, total=len(events))
+            return saved
+        except Exception as e:
+            logger.error("events_batch_save_failed", error=str(e), count=len(events))
+            return 0
     
     @staticmethod
     async def get_events(
