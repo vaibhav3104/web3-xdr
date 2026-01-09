@@ -66,7 +66,7 @@ jobs:
           npm ci
           npm run build
           ls -la dist/
-          echo "✅ Frontend build successful"
+          echo " Frontend build successful"
       
       - name: Run Python tests
         run: |
@@ -74,9 +74,9 @@ jobs:
       
       - name: Verify Dockerfile
         run: |
-          echo "✅ Multi-stage Dockerfile ready for deployment"
-          grep -q "FROM node:18-alpine AS frontend-builder" Dockerfile && echo "✅ Frontend builder stage found"
-          grep -q "COPY --from=frontend-builder" Dockerfile && echo "✅ Frontend copy stage found"
+          echo " Multi-stage Dockerfile ready for deployment"
+          grep -q "FROM node:18-alpine AS frontend-builder" Dockerfile && echo " Frontend builder stage found"
+          grep -q "COPY --from=frontend-builder" Dockerfile && echo " Frontend copy stage found"
 
   # ===========================================================================
   # Deploy to Staging (develop branch)
@@ -106,15 +106,15 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
       
-      - name: Build Docker image (Multi-stage: Node.js + Python)
+      - name: "Build Docker image with frontend"
         run: |
-          echo "🏗️ Building multi-stage Docker image (includes React frontend)..."
+          echo " Building multi-stage Docker image (includes React frontend)..."
           docker build \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} .
           docker tag ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} \
                      ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging
-          echo "✅ Docker image built with bundled UI"
+          echo " Docker image built with bundled UI"
       
       - name: Push to Artifact Registry
         run: |
@@ -136,7 +136,7 @@ jobs:
             --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=api,API_PORT=8080" \
             --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
       
-      - name: Deploy Worker Service to Staging (with Bundled UI)
+      - name: "Deploy Worker Service to Staging with UI"
         run: |
           gcloud run deploy web3-xdr-worker \
             --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} \
@@ -152,7 +152,7 @@ jobs:
             --cpu-boost \
             --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo,PORT=9090" \
             --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
-          echo "✅ Worker deployed with bundled War Room UI"
+          echo " Worker deployed with bundled War Room UI"
       
       - name: Get Staging URLs
         run: |
@@ -172,7 +172,7 @@ jobs:
           echo "**Metrics:** $WORKER_URL/metrics" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`staging-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **Frontend:** React War Room UI bundled and deployed" >> $GITHUB_STEP_SUMMARY
+          echo " **Frontend:** React War Room UI bundled and deployed" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
   # Deploy to Production (main branch)
@@ -202,15 +202,15 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
       
-      - name: Build Docker image (Multi-stage: Node.js + Python)
+      - name: "Build Docker image with frontend"
         run: |
-          echo "🏗️ Building multi-stage Docker image (includes React frontend)..."
+          echo " Building multi-stage Docker image (includes React frontend)..."
           docker build \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} .
           docker tag ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} \
                      ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:latest
-          echo "✅ Docker image built with bundled UI"
+          echo " Docker image built with bundled UI"
       
       - name: Push to Artifact Registry
         run: |
@@ -232,7 +232,7 @@ jobs:
             --set-env-vars "ENVIRONMENT=production,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=api,API_PORT=8080" \
             --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
       
-      - name: Deploy Worker Service to Production (with Bundled UI)
+      - name: "Deploy Worker Service to Production with UI"
         run: |
           gcloud run deploy web3-xdr-production-worker \
             --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} \
@@ -248,7 +248,7 @@ jobs:
             --cpu-boost \
             --set-env-vars "ENVIRONMENT=production,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo,PORT=9090" \
             --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
-          echo "✅ Worker deployed with bundled War Room UI"
+          echo " Worker deployed with bundled War Room UI"
       
       - name: Get Production URLs
         run: |
@@ -268,4 +268,4 @@ jobs:
           echo "**Metrics:** $WORKER_URL/metrics" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **Frontend:** React War Room UI bundled and deployed" >> $GITHUB_STEP_SUMMARY
+          echo " **Frontend:** React War Room UI bundled and deployed" >> $GITHUB_STEP_SUMMARY
