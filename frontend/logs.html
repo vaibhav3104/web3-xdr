@@ -1251,20 +1251,16 @@
                     if (eventTypeFilter) params.append('event_type', eventTypeFilter);
                 }
                 
-                if (startTimeVal && endTimeVal) {
-                    // datetime-local inputs represent local time
-                    // Convert to UTC by treating the input as local time and getting UTC equivalent
-                    // Example: "2026-01-08T21:38" in IST means 21:38 IST = 16:08 UTC
-                    // new Date("2026-01-08T21:38") creates a Date representing 21:38 in local timezone
-                    // getTime() returns UTC milliseconds for that moment
-                    // So we can use toISOString() directly - it converts to UTC
-                    const startDate = new Date(startTimeVal);
-                    const endDate = new Date(endTimeVal);
-                    
-                    // toISOString() converts to UTC, which is what the API expects
-                    params.append('start_time', startDate.toISOString());
-                    params.append('end_time', endDate.toISOString());
-                }
+                // DON'T send time filters to API - do all filtering client-side
+                // This avoids timezone conversion issues entirely
+                // The API will return recent events, and we filter by time client-side
+                // if (false && startTimeVal && endTimeVal) {
+                //     // Time filtering disabled - done client-side instead
+                //     const startDate = new Date(startTimeVal);
+                //     const endDate = new Date(endTimeVal);
+                //     params.append('start_time', startDate.toISOString());
+                //     params.append('end_time', endDate.toISOString());
+                // }
                 
                 const response = await fetch(`${API_BASE}/api/events?${params.toString()}`);
                 
