@@ -37,7 +37,19 @@ class DatabaseManager:
     def get_database_url(cls) -> str:
         """
         Build database URL from environment variables.
+        Prioritizes DATABASE_URL if set (for Cloud SQL).
         """
+        # Check DATABASE_URL first (Cloud SQL format)
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
+            # Convert postgresql:// to postgresql+asyncpg:// for asyncpg driver
+            if database_url.startswith("postgresql://"):
+                database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif database_url.startswith("postgres://"):
+                database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            return database_url
+        
+        # Fall back to individual env vars
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5432")
         user = os.getenv("POSTGRES_USER", "xdr")
