@@ -9,6 +9,11 @@ Lifecycle:
 - Loop A (Ingestion): Poll chains, track finality, publish to bus
 - Loop B (Detection): Consume from bus, process events
 - Health server on port 9090
+
+HEALTH-FIRST PATTERN:
+- HTTP server binds immediately (<2 seconds)
+- All initialization happens in background
+- Health endpoints always return 200
 """
 
 import asyncio
@@ -16,14 +21,15 @@ import os
 import signal
 import sys
 import yaml
+import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import structlog
 
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-import uvicorn
+# Use aiohttp for lightweight, fast-binding health server
+from aiohttp import web
+from aiohttp.web import Response
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -57,15 +63,16 @@ try:
     try:
         from src.runtime.intent_sources.bloxroute_source import BloxrouteMempoolSource
         BLOXROUTE_AVAILABLE = True
-    except ImportError as e:
+    except ImportError:
         BLOXROUTE_AVAILABLE = False
         BloxrouteMempoolSource = None
     
     RUNTIME_AVAILABLE = True
-except ImportError as e:
+except ImportError:
     RUNTIME_AVAILABLE = False
     BLOXROUTE_AVAILABLE = False
     BloxrouteMempoolSource = None
+
 from src.telemetry.metrics import (
     events_ingested_total,
     head_lag_blocks,
@@ -82,7 +89,6 @@ from src.telemetry.metrics import (
     rpc_requests_total,
 )
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from fastapi.responses import Response
 
 logger = structlog.get_logger(__name__)
 
@@ -100,6 +106,12 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 POLL_INTERVAL_SECONDS = float(os.getenv("POLL_INTERVAL_SECONDS", "2.0"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
 PROCESSING_TIMEOUT_SECONDS = float(os.getenv("PROCESSING_TIMEOUT_SECONDS", "5.0"))
+
+# Global state for health checks
+worker_instance: Optional["Sentinel3Worker"] = None
+is_ready = False
+init_error: Optional[str] = None
+start_time = datetime.now(timezone.utc)
 
 
 class Sentinel3Worker:
@@ -647,35 +659,96 @@ class Sentinel3Worker:
         logger.info("worker_stopped")
 
 
-# Health server
-health_app = FastAPI()
+# ============================================================================
+# Health-First HTTP Server (aiohttp)
+# ============================================================================
 
-worker_instance: Optional[Sentinel3Worker] = None
-
-
-@health_app.get("/health")
-async def health():
-    """Health check endpoint - always returns 200 to pass Cloud Run health checks."""
-    if worker_instance and worker_instance.running:
-        return JSONResponse(content={
+async def health_handler(request):
+    """Health check endpoint - always returns 200."""
+    global worker_instance, is_ready, init_error, start_time
+    
+    uptime = (datetime.now(timezone.utc) - start_time).total_seconds()
+    
+    if is_ready and worker_instance and worker_instance.running:
+        return web.json_response({
             "status": "healthy",
-            "uptime_seconds": (datetime.now(timezone.utc) - worker_instance.start_time).total_seconds(),
-            "chains_monitored": len(worker_instance.listeners),
+            "ready": True,
+            "uptime_seconds": uptime,
+            "chains_monitored": len(worker_instance.listeners) if worker_instance.listeners else 0,
             "bus_type": type(worker_instance.bus).__name__ if worker_instance.bus else "none"
         })
-    # Return 200 even if starting - Cloud Run just needs the port to be listening
-    return JSONResponse(content={"status": "starting", "message": "Worker initialization in progress"})
+    elif init_error:
+        return web.json_response({
+            "status": "alive",
+            "ready": False,
+            "uptime_seconds": uptime,
+            "error": init_error
+        }, status=200)  # Still return 200 - container is alive
+    else:
+        return web.json_response({
+            "status": "starting",
+            "ready": False,
+            "uptime_seconds": uptime,
+            "message": "Worker initialization in progress"
+        })
 
 
-@health_app.get("/metrics")
-async def metrics():
+async def root_handler(request):
+    """Root endpoint - same as health."""
+    return await health_handler(request)
+
+
+async def metrics_handler(request):
     """Prometheus metrics endpoint."""
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    return Response(
+        body=generate_latest(),
+        content_type=CONTENT_TYPE_LATEST
+    )
+
+
+async def background_init():
+    """
+    Background initialization - all heavy startup logic goes here.
+    This runs AFTER the HTTP server is already listening.
+    """
+    global worker_instance, is_ready, init_error
+    
+    try:
+        logger.info("background_init_started")
+        
+        # Create worker instance
+        worker_instance = Sentinel3Worker()
+        logger.info("worker_instance_created")
+        
+        # Start worker (this does all initialization: DB, Redis, RPC, Runtime, etc.)
+        await worker_instance.start()
+        
+        # Mark as ready
+        is_ready = True
+        init_error = None
+        logger.info("background_init_completed", ready=True)
+        
+    except Exception as e:
+        # Log error but DO NOT crash - keep health server running
+        init_error = str(e)
+        logger.error(
+            "background_init_failed",
+            error=str(e),
+            exc_info=True,
+            message="Worker initialization failed, but health server remains running for debugging"
+        )
+        # Don't raise - container stays alive
 
 
 async def main():
-    """Main entry point."""
-    global worker_instance, worker_ready
+    """
+    Main entry point - HEALTH-FIRST PATTERN.
+    
+    1. Bind HTTP server immediately (<2 seconds)
+    2. Start background initialization
+    3. Keep server running forever
+    """
+    global start_time
     
     # Handle graceful shutdown
     def signal_handler(sig, frame):
@@ -686,75 +759,46 @@ async def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     
-    # Start health server FIRST (before any initialization)
-    # This MUST start immediately for Cloud Run health checks
-    logger.info("starting_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
+    # STEP 1: Create and bind HTTP server IMMEDIATELY (no blocking operations before this)
+    logger.info("binding_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
     
+    app = web.Application()
+    app.router.add_get("/", root_handler)
+    app.router.add_get("/health", health_handler)
+    app.router.add_get("/metrics", metrics_handler)
+    
+    # Create site and bind to port immediately
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Bind to 0.0.0.0 (not 127.0.0.1) - critical for Cloud Run
+    site = web.TCPSite(runner, host="0.0.0.0", port=WORKER_HEALTH_PORT)
+    await site.start()
+    
+    logger.info("health_server_bound", port=WORKER_HEALTH_PORT, host="0.0.0.0")
+    
+    # STEP 2: Start background initialization (non-blocking)
+    init_task = asyncio.create_task(background_init())
+    
+    # STEP 3: Keep server running forever
     try:
-        # Create server config - use simple config for fast startup
-        config = uvicorn.Config(
-            health_app,
-            host="0.0.0.0",
-            port=WORKER_HEALTH_PORT,
-            log_level="error",
-            access_log=False,  # Reduce logging overhead
-            loop="asyncio"  # Explicitly use asyncio loop
-        )
-        server = uvicorn.Server(config)
-        
-        # Start server in background - this will bind to the port immediately
-        health_server_task = asyncio.create_task(server.serve())
-        
-        # Give server a moment to bind (critical for Cloud Run)
-        await asyncio.sleep(1.0)
-        logger.info("health_server_started", port=WORKER_HEALTH_PORT)
-        
+        # Wait for initialization to complete (or fail)
+        await init_task
     except Exception as e:
-        logger.error("health_server_startup_failed", error=str(e), exc_info=True)
-        # If health server fails, we can't proceed - Cloud Run will fail
-        raise
-    
-    # Create and start worker (initialization happens here)
-    # Do this in background so health server keeps responding
-    async def start_worker_background():
-        global worker_instance, worker_ready
-        try:
-            worker_instance = Sentinel3Worker()
-            logger.info("worker_instance_created", starting_initialization=True)
-            
-            # Start worker (this will initialize and run loops)
-            await worker_instance.start()
-            worker_ready = True
-            logger.info("worker_fully_started")
-            
-            # Keep running until shutdown
-            while worker_instance.running:
-                await asyncio.sleep(1.0)
-                
-        except Exception as e:
-            logger.error("worker_startup_failed", error=str(e), exc_info=True)
-            # Health server will still respond, but status will be "starting"
-            # Don't raise - let health server keep running
-    
-    worker_task = asyncio.create_task(start_worker_background())
-    
-    # Wait for either worker to complete or shutdown signal
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
+        logger.error("unexpected_error_in_main", error=str(e), exc_info=True)
     finally:
-        worker_ready = False
-        if worker_instance:
-            await worker_instance.stop()
-        health_server_task.cancel()
+        # Keep server running even if init fails
+        logger.info("health_server_running", message="Server will continue running for health checks")
         try:
-            await health_server_task
-        except asyncio.CancelledError:
-            pass
-        logger.info("worker_shutdown_complete")
+            # Wait indefinitely (until SIGTERM)
+            while True:
+                await asyncio.sleep(60.0)
+        except KeyboardInterrupt:
+            logger.info("shutdown_requested")
+        finally:
+            await runner.cleanup()
+            logger.info("health_server_shutdown")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
