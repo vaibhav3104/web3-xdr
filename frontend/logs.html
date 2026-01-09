@@ -1256,6 +1256,13 @@
                 const queryTime = Math.round(performance.now() - startTime);
                 document.getElementById('queryTime').textContent = queryTime;
                 
+                // Debug logging
+                console.log('Events loaded:', allEvents.length, 'total');
+                console.log('Time range:', startTimeVal, 'to', endTimeVal);
+                if (allEvents.length > 0) {
+                    console.log('First event timestamp:', allEvents[0].timestamp);
+                }
+                
                 // Show query used if available
                 if (data.query_used) {
                     console.log('Query executed:', data.query_used);
@@ -1338,10 +1345,21 @@
             const chainFilter = document.getElementById('chainFilter').value;
             const severityFilter = document.getElementById('severityFilter').value;
             const eventTypeFilter = document.getElementById('eventTypeFilter').value;
-            const startTime = new Date(document.getElementById('startTime').value);
-            const endTime = new Date(document.getElementById('endTime').value);
+            
+            // Parse time inputs - datetime-local inputs are in local timezone
+            const startTimeInput = document.getElementById('startTime').value;
+            const endTimeInput = document.getElementById('endTime').value;
+            const startTime = startTimeInput ? new Date(startTimeInput) : null;
+            const endTime = endTimeInput ? new Date(endTimeInput) : null;
+            
+            console.log('Applying filters:', {
+                allEvents: allEvents.length,
+                startTime: startTime ? startTime.toISOString() : 'none',
+                endTime: endTime ? endTime.toISOString() : 'none'
+            });
 
             // If Lucene query was used, server already filtered, just apply time and dropdown filters
+            let filteredCount = 0;
             filteredEvents = allEvents.filter(event => {
                 // Time filter (always apply client-side for precision)
                 // Handle both timezone-aware and timezone-naive timestamps
@@ -1361,8 +1379,23 @@
                 
                 // Only filter by time if both start and end times are valid
                 if (startTime && endTime && !isNaN(startTime.getTime()) && !isNaN(endTime.getTime())) {
-                    if (eventTime < startTime || eventTime > endTime) return false;
+                    const beforeStart = eventTime < startTime;
+                    const afterEnd = eventTime > endTime;
+                    if (beforeStart || afterEnd) {
+                        if (filteredCount < 3) {
+                            console.log('Event filtered out:', {
+                                eventTime: eventTime.toISOString(),
+                                startTime: startTime.toISOString(),
+                                endTime: endTime.toISOString(),
+                                beforeStart,
+                                afterEnd
+                            });
+                        }
+                        return false;
+                    }
                 }
+                
+                filteredCount++;
 
                 // If no Lucene query, apply dropdown filters
                 if (!luceneQuery) {
@@ -1373,6 +1406,8 @@
 
                 return true;
             });
+            
+            console.log('Filtered events:', filteredEvents.length, 'out of', allEvents.length);
 
             // Sort
             sortEvents();
