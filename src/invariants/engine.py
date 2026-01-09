@@ -19,7 +19,8 @@ class InvariantEngine:
     Orchestrates real-time invariant evaluation.
     
     Features:
-    - Event-driven evaluation
+    - Event-driv
+    en evaluation
     - Periodic background checks
     - Result aggregation
     - Handler callbacks

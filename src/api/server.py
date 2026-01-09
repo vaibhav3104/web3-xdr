@@ -25,13 +25,9 @@ from .alert_routes import router as alert_router
 from .contract_routes import router as contract_router
 from .scorecard_routes import router as scorecard_router
 
-# WebSocket feed for War Room dashboard
-try:
-    from .websockets import websocket_feed
-    WEBSOCKET_AVAILABLE = True
-except ImportError:
-    WEBSOCKET_AVAILABLE = False
-    websocket_feed = None
+# WebSocket feed removed - War Room dashboard no longer used
+WEBSOCKET_AVAILABLE = False
+websocket_feed = None
 
 # Runtime Security Plane routes
 try:
@@ -152,12 +148,6 @@ def create_app(
     @app.get("/health")
     async def health_check():
         return {"status": "healthy", "service": "sentinel3"}
-    
-    # WebSocket feed for War Room dashboard
-    if WEBSOCKET_AVAILABLE and websocket_feed:
-        @app.websocket("/ws/feed")
-        async def websocket_endpoint(websocket: WebSocket):
-            await websocket_feed(websocket)
     
     # Serve analytics dashboard
     @app.get("/frontend/dashboard.html")

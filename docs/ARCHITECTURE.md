@@ -1,4 +1,4 @@
-# Sentinel3 Architecture Deep Dive
+# Web3 XDR Architecture Deep Dive
 
 ## Design Philosophy
 
@@ -796,6 +796,7 @@ class TelegramAlerter:
 | End-to-end detection | < 3 blocks | From first exploit tx |
 | Alert delivery | < 10 seconds | From incident creation |
 | Uptime | 99.9% | Monthly |
+
 
 ---
 

@@ -345,7 +345,7 @@ class Sentinel3Worker:
                         # Poll for new logs (simplified - in production, track last processed block)
                         if processed < head_block:
                             # Get logs from last processed to head
-                            from_block = max(processed + 1, head_block - 100)  # Limit range
+                            from_block = max(processed + 1, head_block - 50)  # Limit range to avoid RPC errors
                             to_block = head_block
                             
                             try:
@@ -362,16 +362,65 @@ class Sentinel3Worker:
                                         else:
                                             event.status = EventStatus.PENDING
                                         
-                                        # Publish to bus
-                                        published = await self.bus.publish(event.to_dict())
-                                        if published:
-                                            events_ingested_total.labels(
-                                                chain=chain_id,
-                                                status=event.status.value
-                                            ).inc()
-                                            bus_events_published_total.labels(
-                                                bus_type=type(self.bus).__name__.lower().replace("bus", "")
-                                            ).inc()
+                                        # Publish to bus (with fallback to direct database save)
+                                        try:
+                                            published = await self.bus.publish(event.to_dict())
+                                            if published:
+                                                events_ingested_total.labels(
+                                                    chain=chain_id,
+                                                    status=event.status.value
+                                                ).inc()
+                                                bus_events_published_total.labels(
+                                                    bus_type=type(self.bus).__name__.lower().replace("bus", "")
+                                                ).inc()
+                                            else:
+                                                # Fallback: Save directly to database if Redis publish fails
+                                                logger.warning("redis_publish_failed_fallback_to_db", chain=chain_id, tx_hash=event.tx_hash)
+                                                from src.database.service import DatabaseService
+                                                try:
+                                                    db_event = {
+                                                        "event_id": str(uuid.uuid4()),
+                                                        "chain_id": chain_id,
+                                                        "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                                                        "tx_hash": event.tx_hash,
+                                                        "block_number": event.block_number,
+                                                        "block_timestamp": datetime.now(timezone.utc).isoformat(),
+                                                        "contract_address": event.contract_address,
+                                                        "from_address": getattr(event, 'from_address', None),
+                                                        "to_address": getattr(event, 'to_address', None),
+                                                        "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
+                                                        "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
+                                                    }
+                                                    await DatabaseService.save_events_batch([db_event])
+                                                    logger.info("event_saved_direct_to_db", chain=chain_id, tx_hash=event.tx_hash)
+                                                except Exception as db_error:
+                                                    logger.error("direct_db_save_failed", error=str(db_error))
+                                        except Exception as bus_error:
+                                            # Redis connection failed - save directly to database
+                                            logger.warning("redis_unavailable_fallback_to_db", chain=chain_id, error=str(bus_error))
+                                            from src.database.service import DatabaseService
+                                            try:
+                                                db_event = {
+                                                    "event_id": str(uuid.uuid4()),
+                                                    "chain_id": chain_id,
+                                                    "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                                                    "tx_hash": event.tx_hash,
+                                                    "block_number": event.block_number,
+                                                    "block_timestamp": datetime.now(timezone.utc).isoformat(),
+                                                    "contract_address": event.contract_address,
+                                                    "from_address": getattr(event, 'from_address', None),
+                                                    "to_address": getattr(event, 'to_address', None),
+                                                    "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
+                                                    "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
+                                                }
+                                                await DatabaseService.save_events_batch([db_event])
+                                                events_ingested_total.labels(
+                                                    chain=chain_id,
+                                                    status=event.status.value
+                                                ).inc()
+                                                logger.info("event_saved_direct_to_db_fallback", chain=chain_id, tx_hash=event.tx_hash)
+                                            except Exception as db_error:
+                                                logger.error("direct_db_save_failed", error=str(db_error))
                                 
                                 # Update processed block
                                 self.processed_blocks[chain_id] = head_block
@@ -834,23 +883,6 @@ async def metrics_handler(request):
     )
 
 
-async def index_handler(request):
-    """
-    SPA catch-all handler - serves index.html for any unknown route.
-    This allows React Router to handle client-side routing.
-    """
-    static_dir = Path("/app/static")
-    index_file = static_dir / "index.html"
-    
-    if not index_file.exists():
-        return web.Response(
-            text="War Room UI not found. Build the frontend first.",
-            status=404
-        )
-    
-    return web.FileResponse(index_file)
-
-
 async def background_init():
     """
     Background initialization - all heavy startup logic goes here.
@@ -917,20 +949,9 @@ async def main():
         
         app = web.Application()
         
-        # API routes (defined BEFORE catch-all)
+        # API routes
         app.router.add_get("/health", health_handler)
         app.router.add_get("/metrics", metrics_handler)
-        
-        # Static files for React app (JS/CSS/images)
-        static_dir = Path("/app/static")
-        if static_dir.exists():
-            app.router.add_static('/assets', static_dir / 'assets', name='assets')
-            logger.info("static_assets_configured", path="/assets")
-        
-        # SPA catch-all route (MUST be last)
-        # This serves index.html for any route not matched above
-        # Allows React Router to handle client-side routing
-        app.router.add_get('/{tail:.*}', index_handler)
         
         print(f"[WORKER] Setting up AppRunner...", flush=True)
         # Create site and bind to port immediately

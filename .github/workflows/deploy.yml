@@ -3,7 +3,7 @@
 # Staging: Push to 'develop' branch → deploys to web3-xdr (staging)
 # Production: Push to 'main' branch → deploys to web3-xdr-production
 # 
-# NEW: Multi-stage build includes React War Room UI bundled with Python worker
+# NEW: Multi-stage build includes Runtime Security Plane with Python worker
 # =============================================================================
 
 name: Deploy Sentinel3
@@ -23,7 +23,6 @@ on:
 env:
   GCP_REGION: us-central1
   GCP_PROJECT: web3-xdr
-  NODE_VERSION: '18'
 
 jobs:
   # ===========================================================================
@@ -43,12 +42,6 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: 'frontend/war-room/package-lock.json'
       
       - name: Install Python dependencies
         run: |
@@ -60,13 +53,6 @@ jobs:
           python -c "from src.api.server import create_app; print('✅ Server imports OK')"
           python -c "from src.query.lucene_parser import execute_lucene_query; print('✅ Query parser OK')"
       
-      - name: Build Frontend (verification)
-        run: |
-          cd frontend/war-room
-          npm ci
-          npm run build
-          ls -la dist/
-          echo " Frontend build successful"
       
       - name: Run Python tests
         run: |
@@ -74,9 +60,7 @@ jobs:
       
       - name: Verify Dockerfile
         run: |
-          echo " Multi-stage Dockerfile ready for deployment"
-          grep -q "FROM node:18-alpine AS frontend-builder" Dockerfile && echo " Frontend builder stage found"
-          grep -q "COPY --from=frontend-builder" Dockerfile && echo " Frontend copy stage found"
+          echo " Dockerfile ready for deployment"
 
   # ===========================================================================
   # Deploy to Staging (develop branch)
@@ -108,13 +92,13 @@ jobs:
       
       - name: "Build Docker image with frontend"
         run: |
-          echo " Building multi-stage Docker image (includes React frontend)..."
+          echo " Building multi-stage Docker image ()..."
           docker build \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} .
           docker tag ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging-${{ github.sha }} \
                      ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:staging
-          echo " Docker image built with bundled UI"
+          echo " Docker image built "
       
       - name: Push to Artifact Registry
         run: |
@@ -152,7 +136,7 @@ jobs:
             --cpu-boost \
             --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo,AUTO_START_SCANNER=true" \
             --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
-          echo " Worker deployed with bundled War Room UI"
+          echo " Worker deployed with successfully"
       
       - name: Get Staging URLs
         run: |
@@ -167,12 +151,12 @@ jobs:
           echo "**Environment:** Staging" >> $GITHUB_STEP_SUMMARY
           echo "**API URL:** $API_URL" >> $GITHUB_STEP_SUMMARY
           echo "**Worker URL (with UI):** $WORKER_URL" >> $GITHUB_STEP_SUMMARY
-          echo "**War Room UI:** $WORKER_URL/" >> $GITHUB_STEP_SUMMARY
+          echo "**Worker Service:** $WORKER_URL/" >> $GITHUB_STEP_SUMMARY
           echo "**Health Check:** $WORKER_URL/health" >> $GITHUB_STEP_SUMMARY
           echo "**Metrics:** $WORKER_URL/metrics" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`staging-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo " **Frontend:** React War Room UI bundled and deployed" >> $GITHUB_STEP_SUMMARY
+          echo " **Frontend:** Runtime Security Plane and deployed" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
   # Deploy to Production (main branch)
@@ -204,13 +188,13 @@ jobs:
       
       - name: "Build Docker image with frontend"
         run: |
-          echo " Building multi-stage Docker image (includes React frontend)..."
+          echo " Building multi-stage Docker image ()..."
           docker build \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} .
           docker tag ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:${{ github.sha }} \
                      ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/web3-xdr-repo/web3-xdr:latest
-          echo " Docker image built with bundled UI"
+          echo " Docker image built "
       
       - name: Push to Artifact Registry
         run: |
@@ -248,7 +232,7 @@ jobs:
             --cpu-boost \
             --set-env-vars "ENVIRONMENT=production,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo,AUTO_START_SCANNER=true" \
             --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,REDIS_URL=web3-xdr-redis-url:latest"
-          echo " Worker deployed with bundled War Room UI"
+          echo " Worker deployed with successfully"
       
       - name: Get Production URLs
         run: |
@@ -263,9 +247,9 @@ jobs:
           echo "**Environment:** Production" >> $GITHUB_STEP_SUMMARY
           echo "**API URL:** $API_URL" >> $GITHUB_STEP_SUMMARY
           echo "**Worker URL (with UI):** $WORKER_URL" >> $GITHUB_STEP_SUMMARY
-          echo "**War Room UI:** $WORKER_URL/" >> $GITHUB_STEP_SUMMARY
+          echo "**Worker Service:** $WORKER_URL/" >> $GITHUB_STEP_SUMMARY
           echo "**Health Check:** $WORKER_URL/health" >> $GITHUB_STEP_SUMMARY
           echo "**Metrics:** $WORKER_URL/metrics" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo " **Frontend:** React War Room UI bundled and deployed" >> $GITHUB_STEP_SUMMARY
+          echo " **Frontend:** Runtime Security Plane and deployed" >> $GITHUB_STEP_SUMMARY
