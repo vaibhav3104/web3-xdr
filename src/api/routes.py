@@ -7,6 +7,9 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+import structlog
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -275,6 +278,9 @@ async def list_events(
     """
     List security events with full details for log explorer.
     
+    Reads from PostgreSQL database (not in-memory state) so API and Worker
+    can run in separate containers.
+    
     Supports:
     - Basic filters: chain_id, event_type, severity, time range
     - Simple text search: search parameter
@@ -285,54 +291,68 @@ async def list_events(
     - event_type:Transfer AND amount:[1000 TO *]
     - (chain:ethereum OR chain:polygon) AND NOT severity:info
     """
-    from ..shared_state import monitor_state
+    from ..database.service import DatabaseService
+    from ..database.connection import DatabaseManager
     from ..query.lucene_parser import execute_lucene_query
     
-    events = monitor_state.get_events(limit=1000)
-    
-    # Apply basic filters first
-    if chain_id:
-        events = [e for e in events if e.chain == chain_id]
-    
-    if event_type:
-        events = [e for e in events if e.event_type == event_type]
-    
-    if severity:
-        events = [e for e in events if e.severity == severity]
-    
+    # Parse time filters
+    start_dt = None
+    end_dt = None
     if start_time:
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-            events = [e for e in events if e.timestamp >= start_dt]
         except:
             pass
-    
     if end_time:
         try:
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-            events = [e for e in events if e.timestamp <= end_dt]
         except:
             pass
     
-    # Convert events to dicts for Lucene query
-    event_dicts = [
-        {
-            "id": e.id,
-            "chain": e.chain,
-            "chain_id": e.chain,
+    # Query events from PostgreSQL database
+    try:
+        db_events = await DatabaseService.get_events(
+            chain_id=chain_id,
+            event_type=event_type,
+            severity=severity,
+            start_time=start_dt,
+            end_time=end_dt,
+            limit=min(limit * 2, 2000),  # Fetch more for filtering/search
+            offset=0
+        )
+    except Exception as e:
+        logger.error("database_query_failed", error=str(e))
+        # Fallback to empty result
+        return {
+            "total": 0,
+            "query_used": None,
+            "events": []
+        }
+    
+    # Convert EventModel to dict format expected by frontend
+    event_dicts = []
+    for e in db_events:
+        event_dict = {
+            "id": str(e.id),
+            "event_id": e.event_id,
+            "chain": e.chain_id,
+            "chain_id": e.chain_id,
             "event_type": e.event_type,
             "tx_hash": e.tx_hash,
-            "block": e.block,
-            "block_number": e.block,
-            "contract": e.contract,
-            "contract_address": e.contract,
-            "severity": e.severity,
-            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
-            "data": e.data or {},
-            **(e.data or {})  # Flatten data fields for searching
+            "block": e.block_number,
+            "block_number": e.block_number,
+            "contract": e.contract_address,
+            "contract_address": e.contract_address,
+            "from_address": e.from_address,
+            "to_address": e.to_address,
+            "severity": e.severity.lower() if e.severity else "low",
+            "timestamp": e.block_timestamp.isoformat() if e.block_timestamp else None,
+            "amount": float(e.amount) if e.amount else None,
+            "amount_usd": float(e.amount_usd) if e.amount_usd else None,
+            "data": e.raw_data or {},
+            **(e.raw_data or {})  # Flatten raw_data fields for searching
         }
-        for e in events
-    ]
+        event_dicts.append(event_dict)
     
     # Apply Lucene query if provided
     if query and query.strip():
@@ -350,6 +370,7 @@ async def list_events(
             )
         ]
     
+    # Limit results
     event_dicts = event_dicts[:limit]
     
     # Return full event details
