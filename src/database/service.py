@@ -99,28 +99,45 @@ class DatabaseService:
                     raw = event.get('raw_data') or event
                     raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
                     
-                    # Handle timestamp - convert to timezone-aware datetime
+                    # Handle timestamp - convert to UTC timezone-aware datetime
+                    # CRITICAL: asyncpg requires timezone-aware datetime, and all must be UTC to avoid subtraction errors
                     block_timestamp = event.get('block_timestamp')
                     if isinstance(block_timestamp, str):
                         try:
-                            # Try ISO format first (most common)
+                            # Parse ISO string
                             if 'Z' in block_timestamp:
-                                block_timestamp = datetime.fromisoformat(block_timestamp.replace('Z', '+00:00'))
+                                dt = datetime.fromisoformat(block_timestamp.replace('Z', '+00:00'))
                             elif '+' in block_timestamp or block_timestamp.count('-') > 2:
-                                block_timestamp = datetime.fromisoformat(block_timestamp)
+                                dt = datetime.fromisoformat(block_timestamp)
                             else:
-                                # No timezone info - parse and add UTC
-                                block_timestamp = datetime.strptime(block_timestamp, '%Y-%m-%dT%H:%M:%S.%f')
-                                block_timestamp = block_timestamp.replace(tzinfo=timezone.utc)
-                        except:
+                                # No timezone - parse as naive and add UTC
+                                dt = datetime.strptime(block_timestamp, '%Y-%m-%dT%H:%M:%S.%f')
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            
+                            # Normalize to UTC (convert if in different timezone)
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            else:
+                                dt = dt.astimezone(timezone.utc)
+                            block_timestamp = dt
+                        except Exception as e:
+                            logger.debug("timestamp_parse_failed", timestamp=block_timestamp, error=str(e))
                             block_timestamp = datetime.now(timezone.utc)
                     elif isinstance(block_timestamp, datetime):
-                        # Ensure timezone-aware
+                        # Normalize existing datetime to UTC
                         if block_timestamp.tzinfo is None:
                             block_timestamp = block_timestamp.replace(tzinfo=timezone.utc)
+                        else:
+                            block_timestamp = block_timestamp.astimezone(timezone.utc)
                     else:
                         # None or other type - use current UTC time
                         block_timestamp = datetime.now(timezone.utc)
+                    
+                    # Final validation - ensure it's UTC timezone-aware
+                    if not isinstance(block_timestamp, datetime) or block_timestamp.tzinfo is None:
+                        block_timestamp = datetime.now(timezone.utc)
+                    elif block_timestamp.tzinfo != timezone.utc:
+                        block_timestamp = block_timestamp.astimezone(timezone.utc)
                     
                     # Handle amount/amount_usd - convert to Decimal or None
                     def to_decimal_or_none(val):
