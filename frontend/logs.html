@@ -1173,24 +1173,27 @@
             document.querySelectorAll('.quick-time-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
 
-            // Use UTC time to avoid timezone issues
-            const now = new Date();
-            const nowUTC = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
-            let startUTC;
+            // Calculate time range in UTC (events are stored in UTC)
+            const now = new Date(); // Current time
+            let startTime;
 
             switch(range) {
-                case '5m': startUTC = new Date(nowUTC.getTime() - 5 * 60 * 1000); break;
-                case '15m': startUTC = new Date(nowUTC.getTime() - 15 * 60 * 1000); break;
-                case '1h': startUTC = new Date(nowUTC.getTime() - 60 * 60 * 1000); break;
-                case '6h': startUTC = new Date(nowUTC.getTime() - 6 * 60 * 60 * 1000); break;
-                case '24h': startUTC = new Date(nowUTC.getTime() - 24 * 60 * 60 * 1000); break;
-                case '7d': startUTC = new Date(nowUTC.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+                case '5m': startTime = new Date(now.getTime() - 5 * 60 * 1000); break;
+                case '15m': startTime = new Date(now.getTime() - 15 * 60 * 1000); break;
+                case '1h': startTime = new Date(now.getTime() - 60 * 60 * 1000); break;
+                case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+                case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+                case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
                 case 'custom': return; // Don't change inputs
             }
 
-            // Convert UTC back to local for datetime-local input display
-            const startLocal = new Date(startUTC.getTime() - startUTC.getTimezoneOffset() * 60000);
-            const endLocal = new Date(nowUTC.getTime() - nowUTC.getTimezoneOffset() * 60000);
+            // Convert UTC times to local time for datetime-local input display
+            // datetime-local inputs expect local time, but we want to show the UTC equivalent
+            // So we display the UTC time as if it were local time
+            const startLocal = new Date(startTime.getUTCFullYear(), startTime.getUTCMonth(), startTime.getUTCDate(), 
+                                       startTime.getUTCHours(), startTime.getUTCMinutes(), startTime.getUTCSeconds());
+            const endLocal = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+                                     now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
             
             document.getElementById('endTime').value = formatDateTimeLocal(endLocal);
             document.getElementById('startTime').value = formatDateTimeLocal(startLocal);
@@ -1391,21 +1394,22 @@
             let endTime = null;
             
             if (startTimeInput) {
-                // datetime-local input is timezone-naive (local time)
-                // JavaScript Date.getTime() already returns UTC milliseconds
-                // But we need to ensure the Date represents the correct UTC moment
-                // When datetime-local is "2026-01-09T14:00" in IST, it means 14:00 IST = 08:30 UTC
-                // new Date("2026-01-09T14:00") creates a Date that internally stores 08:30 UTC
-                // So getTime() already gives us the correct UTC timestamp
-                // We can use it directly, but let's be explicit about UTC
-                const localStart = new Date(startTimeInput);
-                // getTime() returns UTC milliseconds, so create UTC Date directly
-                startTime = new Date(localStart.getTime());
+                // datetime-local inputs are timezone-naive (treated as local time by browser)
+                // But setTimeRange sets them to UTC time values (displayed as local)
+                // So we need to interpret the input as UTC time, not local time
+                // Parse the datetime-local string and create a UTC Date
+                const [datePart, timePart] = startTimeInput.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
+                // Create Date object treating the input as UTC
+                startTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
             }
             
             if (endTimeInput) {
-                const localEnd = new Date(endTimeInput);
-                endTime = new Date(localEnd.getTime());
+                const [datePart, timePart] = endTimeInput.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
+                endTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
             }
             
             console.log('Applying filters:', {
