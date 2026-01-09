@@ -95,22 +95,37 @@ class DatabaseService:
                     
                     block_number_int = int(block_number)
                     
-                    # Timestamp: worker sends ISO string "2026-01-09T18:37:56.759956+00:00"
+                    # Timestamp: worker sends ISO string - convert to UTC datetime
+                    # CRITICAL: Must be timezone-aware UTC for asyncpg
                     ts_str = event.get('block_timestamp') or event.get('timestamp')
                     if isinstance(ts_str, str):
                         try:
+                            # Normalize Z to +00:00
                             if ts_str.endswith('Z'):
                                 ts_str = ts_str[:-1] + '+00:00'
+                            # Parse ISO string
                             dt = datetime.fromisoformat(ts_str)
+                            # Ensure UTC timezone-aware
                             if dt.tzinfo is None:
                                 dt = dt.replace(tzinfo=timezone.utc)
-                            else:
+                            elif dt.tzinfo != timezone.utc:
                                 dt = dt.astimezone(timezone.utc)
-                        except:
+                        except Exception as e:
+                            logger.debug("timestamp_parse_error", ts=ts_str, error=str(e))
                             dt = datetime.now(timezone.utc)
                     elif isinstance(ts_str, datetime):
-                        dt = ts_str.astimezone(timezone.utc) if ts_str.tzinfo else ts_str.replace(tzinfo=timezone.utc)
+                        # Normalize existing datetime to UTC
+                        if ts_str.tzinfo is None:
+                            dt = ts_str.replace(tzinfo=timezone.utc)
+                        elif ts_str.tzinfo != timezone.utc:
+                            dt = ts_str.astimezone(timezone.utc)
+                        else:
+                            dt = ts_str
                     else:
+                        dt = datetime.now(timezone.utc)
+                    
+                    # Final check - must be UTC timezone-aware
+                    if not isinstance(dt, datetime) or dt.tzinfo is None or dt.tzinfo != timezone.utc:
                         dt = datetime.now(timezone.utc)
                     
                     # Amounts: simple conversion
