@@ -291,6 +291,19 @@ class Sentinel3Worker:
         # Initialize Runtime Security Plane if enabled
         if self.runtime_enabled and RUNTIME_AVAILABLE:
             await self._initialize_runtime_engines()
+        
+        # Auto-start contract scanner if enabled
+        if os.getenv("AUTO_START_SCANNER", "false").lower() == "true":
+            try:
+                from src.ai.collectors import start_auto_collection
+                scanner_chains = os.getenv("SCANNER_CHAINS", "ethereum,polygon,arbitrum").split(",")
+                scanner_chains = [c.strip() for c in scanner_chains if c.strip()]
+                await start_auto_collection(chains=scanner_chains)
+                logger.info("contract_scanner_auto_started", chains=scanner_chains)
+            except ImportError as e:
+                logger.warning("scanner_module_not_available", error=str(e))
+            except Exception as e:
+                logger.warning("scanner_auto_start_failed", error=str(e), exc_info=True)
     
     async def ingestion_loop(self):
         """Loop A: Ingest events from chains."""
@@ -638,6 +651,9 @@ class Sentinel3Worker:
         """Loop B: Consume events from bus and process."""
         logger.info("detection_loop_started")
         
+        # Import database service for event persistence
+        from src.database.service import DatabaseService
+        
         while self.running:
             try:
                 # Consume batch of events
@@ -654,13 +670,33 @@ class Sentinel3Worker:
                 bus_type = type(self.bus).__name__.lower().replace("bus", "")
                 bus_queue_depth.labels(bus_type=bus_type).set(queue_depth)
                 
+                # Batch events for efficient database saving
+                events_to_save = []
+                
                 # Process each event
                 for message in messages:
                     try:
                         event_data = message.event_data
                         chain_id = event_data.get("chain_id", "unknown")
                         
-                        # Stub for Phase 3: Just log for now
+                        # Prepare event for database persistence
+                        db_event = {
+                            "event_id": event_data.get("event_id") or str(uuid.uuid4()),
+                            "chain_id": chain_id,
+                            "event_type": event_data.get("event_type", "Unknown"),
+                            "tx_hash": event_data.get("tx_hash"),
+                            "block_number": event_data.get("block_number"),
+                            "block_timestamp": event_data.get("block_timestamp") or event_data.get("timestamp"),
+                            "contract_address": event_data.get("contract_address") or event_data.get("contract"),
+                            "from_address": event_data.get("from_address") or event_data.get("from"),
+                            "to_address": event_data.get("to_address") or event_data.get("to"),
+                            "amount": event_data.get("amount") or event_data.get("value"),
+                            "amount_usd": event_data.get("amount_usd"),
+                            "severity": (event_data.get("severity") or "LOW").upper(),
+                            "raw_data": event_data.get("raw_data") or event_data,
+                        }
+                        events_to_save.append(db_event)
+                        
                         logger.info(
                             "processing_event",
                             event_id=event_data.get("event_id", "unknown"),
@@ -677,6 +713,14 @@ class Sentinel3Worker:
                         
                     except Exception as e:
                         logger.error("event_processing_error", error=str(e))
+                
+                # Save batch to database
+                if events_to_save:
+                    try:
+                        saved_count = await DatabaseService.save_events_batch(events_to_save)
+                        logger.info("events_saved_to_database", count=saved_count, batch_size=len(events_to_save))
+                    except Exception as e:
+                        logger.error("database_save_failed", error=str(e), exc_info=True)
                 
             except Exception as e:
                 logger.error("detection_loop_error", error=str(e))
