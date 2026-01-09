@@ -43,7 +43,7 @@ class ListenerConfig:
     
     # Recovery
     start_block: Optional[int] = None  # None = latest
-    max_blocks_per_batch: int = 100
+    max_blocks_per_batch: int = 10  # Reduced from 100 to avoid RPC "range too large" errors
     
     # Retry configuration
     max_retries: int = 5
