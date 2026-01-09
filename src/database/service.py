@@ -99,7 +99,7 @@ class DatabaseService:
                     raw = event.get('raw_data') or event
                     raw_json = json.dumps(raw) if isinstance(raw, (dict, list)) else '{}'
                     
-                    # Handle timestamp - convert to datetime if string
+                    # Handle timestamp - convert to datetime if string, ensure timezone-aware
                     block_timestamp = event.get('block_timestamp')
                     if isinstance(block_timestamp, str):
                         try:
@@ -110,24 +110,23 @@ class DatabaseService:
                                 # Fallback to strptime for other formats
                                 block_timestamp = datetime.strptime(block_timestamp, '%Y-%m-%dT%H:%M:%S.%f')
                             except:
-                                block_timestamp = datetime.utcnow()
+                                block_timestamp = datetime.now(timezone.utc)
                     elif block_timestamp is None:
-                        block_timestamp = datetime.utcnow()
+                        block_timestamp = datetime.now(timezone.utc)
                     
-                    # Convert to ISO format string for SQL (ensure timezone-aware)
+                    # Ensure timezone-aware datetime object (asyncpg requires datetime, not string)
                     if isinstance(block_timestamp, datetime):
                         if block_timestamp.tzinfo is None:
                             block_timestamp = block_timestamp.replace(tzinfo=timezone.utc)
-                        block_timestamp_str = block_timestamp.isoformat()
                     else:
-                        block_timestamp_str = datetime.utcnow().isoformat()
+                        block_timestamp = datetime.now(timezone.utc)
                     
                     insert_sql = text("""
                         INSERT INTO events (id, event_id, chain_id, event_type, tx_hash, block_number,
                             block_timestamp, contract_address, severity, amount, amount_usd,
                             from_address, to_address, raw_data)
                         VALUES (CAST(:id AS UUID), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                            CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), :contract_address, :severity, 
+                            :block_timestamp, :contract_address, :severity, 
                             CAST(:amount AS NUMERIC), CAST(:amount_usd AS NUMERIC),
                             :from_address, :to_address, CAST(:raw_data AS JSONB))
                         ON CONFLICT (event_id) DO NOTHING
@@ -140,7 +139,7 @@ class DatabaseService:
                         'event_type': str(event.get('event_type') or 'unknown'),
                         'tx_hash': str(tx_hash),
                         'block_number': int(block_number),
-                        'block_timestamp': block_timestamp_str,
+                        'block_timestamp': block_timestamp,  # Pass datetime object directly
                         'contract_address': str(event.get('contract_address') or ''),
                         'severity': str((event.get('severity') or 'LOW').upper()),
                         'amount': event.get('amount'),
