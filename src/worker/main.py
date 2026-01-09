@@ -24,8 +24,11 @@ import yaml
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 import structlog
+
+if TYPE_CHECKING:
+    from src.runtime.runtime_engine import RuntimeEngine
 
 # Use aiohttp for lightweight, fast-binding health server
 from aiohttp import web
@@ -132,7 +135,7 @@ class Sentinel3Worker:
         self.processed_blocks: Dict[str, int] = {}
         
         # Runtime Security Plane components
-        self.runtime_engines: Dict[str, RuntimeEngine] = {}
+        self.runtime_engines: Dict[str, "RuntimeEngine"] = {}
         self.runtime_enabled = os.getenv("RUNTIME_ENABLED", "false").lower() == "true"
         
         logger.info("worker_initialized", runtime_enabled=self.runtime_enabled)
@@ -445,7 +448,7 @@ class Sentinel3Worker:
                 logger.error("runtime_loop_error", error=str(e))
                 await asyncio.sleep(5.0)
     
-    async def _store_simulation_run(self, runtime_engine: RuntimeEngine, simulation_run_id: str):
+    async def _store_simulation_run(self, runtime_engine: "RuntimeEngine", simulation_run_id: str):
         """Store simulation run to database (stub - would need to get from runtime engine)."""
         # TODO: Store simulation run details
         # For now, this is a placeholder
