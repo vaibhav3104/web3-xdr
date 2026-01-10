@@ -30,9 +30,11 @@ COPY src/ ./src/
 COPY config/ ./config/
 COPY frontend/ ./frontend/
 COPY monitor.py .
+COPY entrypoint.sh /app/entrypoint.sh
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash xdr && \
+# Make entrypoint executable and create non-root user for security
+RUN chmod +x /app/entrypoint.sh && \
+    useradd --create-home --shell /bin/bash xdr && \
     chown -R xdr:xdr /app
 
 USER xdr
@@ -46,6 +48,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Default: Run worker
 # Override with: docker run -e PROC_TYPE=api ... for API-only mode
-ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["if [ \"$PROC_TYPE\" = \"api\" ]; then python -m src.api.server; else python -m src.worker.main; fi"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 
