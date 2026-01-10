@@ -1226,7 +1226,7 @@
             if (isLoadingMore) return;  // Prevent duplicate loads
             
             const startTime = performance.now();
-            
+
             // Reset events if starting fresh
             if (reset) {
                 allEvents = [];
@@ -1258,9 +1258,9 @@
                 }
                 
                 // Add server-side filters (always send to API)
-                if (chainFilter) params.append('chain_id', chainFilter);
-                if (severityFilter) params.append('severity', severityFilter);
-                if (eventTypeFilter) params.append('event_type', eventTypeFilter);
+                    if (chainFilter) params.append('chain_id', chainFilter);
+                    if (severityFilter) params.append('severity', severityFilter);
+                    if (eventTypeFilter) params.append('event_type', eventTypeFilter);
                 
                 // Send time filters to API (server-side filtering)
                 if (startTimeVal && endTimeVal) {
@@ -1290,7 +1290,7 @@
                 }
                 
                 const data = await response.json();
-                
+
                 // Accumulate events (for pagination)
                 const newEvents = data.events || [];
                 allEvents = reset ? newEvents : [...allEvents, ...newEvents];
@@ -1310,7 +1310,7 @@
                 if (data.query_used) {
                     console.log('Query executed:', data.query_used);
                 }
-                
+
                 // Apply client-side filters (only for display/sorting, not time filtering)
                 applyFilters();
                 
