@@ -28,9 +28,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY src/ ./src/
 COPY config/ ./config/
-COPY monitor.py .
-# Copy frontend directory (for logs.html and other static HTML files)
 COPY frontend/ ./frontend/
+COPY monitor.py .
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash xdr && \
