@@ -362,65 +362,39 @@ class Sentinel3Worker:
                                         else:
                                             event.status = EventStatus.PENDING
                                         
-                                        # Publish to bus (with fallback to direct database save)
+                                        # ALWAYS save directly to database (bypass broken Redis consumer)
+                                        from src.database.service import DatabaseService
                                         try:
-                                            published = await self.bus.publish(event.to_dict())
-                                            if published:
-                                                events_ingested_total.labels(
-                                                    chain=chain_id,
-                                                    status=event.status.value
-                                                ).inc()
-                                                bus_events_published_total.labels(
-                                                    bus_type=type(self.bus).__name__.lower().replace("bus", "")
-                                                ).inc()
-                                            else:
-                                                # Fallback: Save directly to database if Redis publish fails
-                                                logger.warning("redis_publish_failed_fallback_to_db", chain=chain_id, tx_hash=event.tx_hash)
-                                                from src.database.service import DatabaseService
-                                                try:
-                                                    db_event = {
-                                                        "event_id": str(uuid.uuid4()),
-                                                        "chain_id": chain_id,
-                                                        "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
-                                                        "tx_hash": event.tx_hash,
-                                                        "block_number": event.block_number,
-                                                        "block_timestamp": datetime.now(timezone.utc).isoformat(),
-                                                        "contract_address": event.contract_address,
-                                                        "from_address": getattr(event, 'from_address', None),
-                                                        "to_address": getattr(event, 'to_address', None),
-                                                        "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
-                                                        "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
-                                                    }
-                                                    await DatabaseService.save_events_batch([db_event])
-                                                    logger.info("event_saved_direct_to_db", chain=chain_id, tx_hash=event.tx_hash)
-                                                except Exception as db_error:
-                                                    logger.error("direct_db_save_failed", error=str(db_error))
-                                        except Exception as bus_error:
-                                            # Redis connection failed - save directly to database
-                                            logger.warning("redis_unavailable_fallback_to_db", chain=chain_id, error=str(bus_error))
-                                            from src.database.service import DatabaseService
-                                            try:
-                                                db_event = {
-                                                    "event_id": str(uuid.uuid4()),
-                                                    "chain_id": chain_id,
-                                                    "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
-                                                    "tx_hash": event.tx_hash,
-                                                    "block_number": event.block_number,
-                                                    "block_timestamp": datetime.now(timezone.utc).isoformat(),
-                                                    "contract_address": event.contract_address,
-                                                    "from_address": getattr(event, 'from_address', None),
-                                                    "to_address": getattr(event, 'to_address', None),
-                                                    "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
-                                                    "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
-                                                }
-                                                await DatabaseService.save_events_batch([db_event])
-                                                events_ingested_total.labels(
-                                                    chain=chain_id,
-                                                    status=event.status.value
-                                                ).inc()
-                                                logger.info("event_saved_direct_to_db_fallback", chain=chain_id, tx_hash=event.tx_hash)
-                                            except Exception as db_error:
-                                                logger.error("direct_db_save_failed", error=str(db_error))
+                                            db_event = {
+                                                "event_id": str(uuid.uuid4()),
+                                                "chain_id": chain_id,
+                                                "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                                                "tx_hash": event.tx_hash,
+                                                "block_number": event.block_number,
+                                                "block_timestamp": datetime.now(timezone.utc).isoformat(),
+                                                "contract_address": event.contract_address,
+                                                "from_address": getattr(event, 'from_address', None),
+                                                "to_address": getattr(event, 'to_address', None),
+                                                "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
+                                                "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
+                                            }
+                                            await DatabaseService.save_events_batch([db_event])
+                                            events_ingested_total.labels(
+                                                chain=chain_id,
+                                                status=event.status.value
+                                            ).inc()
+                                            logger.info("event_saved_directly", chain=chain_id, tx_hash=event.tx_hash)
+                                        except Exception as db_error:
+                                            logger.error("direct_db_save_failed", chain=chain_id, tx_hash=event.tx_hash, error=str(db_error), exc_info=True)
+                                        
+                                        # Also publish to bus for runtime engine (best effort, ignore errors)
+                                        try:
+                                            await self.bus.publish(event.to_dict())
+                                            bus_events_published_total.labels(
+                                                bus_type=type(self.bus).__name__.lower().replace("bus", "")
+                                            ).inc()
+                                        except:
+                                            pass  # Ignore bus errors
                                 
                                 # Update processed block
                                 self.processed_blocks[chain_id] = head_block
