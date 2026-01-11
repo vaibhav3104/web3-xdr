@@ -338,14 +338,21 @@ class Sentinel3Worker:
                         finality_confirmed_blocks.labels(chain=chain_id).set(confirmed_block)
                         
                         processed = self.processed_blocks.get(chain_id, 0)
+                        
+                        # On first run, start from current head (don't try to catch up from 0)
+                        if processed == 0:
+                            processed = head_block - 1
+                            self.processed_blocks[chain_id] = processed
+                            logger.info("first_run_starting_from_head", chain=chain_id, head_block=head_block)
+                        
                         worker_processed_height.labels(chain=chain_id).set(processed)
                         lag = head_block - processed
                         head_lag_blocks.labels(chain=chain_id).set(lag)
                         
-                        # Poll for new logs (simplified - in production, track last processed block)
+                        # Poll for new logs (limit to 10 blocks to avoid RPC timeouts)
                         if processed < head_block:
-                            # Get logs from last processed to head
-                            from_block = max(processed + 1, head_block - 50)  # Limit range to avoid RPC errors
+                            # Get logs from last processed to head (max 10 blocks)
+                            from_block = max(processed + 1, head_block - 10)
                             to_block = head_block
                             
                             try:

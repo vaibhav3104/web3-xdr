@@ -1,0 +1,15 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'build'
+      - '--no-cache'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/web3-xdr/web3-xdr-repo/web3-xdr:manual-$SHORT_SHA'
+      - '.'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/web3-xdr/web3-xdr-repo/web3-xdr:manual-$SHORT_SHA'
+images:
+  - 'us-central1-docker.pkg.dev/web3-xdr/web3-xdr-repo/web3-xdr:manual-$SHORT_SHA'
+timeout: 1200s
