@@ -333,10 +333,16 @@ def save_events_batch_sync(events: List[Dict[str, Any]]) -> int:
         conn.commit()
         
         count = cursor.rowcount
+        logger.info("sync_events_saved", count=count, attempted=len(events), event_ids=[e.get("event_id")[:16] for e in events[:3]])
+        
+        # Verify the insert by querying back
+        cursor.execute("SELECT COUNT(*) FROM events WHERE event_id = ANY(%s)", ([e.get("event_id") for e in events],))
+        verify_count = cursor.fetchone()[0]
+        logger.info("sync_events_verified", inserted=count, found_in_db=verify_count)
+        
         cursor.close()
         conn.close()
         
-        logger.info("sync_events_saved", count=count, attempted=len(events))
         return count
         
     except Exception as e:
