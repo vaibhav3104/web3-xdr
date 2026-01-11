@@ -371,9 +371,15 @@ class Sentinel3Worker:
                                         
                                         # ALWAYS save directly to database (bypass broken Redis consumer)
                                         from src.database.service import DatabaseService
+                                        import hashlib
                                         try:
+                                            # Generate stable event_id based on chain, tx_hash, and log_index
+                                            log_index = getattr(event, 'log_index', 0)
+                                            stable_key = f"{chain_id}:{event.tx_hash}:{log_index}"
+                                            event_id = hashlib.sha256(stable_key.encode()).hexdigest()[:32]
+                                            
                                             db_event = {
-                                                "event_id": str(uuid.uuid4()),
+                                                "event_id": event_id,
                                                 "chain_id": chain_id,
                                                 "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
                                                 "tx_hash": event.tx_hash,

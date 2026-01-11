@@ -336,8 +336,8 @@ def save_events_batch_sync(events: List[Dict[str, Any]]) -> int:
         cursor.close()
         conn.close()
         
-        logger.info("sync_events_saved", count=count)
-        return count if count > 0 else len(events)
+        logger.info("sync_events_saved", count=count, attempted=len(events))
+        return count
         
     except Exception as e:
         logger.error("sync_events_save_failed", error=str(e))
