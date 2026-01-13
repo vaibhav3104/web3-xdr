@@ -89,6 +89,8 @@ def create_app(
         try:
             from ..database.connection import DatabaseManager
             await DatabaseManager.initialize()
+            # Ensure indexes exist (safe to call multiple times)
+            await DatabaseManager.ensure_indexes()
             logger.info("database_initialized_on_startup")
         except Exception as e:
             logger.error("database_initialization_failed", error=str(e))
