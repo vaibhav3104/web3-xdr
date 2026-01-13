@@ -87,7 +87,8 @@ class DatabaseService:
                 from sqlalchemy import text
                 import json
                 
-                # Raw SQL INSERT - no ORM, no complications
+                # Raw SQL INSERT - no ORM, no complications  
+                # Use CAST instead of :: for type conversion
                 raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
@@ -100,14 +101,14 @@ class DatabaseService:
                         :event_type, 
                         :tx_hash, 
                         :block_number,
-                        :block_timestamp::timestamp, 
+                        CAST(:block_timestamp AS TIMESTAMP), 
                         :contract_address, 
                         :severity, 
                         :amount, 
                         :amount_usd,
                         :from_address, 
                         :to_address, 
-                        :raw_data::jsonb,
+                        CAST(:raw_data AS JSONB),
                         NOW()
                     )
                     ON CONFLICT (event_id) DO NOTHING
