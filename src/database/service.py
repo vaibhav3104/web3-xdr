@@ -140,9 +140,19 @@ class DatabaseService:
                 
                 # Commit the transaction
                 await session.commit()
-                logger.info("save_events_batch_RAW_SQL_SUCCESS", executed=saved_count, total=len(events))
+                logger.info("save_events_batch_RAW_SQL_COMMITTED", executed=saved_count, total=len(events))
                 
-                # Assume success if no exception (ON CONFLICT silently skips duplicates)
+                # VERIFICATION: Query database to see if rows actually exist
+                verify_sql = text("SELECT COUNT(*) FROM events WHERE created_at > NOW() - INTERVAL '10 seconds'")
+                result = await session.execute(verify_sql)
+                actual_count = result.scalar()
+                
+                logger.info("save_events_batch_VERIFICATION", 
+                           expected=saved_count, 
+                           actual_in_db=actual_count,
+                           match=actual_count >= saved_count)
+                
+                # Return the executed count (not the DB count, as DB may have older rows too)
                 return saved_count
             
         except Exception as e:
