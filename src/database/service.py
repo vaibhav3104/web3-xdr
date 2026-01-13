@@ -258,8 +258,20 @@ class DatabaseService:
             """
             params['limit'] = limit + 1  # Fetch one extra to check if there's more
             
-            result = await session.execute(text(sql), params)
-            rows = result.fetchall()
+            # Execute query with timeout protection
+            import asyncio
+            try:
+                result = await asyncio.wait_for(
+                    session.execute(text(sql), params),
+                    timeout=25.0  # 25 second timeout for query execution
+                )
+                rows = result.fetchall()
+            except asyncio.TimeoutError:
+                logger.warning("get_events_query_timeout", filters={"chain_id": chain_id, "limit": limit})
+                return [], None  # Return empty result on timeout
+            except Exception as e:
+                logger.error("get_events_query_error", error=str(e), error_type=type(e).__name__)
+                raise
             
             # Convert rows to dicts
             events = []
