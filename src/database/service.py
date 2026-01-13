@@ -136,7 +136,16 @@ class DatabaseService:
                         saved_count += 1
                         logger.debug("raw_sql_insert_executed", event_id=event.get("event_id")[:16])
                     except Exception as e:
-                        logger.error("raw_sql_insert_failed", event_id=event.get("event_id")[:16], error=str(e))
+                        import traceback
+                        error_details = {
+                            "error": str(e) if str(e) else "Empty error message",
+                            "error_type": type(e).__name__,
+                            "error_args": str(e.args) if e.args else "No args",
+                            "traceback": traceback.format_exc()[-500:]  # Last 500 chars
+                        }
+                        logger.error("raw_sql_insert_failed", 
+                                   event_id=event.get("event_id", "unknown")[:16],
+                                   **error_details)
                 
                 # Commit the transaction
                 await session.commit()
