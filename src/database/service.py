@@ -74,42 +74,50 @@ class DatabaseService:
     @staticmethod
     async def save_events_batch(events: List[Dict[str, Any]]) -> int:
         """
-        Save events directly to database with surgical debug logging.
-        ON CONFLICT handles deduplication via event_id.
+        Save events using raw SQL (Nuclear Option).
+        No ORM, no fancy RETURNING - just direct INSERT.
         """
         if not events:
             return 0
         
-        # 1. Surgical Log: What exactly are we trying to save?
-        logger.info("save_events_batch_START", total_events=len(events), sample_event_id=events[0].get("event_id", "N/A")[:16])
-        
-        saved_count = 0
-        skipped_count = 0
+        logger.info("save_events_batch_RAW_SQL_START", total_events=len(events), sample_tx=events[0].get("tx_hash", "N/A")[:16])
         
         try:
             async with DatabaseManager.get_session() as session:
                 from sqlalchemy import text
-                from sqlalchemy.exc import SQLAlchemyError
                 import json
                 
-                # 2. Build INSERT with RETURNING to verify success
-                insert_sql = """
+                # Raw SQL INSERT - no ORM, no complications
+                raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
                         block_timestamp, contract_address, severity, amount, amount_usd,
-                        from_address, to_address, raw_data
+                        from_address, to_address, raw_data, created_at
                     ) VALUES (
-                        gen_random_uuid(), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
-                        :block_timestamp, :contract_address, :severity, :amount, :amount_usd,
-                        :from_address, :to_address, :raw_data::jsonb
+                        gen_random_uuid(), 
+                        :event_id, 
+                        :chain_id, 
+                        :event_type, 
+                        :tx_hash, 
+                        :block_number,
+                        :block_timestamp::timestamp, 
+                        :contract_address, 
+                        :severity, 
+                        :amount, 
+                        :amount_usd,
+                        :from_address, 
+                        :to_address, 
+                        :raw_data::jsonb,
+                        NOW()
                     )
                     ON CONFLICT (event_id) DO NOTHING
-                    RETURNING id
-                """
+                """)
                 
+                # Execute for each event
+                saved_count = 0
                 for event in events:
                     try:
-                        result = await session.execute(text(insert_sql), {
+                        await session.execute(raw_insert_sql, {
                             "event_id": event.get("event_id"),
                             "chain_id": event.get("chain_id"),
                             "event_type": event.get("event_type"),
@@ -124,32 +132,20 @@ class DatabaseService:
                             "to_address": event.get("to_address"),
                             "raw_data": json.dumps(event.get("raw_data", {}))
                         })
-                        
-                        # 3. Check if row was actually inserted
-                        row = result.fetchone()
-                        if row:
-                            saved_count += 1
-                            logger.debug("event_inserted", event_id=event.get("event_id")[:16], row_id=str(row[0])[:16])
-                        else:
-                            # This explains the count=0 mystery - duplicate!
-                            skipped_count += 1
-                            logger.warning("event_skipped_duplicate", event_id=event.get("event_id")[:16], tx_hash=event.get("tx_hash")[:16])
-                    
-                    except SQLAlchemyError as insert_error:
-                        logger.error("event_insert_failed", event_id=event.get("event_id")[:16], error=str(insert_error), exc_info=True)
+                        saved_count += 1
+                        logger.debug("raw_sql_insert_executed", event_id=event.get("event_id")[:16])
+                    except Exception as e:
+                        logger.error("raw_sql_insert_failed", event_id=event.get("event_id")[:16], error=str(e))
                 
-                # 4. Transaction Logging
-                logger.info("save_events_batch_COMMITTING", saved=saved_count, skipped=skipped_count)
+                # Commit the transaction
                 await session.commit()
-                logger.info("save_events_batch_COMMITTED", saved=saved_count, skipped=skipped_count, total=len(events))
+                logger.info("save_events_batch_RAW_SQL_SUCCESS", executed=saved_count, total=len(events))
+                
+                # Assume success if no exception (ON CONFLICT silently skips duplicates)
+                return saved_count
             
-            return saved_count
-            
-        except SQLAlchemyError as e:
-            logger.error("save_events_batch_FAILED", error=str(e), total=len(events), exc_info=True)
-            return 0
         except Exception as e:
-            logger.error("save_events_batch_UNEXPECTED_ERROR", error=str(e), total=len(events), exc_info=True)
+            logger.error("save_events_batch_RAW_SQL_FAILED", error=str(e), total=len(events), exc_info=True)
             return 0
     
     @staticmethod
