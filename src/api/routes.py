@@ -1046,75 +1046,98 @@ async def initialize_database():
 async def get_database_status():
     """
     Check database status: events count, indexes, and table statistics.
+    Uses simpler queries to avoid timeouts.
     """
     try:
         from ..database.connection import DatabaseManager
         from sqlalchemy import text
+        import asyncio
         
         async with DatabaseManager.get_session() as session:
-            # Get events count
-            result = await session.execute(text("SELECT COUNT(*) FROM events"))
-            event_count = result.scalar()
+            status_info = {}
             
-            # Get indexes
-            result = await session.execute(text("""
-                SELECT indexname 
-                FROM pg_indexes 
-                WHERE tablename = 'events' 
-                ORDER BY indexname
-            """))
-            indexes = [row[0] for row in result.fetchall()]
+            # Step 1: Check if table exists (fast)
+            try:
+                result = await asyncio.wait_for(
+                    session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'events')")),
+                    timeout=5.0
+                )
+                table_exists = result.scalar()
+                status_info["table_exists"] = table_exists
+                
+                if not table_exists:
+                    return {
+                        "status": "success",
+                        "message": "Events table does not exist",
+                        **status_info
+                    }
+            except asyncio.TimeoutError:
+                return {"status": "error", "error": "Timeout checking if table exists"}
+            except Exception as e:
+                status_info["table_check_error"] = str(e)
             
-            # Check for performance indexes
-            perf_indexes = {
-                "idx_events_created_at": "idx_events_created_at" in indexes,
-                "idx_events_chain_timestamp": "idx_events_chain_timestamp" in indexes
-            }
-            
-            # Get table stats
-            result = await session.execute(text("""
-                SELECT 
-                    COUNT(*) as total,
-                    COUNT(DISTINCT chain_id) as chains,
-                    MIN(created_at) as oldest,
-                    MAX(created_at) as newest
-                FROM events
-            """))
-            stats_row = result.fetchone()
-            
-            stats = {}
-            if stats_row and stats_row[0] > 0:
-                stats = {
-                    "total_events": stats_row[0],
-                    "unique_chains": stats_row[1],
-                    "oldest_event": stats_row[2].isoformat() if stats_row[2] else None,
-                    "newest_event": stats_row[3].isoformat() if stats_row[3] else None
+            # Step 2: Get indexes (fast - uses system catalog)
+            try:
+                result = await asyncio.wait_for(
+                    session.execute(text("""
+                        SELECT indexname 
+                        FROM pg_indexes 
+                        WHERE tablename = 'events' 
+                        ORDER BY indexname
+                    """)),
+                    timeout=5.0
+                )
+                indexes = [row[0] for row in result.fetchall()]
+                status_info["indexes"] = indexes
+                status_info["performance_indexes"] = {
+                    "idx_events_created_at": "idx_events_created_at" in indexes,
+                    "idx_events_chain_timestamp": "idx_events_chain_timestamp" in indexes
                 }
+            except asyncio.TimeoutError:
+                status_info["index_check_timeout"] = True
+            except Exception as e:
+                status_info["index_check_error"] = str(e)
             
-            # Get recent event types
-            result = await session.execute(text("""
-                SELECT chain_id, event_type, COUNT(*) as cnt 
-                FROM events 
-                GROUP BY chain_id, event_type 
-                ORDER BY cnt DESC 
-                LIMIT 10
-            """))
-            recent_types = [
-                {"chain": row[0], "type": row[1], "count": row[2]}
-                for row in result.fetchall()
-            ]
+            # Step 3: Try to get approximate count (may timeout)
+            try:
+                result = await asyncio.wait_for(
+                    session.execute(text("SELECT COUNT(*) FROM events LIMIT 1")),
+                    timeout=10.0
+                )
+                # Actually get full count
+                result = await asyncio.wait_for(
+                    session.execute(text("SELECT COUNT(*) FROM events")),
+                    timeout=30.0
+                )
+                event_count = result.scalar()
+                status_info["event_count"] = event_count
+            except asyncio.TimeoutError:
+                status_info["count_timeout"] = True
+                status_info["event_count"] = "timeout"
+            except Exception as e:
+                status_info["count_error"] = str(e)
+            
+            # Step 4: Try to get a sample (fast with LIMIT)
+            try:
+                result = await asyncio.wait_for(
+                    session.execute(text("SELECT chain_id, event_type FROM events LIMIT 5")),
+                    timeout=10.0
+                )
+                samples = [{"chain": row[0], "type": row[1]} for row in result.fetchall()]
+                status_info["sample_events"] = samples
+            except asyncio.TimeoutError:
+                status_info["sample_timeout"] = True
+            except Exception as e:
+                status_info["sample_error"] = str(e)
             
             return {
                 "status": "success",
-                "event_count": event_count,
-                "indexes": indexes,
-                "performance_indexes": perf_indexes,
-                "statistics": stats,
-                "recent_event_types": recent_types
+                **status_info
             }
     except Exception as e:
-        logger.error("db_status_check_failed", error=str(e), exc_info=True)
+        logger.error("db_status_check_failed", error=str(e), error_type=type(e).__name__, exc_info=True)
         return {
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "error_type": type(e).__name__
         }
