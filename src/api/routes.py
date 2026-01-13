@@ -1048,6 +1048,74 @@ async def initialize_database():
     except Exception as e:
         return {"error": str(e), "status": "failed"}
 
+@router.post("/maintenance/create-indexes")
+async def create_performance_indexes():
+    """
+    Create performance indexes on events table.
+    Safe to call multiple times (uses CREATE INDEX IF NOT EXISTS).
+    """
+    try:
+        from ..database.connection import DatabaseManager
+        from sqlalchemy import text
+        import asyncio
+        
+        await DatabaseManager.initialize()
+        
+        results = {}
+        async with DatabaseManager.get_session() as session:
+            # Index 1: Timeline sorting
+            try:
+                await asyncio.wait_for(
+                    session.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);"
+                    )),
+                    timeout=60.0
+                )
+                results["idx_events_created_at"] = "created"
+            except asyncio.TimeoutError:
+                results["idx_events_created_at"] = "timeout"
+            except Exception as e:
+                results["idx_events_created_at"] = f"error: {str(e)}"
+            
+            # Index 2: Chain + timestamp
+            try:
+                await asyncio.wait_for(
+                    session.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_events_chain_timestamp ON events(chain_id, block_timestamp DESC);"
+                    )),
+                    timeout=60.0
+                )
+                results["idx_events_chain_timestamp"] = "created"
+            except asyncio.TimeoutError:
+                results["idx_events_chain_timestamp"] = "timeout"
+            except Exception as e:
+                results["idx_events_chain_timestamp"] = f"error: {str(e)}"
+            
+            # Index 3: Chain + event_type
+            try:
+                await asyncio.wait_for(
+                    session.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_events_chain_type ON events(chain_id, event_type);"
+                    )),
+                    timeout=60.0
+                )
+                results["idx_events_chain_type"] = "created"
+            except asyncio.TimeoutError:
+                results["idx_events_chain_type"] = "timeout"
+            except Exception as e:
+                results["idx_events_chain_type"] = f"error: {str(e)}"
+        
+        return {
+            "status": "success",
+            "indexes": results
+        }
+    except Exception as e:
+        logger.error("create_indexes_failed", error=str(e), exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 @router.get("/maintenance/db-status")
 async def get_database_status():
     """
