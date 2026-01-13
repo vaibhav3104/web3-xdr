@@ -1041,3 +1041,80 @@ async def initialize_database():
         return {"error": "Database module not available", "status": "failed"}
     except Exception as e:
         return {"error": str(e), "status": "failed"}
+
+@router.get("/maintenance/db-status")
+async def get_database_status():
+    """
+    Check database status: events count, indexes, and table statistics.
+    """
+    try:
+        from ..database.connection import DatabaseManager
+        from sqlalchemy import text
+        
+        async with DatabaseManager.get_session() as session:
+            # Get events count
+            result = await session.execute(text("SELECT COUNT(*) FROM events"))
+            event_count = result.scalar()
+            
+            # Get indexes
+            result = await session.execute(text("""
+                SELECT indexname 
+                FROM pg_indexes 
+                WHERE tablename = 'events' 
+                ORDER BY indexname
+            """))
+            indexes = [row[0] for row in result.fetchall()]
+            
+            # Check for performance indexes
+            perf_indexes = {
+                "idx_events_created_at": "idx_events_created_at" in indexes,
+                "idx_events_chain_timestamp": "idx_events_chain_timestamp" in indexes
+            }
+            
+            # Get table stats
+            result = await session.execute(text("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(DISTINCT chain_id) as chains,
+                    MIN(created_at) as oldest,
+                    MAX(created_at) as newest
+                FROM events
+            """))
+            stats_row = result.fetchone()
+            
+            stats = {}
+            if stats_row and stats_row[0] > 0:
+                stats = {
+                    "total_events": stats_row[0],
+                    "unique_chains": stats_row[1],
+                    "oldest_event": stats_row[2].isoformat() if stats_row[2] else None,
+                    "newest_event": stats_row[3].isoformat() if stats_row[3] else None
+                }
+            
+            # Get recent event types
+            result = await session.execute(text("""
+                SELECT chain_id, event_type, COUNT(*) as cnt 
+                FROM events 
+                GROUP BY chain_id, event_type 
+                ORDER BY cnt DESC 
+                LIMIT 10
+            """))
+            recent_types = [
+                {"chain": row[0], "type": row[1], "count": row[2]}
+                for row in result.fetchall()
+            ]
+            
+            return {
+                "status": "success",
+                "event_count": event_count,
+                "indexes": indexes,
+                "performance_indexes": perf_indexes,
+                "statistics": stats,
+                "recent_event_types": recent_types
+            }
+    except Exception as e:
+        logger.error("db_status_check_failed", error=str(e), exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e)
+        }
