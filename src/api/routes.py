@@ -330,7 +330,6 @@ async def list_events(
                 chain_id=chain_id,
                 event_type=event_type,
                 severity=severity,
-                status=status,
                 start_time=start_dt,
                 end_time=end_dt
             )
