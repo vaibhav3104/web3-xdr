@@ -74,19 +74,25 @@ class DatabaseService:
     @staticmethod
     async def save_events_batch(events: List[Dict[str, Any]]) -> int:
         """
-        Save events directly to database.
+        Save events directly to database with surgical debug logging.
         ON CONFLICT handles deduplication via event_id.
         """
         if not events:
             return 0
         
-        # Use asyncpg directly (works with Cloud Run + Cloud SQL)
+        # 1. Surgical Log: What exactly are we trying to save?
+        logger.info("save_events_batch_START", total_events=len(events), sample_event_id=events[0].get("event_id", "N/A")[:16])
+        
+        saved_count = 0
+        skipped_count = 0
+        
         try:
             async with DatabaseManager.get_session() as session:
                 from sqlalchemy import text
+                from sqlalchemy.exc import SQLAlchemyError
                 import json
                 
-                # Prepare insert SQL
+                # 2. Build INSERT with RETURNING to verify success
                 insert_sql = """
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
@@ -98,12 +104,12 @@ class DatabaseService:
                         :from_address, :to_address, :raw_data::jsonb
                     )
                     ON CONFLICT (event_id) DO NOTHING
+                    RETURNING id
                 """
                 
-                saved = 0
                 for event in events:
                     try:
-                        await session.execute(text(insert_sql), {
+                        result = await session.execute(text(insert_sql), {
                             "event_id": event.get("event_id"),
                             "chain_id": event.get("chain_id"),
                             "event_type": event.get("event_type"),
@@ -118,16 +124,32 @@ class DatabaseService:
                             "to_address": event.get("to_address"),
                             "raw_data": json.dumps(event.get("raw_data", {}))
                         })
-                        saved += 1
-                    except Exception as insert_error:
-                        logger.error("event_insert_failed", event_id=event.get("event_id"), error=str(insert_error))
+                        
+                        # 3. Check if row was actually inserted
+                        row = result.fetchone()
+                        if row:
+                            saved_count += 1
+                            logger.debug("event_inserted", event_id=event.get("event_id")[:16], row_id=str(row[0])[:16])
+                        else:
+                            # This explains the count=0 mystery - duplicate!
+                            skipped_count += 1
+                            logger.warning("event_skipped_duplicate", event_id=event.get("event_id")[:16], tx_hash=event.get("tx_hash")[:16])
+                    
+                    except SQLAlchemyError as insert_error:
+                        logger.error("event_insert_failed", event_id=event.get("event_id")[:16], error=str(insert_error), exc_info=True)
                 
+                # 4. Transaction Logging
+                logger.info("save_events_batch_COMMITTING", saved=saved_count, skipped=skipped_count)
                 await session.commit()
-                logger.info("events_batch_saved", count=saved, total=len(events))
+                logger.info("save_events_batch_COMMITTED", saved=saved_count, skipped=skipped_count, total=len(events))
             
-            return saved
+            return saved_count
+            
+        except SQLAlchemyError as e:
+            logger.error("save_events_batch_FAILED", error=str(e), total=len(events), exc_info=True)
+            return 0
         except Exception as e:
-            logger.error("events_batch_save_failed", error=str(e), count=len(events))
+            logger.error("save_events_batch_UNEXPECTED_ERROR", error=str(e), total=len(events), exc_info=True)
             return 0
     
     @staticmethod
