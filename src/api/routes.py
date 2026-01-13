@@ -324,15 +324,21 @@ async def list_events(
                 cursor=cursor is not None)
     try:
         # Get actual total count from database (only if requested - expensive operation)
+        # Skip if it times out - don't block the API response
         total_count = None
         if include_total:
-            total_count = await DatabaseService.get_events_count(
-                chain_id=chain_id,
-                event_type=event_type,
-                severity=severity,
-                start_time=start_dt,
-                end_time=end_dt
-            )
+            try:
+                total_count = await DatabaseService.get_events_count(
+                    chain_id=chain_id,
+                    event_type=event_type,
+                    severity=severity,
+                    start_time=start_dt,
+                    end_time=end_dt
+                )
+                # If None, count query timed out - that's OK, we'll just not include total
+            except Exception as e:
+                logger.warning("count_query_failed", error=str(e))
+                total_count = None
         
         # Fetch events with cursor pagination (preferred) or offset (backward compat)
         db_events, next_cursor = await DatabaseService.get_events(

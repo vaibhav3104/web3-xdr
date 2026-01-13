@@ -300,11 +300,12 @@ class DatabaseService:
         severity: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-    ) -> int:
+    ) -> Optional[int]:
         """
         Get actual total count of events matching filters using raw SQL.
-        This avoids ORM schema issues and gives accurate counts.
+        Returns None if query times out (to avoid blocking API).
         """
+        import asyncio
         async with DatabaseManager.get_session() as session:
             # Build WHERE clause (same logic as get_events)
             where_parts = []
@@ -344,11 +345,21 @@ class DatabaseService:
             
             where_clause = " AND ".join(where_parts) if where_parts else "1=1"
             
-            # Count query
-            sql = f"SELECT COUNT(*) FROM events WHERE {where_clause}"
-            result = await session.execute(text(sql), params)
-            count = result.scalar()
-            return count or 0
+            # Count query with timeout protection
+            try:
+                sql = f"SELECT COUNT(*) FROM events WHERE {where_clause}"
+                result = await asyncio.wait_for(
+                    session.execute(text(sql), params),
+                    timeout=15.0  # 15 second timeout for COUNT queries
+                )
+                count = result.scalar()
+                return count or 0
+            except asyncio.TimeoutError:
+                logger.warning("get_events_count_timeout", filters={"chain_id": chain_id, "event_type": event_type})
+                return None  # Return None to indicate timeout
+            except Exception as e:
+                logger.error("get_events_count_error", error=str(e))
+                return None
     
     @staticmethod
     async def count_events(

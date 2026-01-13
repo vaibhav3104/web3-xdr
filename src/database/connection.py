@@ -80,14 +80,23 @@ class DatabaseManager:
         
         logger.info("initializing_database", url=url.split("@")[-1])  # Log without password
         
+        # Optimize for g1-small: smaller pool, faster timeouts
+        # g1-small has 1 vCPU and 1.7GB RAM - too many connections can overwhelm it
         cls._engine = create_async_engine(
             url,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-            pool_size=int(os.getenv("DB_POOL_SIZE", "20")),  # Increased from 10 to 20 for high-throughput worker
-            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),  # Allow burst connections
-            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),  # Wait 30s before giving up on a connection
+            pool_size=int(os.getenv("DB_POOL_SIZE", "10")),  # Reduced to 10 for g1-small stability
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),  # Reduced overflow
+            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "10")),  # Faster timeout (10s)
             pool_pre_ping=True,  # Test connections before use
-            pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Recycle connections every 30 mins to prevent stale sockets
+            pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Recycle connections every 30 mins
+            connect_args={
+                "server_settings": {
+                    "statement_timeout": "30000",  # 30 second query timeout at DB level
+                    "application_name": "web3-xdr"
+                },
+                "command_timeout": 30,  # asyncpg command timeout
+            }
         )
         
         cls._session_factory = async_sessionmaker(
@@ -156,30 +165,49 @@ class DatabaseManager:
         """
         Ensure performance indexes exist on the events table.
         Safe to call multiple times (uses CREATE INDEX IF NOT EXISTS).
+        Uses timeouts to prevent blocking.
         """
         if cls._engine is None:
             raise RuntimeError("Database not initialized. Call initialize() first.")
         
         from sqlalchemy import text
+        import asyncio
         
         try:
+            # Use a separate connection with longer timeout for index creation
             async with cls._engine.begin() as conn:
                 # Index 1: For Timeline Sorting (Essential for API)
-                await conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);"
-                ))
-                logger.debug("index_created", index="idx_events_created_at")
+                try:
+                    await asyncio.wait_for(
+                        conn.execute(text(
+                            "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);"
+                        )),
+                        timeout=60.0  # 60 seconds for index creation
+                    )
+                    logger.info("index_created", index="idx_events_created_at")
+                except asyncio.TimeoutError:
+                    logger.warning("index_creation_timeout", index="idx_events_created_at")
+                except Exception as e:
+                    logger.warning("index_creation_error", index="idx_events_created_at", error=str(e))
                 
                 # Index 2: For Chain Filtering + Time (Essential for Dashboard)
-                await conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_events_chain_timestamp ON events(chain_id, block_timestamp DESC);"
-                ))
-                logger.debug("index_created", index="idx_events_chain_timestamp")
+                try:
+                    await asyncio.wait_for(
+                        conn.execute(text(
+                            "CREATE INDEX IF NOT EXISTS idx_events_chain_timestamp ON events(chain_id, block_timestamp DESC);"
+                        )),
+                        timeout=60.0
+                    )
+                    logger.info("index_created", index="idx_events_chain_timestamp")
+                except asyncio.TimeoutError:
+                    logger.warning("index_creation_timeout", index="idx_events_chain_timestamp")
+                except Exception as e:
+                    logger.warning("index_creation_error", index="idx_events_chain_timestamp", error=str(e))
             
-            logger.info("performance_indexes_ensured")
+            logger.info("performance_indexes_check_complete")
         except Exception as e:
             # Log but don't fail - indexes might already exist or table might not exist yet
-            logger.warning("index_creation_warning", error=str(e))
+            logger.warning("index_creation_warning", error=str(e), error_type=type(e).__name__)
     
     @classmethod
     async def drop_tables(cls) -> None:
