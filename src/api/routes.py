@@ -1116,6 +1116,55 @@ async def create_performance_indexes():
             "error": str(e)
         }
 
+@router.get("/maintenance/check-events")
+async def check_events_in_database():
+    """
+    Simple check to see if any events exist in the database.
+    Uses the simplest possible query.
+    """
+    try:
+        from ..database.connection import DatabaseManager
+        from sqlalchemy import text
+        import asyncio
+        
+        async with DatabaseManager.get_session() as session:
+            # Simplest possible query - just get one row
+            try:
+                result = await asyncio.wait_for(
+                    session.execute(text("SELECT COUNT(*) as cnt FROM events")),
+                    timeout=10.0
+                )
+                count = result.scalar()
+                
+                # If count > 0, get a sample
+                sample = None
+                if count and count > 0:
+                    result = await asyncio.wait_for(
+                        session.execute(text("SELECT chain_id, event_type, block_number, created_at FROM events ORDER BY created_at DESC LIMIT 1")),
+                        timeout=10.0
+                    )
+                    row = result.fetchone()
+                    if row:
+                        sample = {
+                            "chain": row[0],
+                            "event_type": row[1],
+                            "block": row[2],
+                            "created_at": str(row[3]) if row[3] else None
+                        }
+                
+                return {
+                    "status": "success",
+                    "event_count": count or 0,
+                    "sample_event": sample
+                }
+            except asyncio.TimeoutError:
+                return {"status": "timeout", "error": "Query timed out"}
+            except Exception as e:
+                return {"status": "error", "error": str(e), "error_type": type(e).__name__}
+    except Exception as e:
+        logger.error("check_events_failed", error=str(e), exc_info=True)
+        return {"status": "error", "error": str(e)}
+
 @router.get("/maintenance/db-status")
 async def get_database_status():
     """
