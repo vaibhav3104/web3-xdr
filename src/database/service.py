@@ -142,21 +142,29 @@ class DatabaseService:
                 await session.commit()
                 logger.info("save_events_batch_RAW_SQL_COMMITTED", executed=saved_count, total=len(events))
                 
-                # VERIFICATION: Query database to see if rows actually exist
-                verify_sql = text("SELECT COUNT(*) FROM events WHERE created_at > NOW() - INTERVAL '10 seconds'")
-                result = await session.execute(verify_sql)
-                actual_count = result.scalar()
-                
-                logger.info("save_events_batch_VERIFICATION", 
-                           expected=saved_count, 
-                           actual_in_db=actual_count,
-                           match=actual_count >= saved_count)
-                
-                # Return the executed count (not the DB count, as DB may have older rows too)
-                return saved_count
+            # VERIFICATION: Query database AFTER session closes (new session)
+            try:
+                async with DatabaseManager.get_session() as verify_session:
+                    verify_sql = text("SELECT COUNT(*) FROM events WHERE created_at > NOW() - INTERVAL '10 seconds'")
+                    result = await verify_session.execute(verify_sql)
+                    actual_count = result.scalar()
+                    
+                    logger.info("save_events_batch_VERIFICATION", 
+                               expected=saved_count, 
+                               actual_in_db=actual_count,
+                               match=actual_count >= saved_count)
+            except Exception as verify_error:
+                logger.warning("verification_query_failed", error=str(verify_error), error_type=type(verify_error).__name__)
+            
+            # Return the executed count
+            return saved_count
             
         except Exception as e:
-            logger.error("save_events_batch_RAW_SQL_FAILED", error=str(e), total=len(events), exc_info=True)
+            logger.error("save_events_batch_RAW_SQL_FAILED", 
+                        error=str(e), 
+                        error_type=type(e).__name__,
+                        total=len(events), 
+                        exc_info=True)
             return 0
     
     @staticmethod
