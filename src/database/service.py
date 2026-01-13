@@ -74,40 +74,10 @@ class DatabaseService:
     @staticmethod
     async def save_events_batch(events: List[Dict[str, Any]]) -> int:
         """
-        Save events with idempotency checks.
-        Uses the proven sync_service that works.
+        Save events directly to database.
+        ON CONFLICT handles deduplication via event_id.
         """
         if not events:
-            return 0
-        
-        from .idempotency import IdempotencyService, generate_idempotency_key
-        
-        # Filter out already processed events using idempotency table
-        events_to_save = []
-        for event in events:
-            # Generate idempotency key
-            idempotency_key = generate_idempotency_key(
-                chain_id=event.get("chain_id", ""),
-                tx_hash=event.get("tx_hash", ""),
-                log_index=event.get("log_index")
-            )
-            
-            # Check if already processed
-            existing = await IdempotencyService.check_idempotency(idempotency_key)
-            if existing and existing.get("status") == "PROCESSED":
-                logger.debug("event_already_processed", key=idempotency_key[:16])
-                continue
-            
-            # Mark as processing
-            await IdempotencyService.mark_processing(
-                idempotency_key=idempotency_key,
-                status="PENDING"
-            )
-            
-            events_to_save.append(event)
-        
-        if not events_to_save:
-            logger.debug("all_events_already_processed", total=len(events))
             return 0
         
         # Use asyncpg directly (works with Cloud Run + Cloud SQL)
@@ -131,7 +101,7 @@ class DatabaseService:
                 """
                 
                 saved = 0
-                for event in events_to_save:
+                for event in events:
                     try:
                         await session.execute(text(insert_sql), {
                             "event_id": event.get("event_id"),
@@ -153,39 +123,11 @@ class DatabaseService:
                         logger.error("event_insert_failed", event_id=event.get("event_id"), error=str(insert_error))
                 
                 await session.commit()
-            
-            # Mark successfully saved events as processed
-            if saved > 0:
-                for i, event in enumerate(events_to_save[:saved]):
-                    idempotency_key = generate_idempotency_key(
-                        chain_id=event.get("chain_id", ""),
-                        tx_hash=event.get("tx_hash", ""),
-                        log_index=event.get("log_index")
-                    )
-                    event_id = event.get("event_id")
-                    await IdempotencyService.mark_processed(
-                        idempotency_key=idempotency_key,
-                        event_id=event_id
-                    )
-                
-                logger.info("events_batch_saved", count=saved, total=len(events), filtered=len(events) - len(events_to_save))
+                logger.info("events_batch_saved", count=saved, total=len(events))
             
             return saved
         except Exception as e:
-            logger.error("events_batch_save_failed", error=str(e), count=len(events_to_save))
-            
-            # Mark failed events
-            for event in events_to_save:
-                idempotency_key = generate_idempotency_key(
-                    chain_id=event.get("chain_id", ""),
-                    tx_hash=event.get("tx_hash", ""),
-                    log_index=event.get("log_index")
-                )
-                await IdempotencyService.mark_failed(
-                    idempotency_key=idempotency_key,
-                    error_message=str(e)
-                )
-            
+            logger.error("events_batch_save_failed", error=str(e), count=len(events))
             return 0
     
     @staticmethod
