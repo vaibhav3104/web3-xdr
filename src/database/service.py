@@ -110,12 +110,49 @@ class DatabaseService:
             logger.debug("all_events_already_processed", total=len(events))
             return 0
         
-        import asyncio
-        from .sync_service import save_events_batch_sync
-        
-        # Use the sync service that already works - run it in thread pool
+        # Use asyncpg directly (works with Cloud Run + Cloud SQL)
         try:
-            saved = await asyncio.to_thread(save_events_batch_sync, events_to_save)
+            async with DatabaseManager.get_session() as session:
+                from sqlalchemy import text
+                import json
+                
+                # Prepare insert SQL
+                insert_sql = """
+                    INSERT INTO events (
+                        id, event_id, chain_id, event_type, tx_hash, block_number,
+                        block_timestamp, contract_address, severity, amount, amount_usd,
+                        from_address, to_address, raw_data
+                    ) VALUES (
+                        gen_random_uuid(), :event_id, :chain_id, :event_type, :tx_hash, :block_number,
+                        :block_timestamp, :contract_address, :severity, :amount, :amount_usd,
+                        :from_address, :to_address, :raw_data::jsonb
+                    )
+                    ON CONFLICT (event_id) DO NOTHING
+                """
+                
+                saved = 0
+                for event in events_to_save:
+                    try:
+                        await session.execute(text(insert_sql), {
+                            "event_id": event.get("event_id"),
+                            "chain_id": event.get("chain_id"),
+                            "event_type": event.get("event_type"),
+                            "tx_hash": event.get("tx_hash"),
+                            "block_number": event.get("block_number"),
+                            "block_timestamp": event.get("block_timestamp"),
+                            "contract_address": event.get("contract_address"),
+                            "severity": event.get("severity", "LOW"),
+                            "amount": event.get("amount"),
+                            "amount_usd": event.get("amount_usd"),
+                            "from_address": event.get("from_address"),
+                            "to_address": event.get("to_address"),
+                            "raw_data": json.dumps(event.get("raw_data", {}))
+                        })
+                        saved += 1
+                    except Exception as insert_error:
+                        logger.error("event_insert_failed", event_id=event.get("event_id"), error=str(insert_error))
+                
+                await session.commit()
             
             # Mark successfully saved events as processed
             if saved > 0:
