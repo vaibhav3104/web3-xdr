@@ -83,10 +83,11 @@ class DatabaseManager:
         cls._engine = create_async_engine(
             url,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-            pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
-            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
+            pool_size=int(os.getenv("DB_POOL_SIZE", "20")),  # Increased from 10 to 20 for high-throughput worker
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),  # Allow burst connections
+            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),  # Wait 30s before giving up on a connection
             pool_pre_ping=True,  # Test connections before use
-            pool_recycle=3600,   # Recycle connections after 1 hour
+            pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Recycle connections every 30 mins to prevent stale sockets
         )
         
         cls._session_factory = async_sessionmaker(
@@ -146,6 +147,39 @@ class DatabaseManager:
             await conn.run_sync(Base.metadata.create_all)
         
         logger.info("database_tables_created")
+        
+        # Apply performance indexes after table creation
+        await cls.ensure_indexes()
+    
+    @classmethod
+    async def ensure_indexes(cls) -> None:
+        """
+        Ensure performance indexes exist on the events table.
+        Safe to call multiple times (uses CREATE INDEX IF NOT EXISTS).
+        """
+        if cls._engine is None:
+            raise RuntimeError("Database not initialized. Call initialize() first.")
+        
+        from sqlalchemy import text
+        
+        try:
+            async with cls._engine.begin() as conn:
+                # Index 1: For Timeline Sorting (Essential for API)
+                await conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);"
+                ))
+                logger.debug("index_created", index="idx_events_created_at")
+                
+                # Index 2: For Chain Filtering + Time (Essential for Dashboard)
+                await conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_events_chain_timestamp ON events(chain_id, block_timestamp DESC);"
+                ))
+                logger.debug("index_created", index="idx_events_chain_timestamp")
+            
+            logger.info("performance_indexes_ensured")
+        except Exception as e:
+            # Log but don't fail - indexes might already exist or table might not exist yet
+            logger.warning("index_creation_warning", error=str(e))
     
     @classmethod
     async def drop_tables(cls) -> None:
