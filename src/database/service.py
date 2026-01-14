@@ -94,13 +94,10 @@ class DatabaseService:
             try:
                 # Get session - connection pool handles timeouts
                 async with DatabaseManager.get_session() as session:
-                
-                # Raw SQL INSERT - no ORM, no complications  
-                # Use CAST instead of :: for type conversion
-                # Match the actual table schema (from sync_service.py)
-                # Table may not have 'status' column, so we'll try without it first
-                # If status column exists, we'll add it in a migration
-                raw_insert_sql = text("""
+                    # Raw SQL INSERT - no ORM, no complications  
+                    # Use CAST instead of :: for type conversion
+                    # Match the actual table schema (from sync_service.py)
+                    raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
                         block_timestamp, contract_address, severity, amount, amount_usd,
