@@ -1116,6 +1116,73 @@ async def create_performance_indexes():
             "error": str(e)
         }
 
+@router.get("/maintenance/check-schema")
+async def check_table_schema():
+    """
+    Check the actual database table schema.
+    """
+    try:
+        from ..database.connection import DatabaseManager
+        from sqlalchemy import text
+        import asyncio
+        
+        async with DatabaseManager.get_session() as session:
+            # Get column information
+            result = await asyncio.wait_for(
+                session.execute(text("""
+                    SELECT 
+                        column_name, 
+                        data_type, 
+                        is_nullable,
+                        column_default
+                    FROM information_schema.columns 
+                    WHERE table_name = 'events' 
+                    ORDER BY ordinal_position
+                """)),
+                timeout=10.0
+            )
+            columns = result.fetchall()
+            
+            schema_info = []
+            for col in columns:
+                schema_info.append({
+                    "name": col[0],
+                    "type": col[1],
+                    "nullable": col[2] == "YES",
+                    "default": col[3]
+                })
+            
+            # Check constraints
+            result = await asyncio.wait_for(
+                session.execute(text("""
+                    SELECT 
+                        conname as constraint_name,
+                        contype as constraint_type,
+                        pg_get_constraintdef(oid) as definition
+                    FROM pg_constraint
+                    WHERE conrelid = 'events'::regclass
+                """)),
+                timeout=10.0
+            )
+            constraints = result.fetchall()
+            
+            constraint_info = []
+            for con in constraints:
+                constraint_info.append({
+                    "name": con[0],
+                    "type": con[1],
+                    "definition": con[2]
+                })
+            
+            return {
+                "status": "success",
+                "columns": schema_info,
+                "constraints": constraint_info
+            }
+    except Exception as e:
+        logger.error("check_schema_failed", error=str(e), exc_info=True)
+        return {"status": "error", "error": str(e)}
+
 @router.get("/maintenance/check-events")
 async def check_events_in_database():
     """
