@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
 import uuid
 import json
+import asyncio
 
 import structlog
 from sqlalchemy import select, func, delete, update, and_, or_, desc, text
@@ -76,14 +77,21 @@ class DatabaseService:
         """
         Save events using raw SQL (Nuclear Option).
         No ORM, no fancy RETURNING - just direct INSERT.
+        Includes retry logic for connection timeouts.
         """
         if not events:
             return 0
         
         logger.info("save_events_batch_RAW_SQL_START", total_events=len(events), sample_tx=events[0].get("tx_hash", "N/A")[:16])
         
-        try:
-            async with DatabaseManager.get_session() as session:
+        # Retry logic for connection timeouts
+        max_retries = 3
+        retry_delay = 2.0
+        
+        for attempt in range(max_retries):
+            try:
+                # Use asyncio.wait_for to add timeout to the entire operation
+                async with asyncio.wait_for(DatabaseManager.get_session(), timeout=25.0) as session:
                 from sqlalchemy import text
                 import json
                 
@@ -156,12 +164,40 @@ class DatabaseService:
                                    event_id=event.get("event_id", "unknown")[:16],
                                    **error_details)
                 
-                # Commit the transaction
-                await session.commit()
-                logger.info("save_events_batch_RAW_SQL_COMMITTED", executed=saved_count, total=len(events))
-                
-            # VERIFICATION: Query database AFTER session closes (new session)
-            try:
+                    # Commit the transaction
+                    await session.commit()
+                    logger.info("save_events_batch_RAW_SQL_COMMITTED", executed=saved_count, total=len(events))
+                    return saved_count
+                    
+            except asyncio.TimeoutError as e:
+                if attempt < max_retries - 1:
+                    logger.warning("db_connection_timeout_retry", attempt=attempt+1, max_retries=max_retries, delay=retry_delay)
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    logger.error("db_connection_timeout_failed", total_events=len(events), error=str(e))
+                    return 0
+            except Exception as e:
+                import traceback
+                error_details = {
+                    "error": str(e) if str(e) else "Empty error message",
+                    "error_type": type(e).__name__,
+                    "error_args": str(e.args) if e.args else "No args",
+                    "traceback": traceback.format_exc()[-500:]
+                }
+                logger.error("save_events_batch_failed", attempt=attempt+1, **error_details)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    return 0
+        
+        return 0
+        
+        # VERIFICATION: Query database AFTER session closes (new session)
+        try:
                 async with DatabaseManager.get_session() as verify_session:
                     verify_sql = text("SELECT COUNT(*) FROM events WHERE created_at > NOW() - INTERVAL '10 seconds'")
                     result = await verify_session.execute(verify_sql)
