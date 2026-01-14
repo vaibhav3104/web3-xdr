@@ -62,10 +62,10 @@ class DatabaseManager:
                 except:
                     pass
             
-            unix_socket_path = f"/cloudsql/{cloudsql_instance}"
-            logger.info("using_cloud_sql_proxy_unix_socket", instance=cloudsql_instance, socket_path=unix_socket_path)
+            unix_socket_dir = f"/cloudsql/{cloudsql_instance}"
+            logger.info("using_cloud_sql_proxy_unix_socket", instance=cloudsql_instance, socket_dir=unix_socket_dir)
             # asyncpg Unix socket format: postgresql+asyncpg://user:password@/database
-            # The host will be passed via connect_args in initialize()
+            # No host/port in URL - will be set via connect_args in initialize()
             return f"postgresql+asyncpg://{user}:{password}@/{database}"
         
         # Check DATABASE_URL (for direct connection or when Cloud SQL Proxy not available)
@@ -118,10 +118,16 @@ class DatabaseManager:
         }
         
         # If Cloud SQL Proxy is available, use Unix socket
+        # For asyncpg with Cloud SQL Proxy, use the socket directory as host
+        # The actual socket file will be .s.PGSQL.5432 in that directory
         if cloudsql_instance:
-            unix_socket_path = f"/cloudsql/{cloudsql_instance}"
-            connect_args["host"] = unix_socket_path
-            logger.info("using_unix_socket_connection", socket_path=unix_socket_path)
+            unix_socket_dir = f"/cloudsql/{cloudsql_instance}"
+            # asyncpg uses 'host' parameter for Unix socket directory
+            # It will automatically look for .s.PGSQL.5432 in that directory
+            connect_args["host"] = unix_socket_dir
+            # Remove port for Unix socket connections
+            connect_args.pop("port", None)
+            logger.info("using_unix_socket_connection", socket_dir=unix_socket_dir, instance=cloudsql_instance)
         
         logger.info("initializing_database", url=url.split("@")[-1] if "@" in url else url)  # Log without password
         
