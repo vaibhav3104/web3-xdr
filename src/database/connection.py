@@ -63,8 +63,10 @@ class DatabaseManager:
                     pass
             
             unix_socket_path = f"/cloudsql/{cloudsql_instance}"
-            logger.info("using_cloud_sql_proxy_unix_socket", instance=cloudsql_instance)
-            return f"postgresql+asyncpg://{user}:{password}@/{database}?host={unix_socket_path}"
+            logger.info("using_cloud_sql_proxy_unix_socket", instance=cloudsql_instance, socket_path=unix_socket_path)
+            # asyncpg Unix socket format: postgresql+asyncpg://user:password@/database
+            # The host will be passed via connect_args in initialize()
+            return f"postgresql+asyncpg://{user}:{password}@/{database}"
         
         # Check DATABASE_URL (for direct connection or when Cloud SQL Proxy not available)
         database_url = os.getenv("DATABASE_URL")
