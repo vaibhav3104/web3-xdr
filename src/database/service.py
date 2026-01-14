@@ -123,47 +123,47 @@ class DatabaseService:
                         NOW()
                     )
                     ON CONFLICT (event_id) DO NOTHING
-                """)
-                
-                # Execute for each event
-                saved_count = 0
-                for event in events:
-                    try:
-                        # Prepare values - ensure all required fields are present
-                        event_id = event.get("event_id")
-                        if not event_id:
-                            logger.warning("event_missing_id", event=event)
-                            continue
-                            
-                        await session.execute(raw_insert_sql, {
-                            "event_id": event_id,
-                            "chain_id": event.get("chain_id") or "",
-                            "event_type": event.get("event_type") or "",
-                            "tx_hash": event.get("tx_hash") or "",
-                            "block_number": event.get("block_number") or 0,
-                            "block_timestamp": event.get("block_timestamp") or datetime.now(timezone.utc),
-                            "contract_address": event.get("contract_address") or "",
-                            "severity": event.get("severity", "LOW"),
-                            "amount": str(event.get("amount")) if event.get("amount") is not None and event.get("amount") != "" else None,
-                            "amount_usd": str(event.get("amount_usd")) if event.get("amount_usd") is not None and event.get("amount_usd") != "" else None,
-                            "from_address": event.get("from_address"),
-                            "to_address": event.get("to_address"),
-                            "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None
-                        })
-                        saved_count += 1
-                        logger.debug("raw_sql_insert_executed", event_id=event.get("event_id")[:16])
-                    except Exception as e:
-                        import traceback
-                        error_details = {
-                            "error": str(e) if str(e) else "Empty error message",
-                            "error_type": type(e).__name__,
-                            "error_args": str(e.args) if e.args else "No args",
-                            "traceback": traceback.format_exc()[-500:]  # Last 500 chars
-                        }
-                        logger.error("raw_sql_insert_failed", 
-                                   event_id=event.get("event_id", "unknown")[:16],
-                                   **error_details)
-                
+                    """)
+                    
+                    # Execute for each event
+                    saved_count = 0
+                    for event in events:
+                        try:
+                            # Prepare values - ensure all required fields are present
+                            event_id = event.get("event_id")
+                            if not event_id:
+                                logger.warning("event_missing_id", event=event)
+                                continue
+                                
+                            await session.execute(raw_insert_sql, {
+                                "event_id": event_id,
+                                "chain_id": event.get("chain_id") or "",
+                                "event_type": event.get("event_type") or "",
+                                "tx_hash": event.get("tx_hash") or "",
+                                "block_number": event.get("block_number") or 0,
+                                "block_timestamp": event.get("block_timestamp") or datetime.now(timezone.utc),
+                                "contract_address": event.get("contract_address") or "",
+                                "severity": event.get("severity", "LOW"),
+                                "amount": str(event.get("amount")) if event.get("amount") is not None and event.get("amount") != "" else None,
+                                "amount_usd": str(event.get("amount_usd")) if event.get("amount_usd") is not None and event.get("amount_usd") != "" else None,
+                                "from_address": event.get("from_address"),
+                                "to_address": event.get("to_address"),
+                                "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None
+                            })
+                            saved_count += 1
+                            logger.debug("raw_sql_insert_executed", event_id=event.get("event_id")[:16])
+                        except Exception as e:
+                            import traceback
+                            error_details = {
+                                "error": str(e) if str(e) else "Empty error message",
+                                "error_type": type(e).__name__,
+                                "error_args": str(e.args) if e.args else "No args",
+                                "traceback": traceback.format_exc()[-500:]  # Last 500 chars
+                            }
+                            logger.error("raw_sql_insert_failed", 
+                                       event_id=event.get("event_id", "unknown")[:16],
+                                       **error_details)
+                    
                     # Commit the transaction
                     await session.commit()
                     logger.info("save_events_batch_RAW_SQL_COMMITTED", executed=saved_count, total=len(events))
