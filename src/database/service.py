@@ -89,11 +89,14 @@ class DatabaseService:
                 
                 # Raw SQL INSERT - no ORM, no complications  
                 # Use CAST instead of :: for type conversion
+                # Match the actual table schema (from sync_service.py)
+                # Table may not have 'status' column, so we'll try without it first
+                # If status column exists, we'll add it in a migration
                 raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
                         block_timestamp, contract_address, severity, amount, amount_usd,
-                        from_address, to_address, raw_data, created_at, status
+                        from_address, to_address, raw_data, created_at
                     ) VALUES (
                         gen_random_uuid(), 
                         :event_id, 
@@ -103,14 +106,13 @@ class DatabaseService:
                         :block_number,
                         CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), 
                         :contract_address, 
-                        :severity, 
-                        CASE WHEN :amount IS NOT NULL THEN CAST(:amount AS NUMERIC) ELSE NULL END,
-                        CASE WHEN :amount_usd IS NOT NULL THEN CAST(:amount_usd AS NUMERIC) ELSE NULL END,
+                        COALESCE(:severity, 'LOW'), 
+                        CASE WHEN :amount IS NOT NULL AND :amount != '' THEN CAST(:amount AS NUMERIC(38, 18)) ELSE NULL END,
+                        CASE WHEN :amount_usd IS NOT NULL AND :amount_usd != '' THEN CAST(:amount_usd AS NUMERIC(20, 2)) ELSE NULL END,
                         :from_address, 
                         :to_address, 
-                        CAST(:raw_data AS JSONB),
-                        NOW(),
-                        COALESCE(:status, 'PENDING')
+                        CASE WHEN :raw_data IS NOT NULL THEN CAST(:raw_data AS JSONB) ELSE NULL END,
+                        NOW()
                     )
                     ON CONFLICT (event_id) DO NOTHING
                 """)
@@ -119,21 +121,26 @@ class DatabaseService:
                 saved_count = 0
                 for event in events:
                     try:
+                        # Prepare values - ensure all required fields are present
+                        event_id = event.get("event_id")
+                        if not event_id:
+                            logger.warning("event_missing_id", event=event)
+                            continue
+                            
                         await session.execute(raw_insert_sql, {
-                            "event_id": event.get("event_id"),
-                            "chain_id": event.get("chain_id"),
-                            "event_type": event.get("event_type"),
-                            "tx_hash": event.get("tx_hash"),
-                            "block_number": event.get("block_number"),
-                            "block_timestamp": event.get("block_timestamp"),
-                            "contract_address": event.get("contract_address"),
+                            "event_id": event_id,
+                            "chain_id": event.get("chain_id") or "",
+                            "event_type": event.get("event_type") or "",
+                            "tx_hash": event.get("tx_hash") or "",
+                            "block_number": event.get("block_number") or 0,
+                            "block_timestamp": event.get("block_timestamp") or datetime.now(timezone.utc),
+                            "contract_address": event.get("contract_address") or "",
                             "severity": event.get("severity", "LOW"),
-                            "amount": str(event.get("amount")) if event.get("amount") is not None else None,
-                            "amount_usd": str(event.get("amount_usd")) if event.get("amount_usd") is not None else None,
+                            "amount": str(event.get("amount")) if event.get("amount") is not None and event.get("amount") != "" else None,
+                            "amount_usd": str(event.get("amount_usd")) if event.get("amount_usd") is not None and event.get("amount_usd") != "" else None,
                             "from_address": event.get("from_address"),
                             "to_address": event.get("to_address"),
-                            "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None,
-                            "status": event.get("status", "PENDING")
+                            "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None
                         })
                         saved_count += 1
                         logger.debug("raw_sql_insert_executed", event_id=event.get("event_id")[:16])
