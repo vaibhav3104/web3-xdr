@@ -40,30 +40,36 @@ class DatabaseManager:
         Prioritizes Cloud SQL Proxy Unix socket if available, then DATABASE_URL.
         """
         # Check if Cloud SQL Proxy is available (Cloud Run with cloudsql-instances annotation)
+        # IMPORTANT: Check CLOUDSQL_INSTANCE FIRST, before DATABASE_URL
+        # This ensures we use Unix socket even if DATABASE_URL is set
         cloudsql_instance = os.getenv("CLOUDSQL_INSTANCE")
         if cloudsql_instance:
             # Use Unix socket connection via Cloud SQL Proxy
-            # Format: postgresql+asyncpg://user:password@/database?host=/cloudsql/INSTANCE_CONNECTION_NAME
             user = os.getenv("POSTGRES_USER") or os.getenv("DB_USER") or "xdr"
             password = os.getenv("POSTGRES_PASSWORD") or os.getenv("DB_PASSWORD") or ""
             database = os.getenv("POSTGRES_DB") or os.getenv("DB_NAME") or "web3_xdr"
             
-            # Extract password from DATABASE_URL if available
+            # Extract user/password from DATABASE_URL if available (but don't use the host/port)
             database_url = os.getenv("DATABASE_URL", "")
             if database_url and "@" in database_url:
-                # Extract password from DATABASE_URL
+                # Extract credentials from DATABASE_URL
                 try:
                     # Format: postgresql://user:password@host:port/db
                     parts = database_url.split("@")
                     if len(parts) > 0:
                         cred_part = parts[0].split("//")[-1]
                         if ":" in cred_part:
-                            _, password = cred_part.split(":", 1)
-                except:
-                    pass
+                            user, password = cred_part.split(":", 1)
+                        # Also check for database name after the @
+                        if len(parts) > 1:
+                            db_part = parts[1].split("/")
+                            if len(db_part) > 1:
+                                database = db_part[-1].split("?")[0]  # Remove query params
+                except Exception as e:
+                    logger.warning("failed_to_extract_creds_from_url", error=str(e))
             
             unix_socket_dir = f"/cloudsql/{cloudsql_instance}"
-            logger.info("using_cloud_sql_proxy_unix_socket", instance=cloudsql_instance, socket_dir=unix_socket_dir)
+            logger.info("using_cloud_sql_proxy_unix_socket", instance=cloudsql_instance, socket_dir=unix_socket_dir, user=user, database=database)
             # asyncpg Unix socket format: postgresql+asyncpg://user:password@/database
             # No host/port in URL - will be set via connect_args in initialize()
             return f"postgresql+asyncpg://{user}:{password}@/{database}"
