@@ -88,12 +88,12 @@ class DatabaseService:
         max_retries = 3
         retry_delay = 2.0
         
+        from sqlalchemy import text
+        
         for attempt in range(max_retries):
             try:
-                # Use asyncio.wait_for to add timeout to the entire operation
-                async with asyncio.wait_for(DatabaseManager.get_session(), timeout=25.0) as session:
-                from sqlalchemy import text
-                import json
+                # Get session - connection pool handles timeouts
+                async with DatabaseManager.get_session() as session:
                 
                 # Raw SQL INSERT - no ORM, no complications  
                 # Use CAST instead of :: for type conversion
