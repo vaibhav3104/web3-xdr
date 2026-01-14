@@ -107,10 +107,25 @@ class DatabaseManager:
         
         url = database_url or cls.get_database_url()
         
-        logger.info("initializing_database", url=url.split("@")[-1])  # Log without password
+        # Check if we should use Unix socket (Cloud SQL Proxy)
+        cloudsql_instance = os.getenv("CLOUDSQL_INSTANCE")
+        connect_args = {
+            "server_settings": {
+                "statement_timeout": "60000",  # 60 second query timeout at DB level
+                "application_name": "web3-xdr"
+            },
+            "command_timeout": 60,  # asyncpg command timeout - increased to 60s
+        }
         
-        # Optimize for g1-small: smaller pool, faster timeouts
-        # g1-small has 1 vCPU and 1.7GB RAM - too many connections can overwhelm it
+        # If Cloud SQL Proxy is available, use Unix socket
+        if cloudsql_instance:
+            unix_socket_path = f"/cloudsql/{cloudsql_instance}"
+            connect_args["host"] = unix_socket_path
+            logger.info("using_unix_socket_connection", socket_path=unix_socket_path)
+        
+        logger.info("initializing_database", url=url.split("@")[-1] if "@" in url else url)  # Log without password
+        
+        # Optimize connection pool settings
         cls._engine = create_async_engine(
             url,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
@@ -119,13 +134,7 @@ class DatabaseManager:
             pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "60")),  # Increased to 60s for stability
             pool_pre_ping=True,  # Test connections before use
             pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Recycle connections every 30 mins
-            connect_args={
-                "server_settings": {
-                    "statement_timeout": "60000",  # 60 second query timeout at DB level
-                    "application_name": "web3-xdr"
-                },
-                "command_timeout": 60,  # asyncpg command timeout - increased to 60s
-            }
+            connect_args=connect_args
         )
         
         cls._session_factory = async_sessionmaker(
