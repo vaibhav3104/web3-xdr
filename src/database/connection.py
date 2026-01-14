@@ -85,9 +85,9 @@ class DatabaseManager:
         cls._engine = create_async_engine(
             url,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-            pool_size=int(os.getenv("DB_POOL_SIZE", "10")),  # Reduced to 10 for g1-small stability
-            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),  # Reduced overflow
-            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "10")),  # Faster timeout (10s)
+            pool_size=int(os.getenv("DB_POOL_SIZE", "5")),  # Smaller pool for worker (5 connections)
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "3")),  # Small overflow for worker
+            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),  # Increased to 30s for worker stability
             pool_pre_ping=True,  # Test connections before use
             pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Recycle connections every 30 mins
             connect_args={
