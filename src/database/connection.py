@@ -85,17 +85,17 @@ class DatabaseManager:
         cls._engine = create_async_engine(
             url,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-            pool_size=int(os.getenv("DB_POOL_SIZE", "5")),  # Smaller pool for worker (5 connections)
-            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "3")),  # Small overflow for worker
-            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),  # Increased to 30s for worker stability
+            pool_size=int(os.getenv("DB_POOL_SIZE", "10")),  # Increased pool size
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),  # More overflow connections
+            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "60")),  # Increased to 60s for stability
             pool_pre_ping=True,  # Test connections before use
             pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Recycle connections every 30 mins
             connect_args={
                 "server_settings": {
-                    "statement_timeout": "30000",  # 30 second query timeout at DB level
+                    "statement_timeout": "60000",  # 60 second query timeout at DB level
                     "application_name": "web3-xdr"
                 },
-                "command_timeout": 30,  # asyncpg command timeout
+                "command_timeout": 60,  # asyncpg command timeout - increased to 60s
             }
         )
         
