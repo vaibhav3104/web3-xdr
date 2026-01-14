@@ -184,7 +184,7 @@ class DatabaseService:
                     "traceback": traceback.format_exc()[-500:]
                 }
                 logger.error("save_events_batch_failed", attempt=attempt+1, **error_details)
-                if attempt < max_retries - 1:
+                if attempt < max_retries - 1 and "Timeout" in str(e):
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2
                     continue
@@ -192,31 +192,6 @@ class DatabaseService:
                     return 0
         
         return 0
-        
-        # VERIFICATION: Query database AFTER session closes (new session)
-        try:
-                async with DatabaseManager.get_session() as verify_session:
-                    verify_sql = text("SELECT COUNT(*) FROM events WHERE created_at > NOW() - INTERVAL '10 seconds'")
-                    result = await verify_session.execute(verify_sql)
-                    actual_count = result.scalar()
-                    
-                    logger.info("save_events_batch_VERIFICATION", 
-                               expected=saved_count, 
-                               actual_in_db=actual_count,
-                               match=actual_count >= saved_count)
-            except Exception as verify_error:
-                logger.warning("verification_query_failed", error=str(verify_error), error_type=type(verify_error).__name__)
-            
-            # Return the executed count
-            return saved_count
-            
-        except Exception as e:
-            logger.error("save_events_batch_RAW_SQL_FAILED", 
-                        error=str(e), 
-                        error_type=type(e).__name__,
-                        total=len(events), 
-                        exc_info=True)
-            return 0
     
     @staticmethod
     async def get_events(
