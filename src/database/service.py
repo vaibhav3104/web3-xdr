@@ -122,15 +122,31 @@ class DatabaseService:
                     ON CONFLICT (event_id) DO NOTHING
                     """)
                     
-                    # Execute for each event
+                    # Execute for each event in individual savepoints to handle errors
                     saved_count = 0
                     for event in events:
+                        # Use savepoint for each event so one failure doesn't abort the whole transaction
+                        savepoint = await session.begin_nested()
                         try:
                             # Prepare values - ensure all required fields are present
                             event_id = event.get("event_id")
                             if not event_id:
                                 logger.warning("event_missing_id", event=event)
+                                await savepoint.rollback()
                                 continue
+                            
+                            # Convert amount/amount_usd to string, handling None, empty, and numeric 0
+                            amount_val = event.get("amount")
+                            if amount_val is not None and amount_val != "":
+                                amount_str = str(amount_val) if amount_val != 0 else "0"
+                            else:
+                                amount_str = None
+                            
+                            amount_usd_val = event.get("amount_usd")
+                            if amount_usd_val is not None and amount_usd_val != "":
+                                amount_usd_str = str(amount_usd_val) if amount_usd_val != 0 else "0"
+                            else:
+                                amount_usd_str = None
                                 
                             await session.execute(raw_insert_sql, {
                                 "event_id": event_id,
@@ -141,16 +157,19 @@ class DatabaseService:
                                 "block_timestamp": event.get("block_timestamp") or datetime.now(timezone.utc),
                                 "contract_address": event.get("contract_address") or "",
                                 "severity": event.get("severity", "LOW"),
-                                "amount": str(event.get("amount")) if event.get("amount") is not None and event.get("amount") != "" else None,
-                                "amount_usd": str(event.get("amount_usd")) if event.get("amount_usd") is not None and event.get("amount_usd") != "" else None,
+                                "amount": amount_str,
+                                "amount_usd": amount_usd_str,
                                 "from_address": event.get("from_address"),
                                 "to_address": event.get("to_address"),
                                 "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None
                             })
+                            await savepoint.commit()
                             saved_count += 1
                             logger.debug("raw_sql_insert_executed", event_id=event.get("event_id")[:16])
                         except Exception as e:
                             import traceback
+                            # Rollback savepoint on error
+                            await savepoint.rollback()
                             error_details = {
                                 "error": str(e) if str(e) else "Empty error message",
                                 "error_type": type(e).__name__,
