@@ -324,9 +324,10 @@ class DatabaseService:
             if severity:
                 where_parts.append("severity = :severity")
                 params['severity'] = severity.upper()
-            if status:
-                where_parts.append("status = :status")
-                params['status'] = status.upper()
+            # Note: status column doesn't exist in the actual table, ignoring status filter
+            # if status:
+            #     where_parts.append("status = :status")
+            #     params['status'] = status.upper()
             
             # Cursor-based pagination (preferred over OFFSET)
             if cursor:
@@ -343,11 +344,11 @@ class DatabaseService:
             
             # Query using raw SQL with cursor pagination
             # Order by (block_timestamp DESC, id DESC) for stable cursor
+            # Note: status column doesn't exist in the actual table, removed from query
             sql = f"""
                 SELECT id, event_id, chain_id, event_type, tx_hash, block_number,
                        block_timestamp, contract_address, severity, amount, amount_usd,
-                       from_address, to_address, raw_data, created_at,
-                       COALESCE(status, 'PENDING') as status
+                       from_address, to_address, raw_data, created_at
                 FROM events
                 WHERE {where_clause}
                 ORDER BY block_timestamp DESC, id DESC
@@ -385,6 +386,9 @@ class DatabaseService:
                 raise
             
             # Convert rows to dicts
+            # Columns: id, event_id, chain_id, event_type, tx_hash, block_number,
+            #          block_timestamp, contract_address, severity, amount, amount_usd,
+            #          from_address, to_address, raw_data, created_at
             events = []
             for row in rows:
                 events.append({
@@ -403,7 +407,7 @@ class DatabaseService:
                     'to_address': row[12],
                     'raw_data': row[13] if isinstance(row[13], dict) else (json.loads(row[13]) if row[13] else {}),
                     'created_at': row[14],
-                    'status': row[15] if len(row) > 15 else 'PENDING',
+                    'status': 'PENDING',  # Default status - column doesn't exist in DB
                 })
             
             # Generate next cursor if there are more results
