@@ -298,22 +298,40 @@ async def list_events(
     from ..database.connection import DatabaseManager
     from ..query.lucene_parser import execute_lucene_query
     
+    # ========== DEBUG: Log all incoming parameters ==========
+    logger.info("DEBUG_API_EVENTS_REQUEST_RECEIVED",
+                raw_params={
+                    "chain_id": chain_id,
+                    "event_type": event_type,
+                    "severity": severity,
+                    "status": status,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "cursor": cursor,
+                    "include_total": include_total,
+                    "search": search,
+                    "query": query,
+                    "limit": limit
+                })
+    
     # Parse time filters
     start_dt = None
     end_dt = None
     if start_time:
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-        except:
-            pass
+            logger.info("DEBUG_PARSED_START_TIME", raw=start_time, parsed=str(start_dt))
+        except Exception as e:
+            logger.warning("DEBUG_START_TIME_PARSE_FAILED", raw=start_time, error=str(e))
     if end_time:
         try:
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-        except:
-            pass
+            logger.info("DEBUG_PARSED_END_TIME", raw=end_time, parsed=str(end_dt))
+        except Exception as e:
+            logger.warning("DEBUG_END_TIME_PARSE_FAILED", raw=end_time, error=str(e))
     
     # Query events from PostgreSQL database
-    logger.info("api_querying_database_for_events", 
+    logger.info("DEBUG_CALLING_DATABASE_SERVICE", 
                 chain_id=chain_id, 
                 event_type=event_type, 
                 severity=severity,
@@ -341,6 +359,7 @@ async def list_events(
                 total_count = None
         
         # Fetch events with cursor pagination (preferred) or offset (backward compat)
+        logger.info("DEBUG_BEFORE_GET_EVENTS_CALL")
         db_events, next_cursor = await DatabaseService.get_events(
             chain_id=chain_id,
             event_type=event_type,
@@ -352,9 +371,17 @@ async def list_events(
             offset=0,  # Not used if cursor provided
             cursor=cursor
         )
-        logger.info("api_database_query_successful", events_count=len(db_events), total_in_db=total_count, has_next_cursor=next_cursor is not None)
+        logger.info("DEBUG_AFTER_GET_EVENTS_CALL", 
+                    events_count=len(db_events), 
+                    total_in_db=total_count, 
+                    has_next_cursor=next_cursor is not None,
+                    first_event_sample=db_events[0] if db_events else None)
     except Exception as e:
-        logger.error("database_query_failed", error=str(e), exc_info=True)
+        import traceback
+        logger.error("DEBUG_DATABASE_QUERY_FAILED", 
+                     error=str(e), 
+                     error_type=type(e).__name__,
+                     traceback=traceback.format_exc()[-1000:])
         # Fallback to empty result
         total_count = None
         db_events = []
@@ -460,6 +487,149 @@ async def get_query_help():
     """
     from ..query.lucene_parser import get_query_syntax_help
     return get_query_syntax_help()
+
+
+@router.get("/debug/events")
+async def debug_events():
+    """
+    DEBUG ENDPOINT: Direct database check for events.
+    
+    This endpoint bypasses all filtering and directly queries the database
+    to verify data existence. Use this to debug the read path.
+    """
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    import traceback
+    
+    debug_info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "database_connected": False,
+        "total_events_in_db": 0,
+        "sample_events": [],
+        "events_by_chain": {},
+        "events_by_severity": {},
+        "latest_event_time": None,
+        "oldest_event_time": None,
+        "errors": []
+    }
+    
+    try:
+        async with DatabaseManager.get_session() as session:
+            debug_info["database_connected"] = True
+            
+            # 1. Get total count
+            count_result = await session.execute(text("SELECT COUNT(*) FROM events"))
+            total_count = count_result.scalar()
+            debug_info["total_events_in_db"] = total_count
+            logger.info("DEBUG_ENDPOINT_TOTAL_COUNT", count=total_count)
+            
+            # 2. Get events by chain
+            chain_result = await session.execute(text("""
+                SELECT chain_id, COUNT(*) as cnt 
+                FROM events 
+                GROUP BY chain_id 
+                ORDER BY cnt DESC
+            """))
+            for row in chain_result.fetchall():
+                debug_info["events_by_chain"][row[0]] = row[1]
+            
+            # 3. Get events by severity
+            severity_result = await session.execute(text("""
+                SELECT severity, COUNT(*) as cnt 
+                FROM events 
+                GROUP BY severity 
+                ORDER BY cnt DESC
+            """))
+            for row in severity_result.fetchall():
+                debug_info["events_by_severity"][row[0]] = row[1]
+            
+            # 4. Get time range
+            time_result = await session.execute(text("""
+                SELECT 
+                    MIN(block_timestamp) as oldest,
+                    MAX(block_timestamp) as newest
+                FROM events
+            """))
+            time_row = time_result.fetchone()
+            if time_row:
+                debug_info["oldest_event_time"] = str(time_row[0]) if time_row[0] else None
+                debug_info["latest_event_time"] = str(time_row[1]) if time_row[1] else None
+            
+            # 5. Get 5 sample events (most recent)
+            sample_result = await session.execute(text("""
+                SELECT id, event_id, chain_id, event_type, tx_hash, block_number, 
+                       block_timestamp, severity, contract_address
+                FROM events 
+                ORDER BY block_timestamp DESC NULLS LAST
+                LIMIT 5
+            """))
+            for row in sample_result.fetchall():
+                debug_info["sample_events"].append({
+                    "id": str(row[0]),
+                    "event_id": row[1],
+                    "chain_id": row[2],
+                    "event_type": row[3],
+                    "tx_hash": row[4][:20] + "..." if row[4] and len(row[4]) > 20 else row[4],
+                    "block_number": row[5],
+                    "block_timestamp": str(row[6]) if row[6] else None,
+                    "severity": row[7],
+                    "contract_address": row[8][:20] + "..." if row[8] and len(row[8]) > 20 else row[8]
+                })
+            
+            logger.info("DEBUG_ENDPOINT_COMPLETE", 
+                        total=total_count, 
+                        chains=len(debug_info["events_by_chain"]),
+                        sample_count=len(debug_info["sample_events"]))
+                        
+    except Exception as e:
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        debug_info["errors"].append(error_msg)
+        debug_info["errors"].append(traceback.format_exc()[-500:])
+        logger.error("DEBUG_ENDPOINT_ERROR", error=error_msg)
+    
+    return debug_info
+
+
+@router.get("/debug/db-connection")
+async def debug_db_connection():
+    """
+    DEBUG ENDPOINT: Test database connection directly.
+    """
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    import traceback
+    import os
+    
+    debug_info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "connection_successful": False,
+        "env_vars": {
+            "DATABASE_URL_set": bool(os.getenv("DATABASE_URL")),
+            "CLOUDSQL_INSTANCE": os.getenv("CLOUDSQL_INSTANCE"),
+            "POSTGRES_HOST": os.getenv("POSTGRES_HOST"),
+            "POSTGRES_DB": os.getenv("POSTGRES_DB"),
+        },
+        "test_query_result": None,
+        "errors": []
+    }
+    
+    try:
+        async with DatabaseManager.get_session() as session:
+            # Simple test query
+            result = await session.execute(text("SELECT 1 as test, NOW() as current_time"))
+            row = result.fetchone()
+            debug_info["connection_successful"] = True
+            debug_info["test_query_result"] = {
+                "test": row[0],
+                "current_time": str(row[1])
+            }
+            logger.info("DEBUG_DB_CONNECTION_SUCCESS")
+    except Exception as e:
+        debug_info["errors"].append(f"{type(e).__name__}: {str(e)}")
+        debug_info["errors"].append(traceback.format_exc()[-500:])
+        logger.error("DEBUG_DB_CONNECTION_FAILED", error=str(e))
+    
+    return debug_info
 
 
 @router.get("/stats")

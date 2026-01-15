@@ -242,6 +242,17 @@ class DatabaseService:
         """
         from .cursor import encode_cursor, decode_cursor
         
+        # ========== DEBUG: Log incoming parameters ==========
+        logger.info("DEBUG_GET_EVENTS_CALLED", 
+                    chain_id=chain_id,
+                    event_type=event_type,
+                    severity=severity,
+                    status=status,
+                    start_time=str(start_time) if start_time else None,
+                    end_time=str(end_time) if end_time else None,
+                    limit=limit,
+                    cursor=cursor is not None)
+        
         async with DatabaseManager.get_session() as session:
             # Build WHERE clause
             where_parts = []
@@ -312,6 +323,12 @@ class DatabaseService:
             """
             params['limit'] = limit + 1  # Fetch one extra to check if there's more
             
+            # ========== DEBUG: Log the SQL query ==========
+            logger.info("DEBUG_GET_EVENTS_SQL", 
+                        sql=sql.replace('\n', ' ').strip(),
+                        params=str(params),
+                        where_clause=where_clause)
+            
             # Execute query with timeout protection
             import asyncio
             try:
@@ -320,11 +337,19 @@ class DatabaseService:
                     timeout=25.0  # 25 second timeout for query execution
                 )
                 rows = result.fetchall()
+                
+                # ========== DEBUG: Log row count ==========
+                logger.info("DEBUG_GET_EVENTS_ROWS_FETCHED", row_count=len(rows))
+                
             except asyncio.TimeoutError:
-                logger.warning("get_events_query_timeout", filters={"chain_id": chain_id, "limit": limit})
+                logger.warning("DEBUG_GET_EVENTS_TIMEOUT", filters={"chain_id": chain_id, "limit": limit})
                 return [], None  # Return empty result on timeout
             except Exception as e:
-                logger.error("get_events_query_error", error=str(e), error_type=type(e).__name__)
+                import traceback
+                logger.error("DEBUG_GET_EVENTS_QUERY_ERROR", 
+                             error=str(e), 
+                             error_type=type(e).__name__,
+                             traceback=traceback.format_exc()[-500:])
                 raise
             
             # Convert rows to dicts
@@ -356,6 +381,13 @@ class DatabaseService:
                 last_event = events[limit - 1]
                 next_cursor = encode_cursor(last_event['block_timestamp'], last_event['id'])
                 events = events[:limit]
+            
+            # ========== DEBUG: Log final result ==========
+            logger.info("DEBUG_GET_EVENTS_RETURNING", 
+                        events_count=len(events),
+                        has_next_cursor=next_cursor is not None,
+                        first_event_id=events[0]['event_id'] if events else None,
+                        first_event_chain=events[0]['chain_id'] if events else None)
             
             return events, next_cursor
     
