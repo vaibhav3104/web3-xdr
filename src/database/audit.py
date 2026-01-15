@@ -85,12 +85,30 @@ class AuditLogger:
             new_value: New value (for updates)
         """
         try:
-            # Get database session
+            # Get database session - prioritize Cloud SQL Proxy Unix socket
+            cloudsql_instance = os.getenv("CLOUDSQL_INSTANCE")
             database_url = os.getenv("DATABASE_URL")
-            if not database_url:
-                database_url = f"postgresql://{os.getenv('POSTGRES_USER', 'xdr')}:{os.getenv('POSTGRES_PASSWORD', 'xdr_password')}@{os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'web3_xdr')}"
             
-            engine = create_engine(database_url)
+            if cloudsql_instance:
+                # Use Cloud SQL Proxy Unix socket
+                socket_dir = f"/cloudsql/{cloudsql_instance}"
+                db_user = os.getenv("POSTGRES_USER", "xdr")
+                db_pass = os.getenv("POSTGRES_PASSWORD", "xdr_password")
+                db_name = os.getenv("POSTGRES_DB", "web3_xdr")
+                database_url = f"postgresql+psycopg2://{db_user}:{db_pass}@/{db_name}"
+                engine = create_engine(
+                    database_url,
+                    connect_args={"host": socket_dir},
+                    pool_pre_ping=True,
+                    pool_size=2,
+                    max_overflow=3
+                )
+            elif database_url:
+                engine = create_engine(database_url, pool_pre_ping=True)
+            else:
+                database_url = f"postgresql://{os.getenv('POSTGRES_USER', 'xdr')}:{os.getenv('POSTGRES_PASSWORD', 'xdr_password')}@{os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'web3_xdr')}"
+                engine = create_engine(database_url, pool_pre_ping=True)
+            
             SessionLocal = sessionmaker(bind=engine)
             session = SessionLocal()
             
