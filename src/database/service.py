@@ -300,27 +300,41 @@ class DatabaseService:
                 where_parts.append("contract_address = :contract_address")
                 params['contract_address'] = contract_address
             if start_time:
+                # asyncpg requires datetime objects, not strings - no CAST needed
                 if isinstance(start_time, datetime):
                     if start_time.tzinfo is None:
-                        start_time = start_time.replace(tzinfo=timezone.utc)
+                        start_time_dt = start_time.replace(tzinfo=timezone.utc)
                     else:
-                        start_time = start_time.astimezone(timezone.utc)
-                    start_time_str = start_time.isoformat()
+                        start_time_dt = start_time.astimezone(timezone.utc)
                 else:
-                    start_time_str = str(start_time)
-                where_parts.append("block_timestamp >= CAST(:start_time AS TIMESTAMP WITH TIME ZONE)")
-                params['start_time'] = start_time_str
+                    # Parse string to datetime
+                    try:
+                        start_time_clean = str(start_time).replace('Z', '+00:00')
+                        start_time_dt = datetime.fromisoformat(start_time_clean)
+                        if start_time_dt.tzinfo is None:
+                            start_time_dt = start_time_dt.replace(tzinfo=timezone.utc)
+                    except (ValueError, TypeError):
+                        start_time_dt = datetime.now(timezone.utc)
+                where_parts.append("block_timestamp >= :start_time")
+                params['start_time'] = start_time_dt
             if end_time:
+                # asyncpg requires datetime objects, not strings - no CAST needed
                 if isinstance(end_time, datetime):
                     if end_time.tzinfo is None:
-                        end_time = end_time.replace(tzinfo=timezone.utc)
+                        end_time_dt = end_time.replace(tzinfo=timezone.utc)
                     else:
-                        end_time = end_time.astimezone(timezone.utc)
-                    end_time_str = end_time.isoformat()
+                        end_time_dt = end_time.astimezone(timezone.utc)
                 else:
-                    end_time_str = str(end_time)
-                where_parts.append("block_timestamp <= CAST(:end_time AS TIMESTAMP WITH TIME ZONE)")
-                params['end_time'] = end_time_str
+                    # Parse string to datetime
+                    try:
+                        end_time_clean = str(end_time).replace('Z', '+00:00')
+                        end_time_dt = datetime.fromisoformat(end_time_clean)
+                        if end_time_dt.tzinfo is None:
+                            end_time_dt = end_time_dt.replace(tzinfo=timezone.utc)
+                    except (ValueError, TypeError):
+                        end_time_dt = datetime.now(timezone.utc)
+                where_parts.append("block_timestamp <= :end_time")
+                params['end_time'] = end_time_dt
             if severity:
                 where_parts.append("severity = :severity")
                 params['severity'] = severity.upper()
@@ -334,10 +348,17 @@ class DatabaseService:
                 cursor_data = decode_cursor(cursor)
                 if cursor_data:
                     cursor_timestamp, cursor_id = cursor_data
+                    # asyncpg requires datetime objects, not strings
+                    if isinstance(cursor_timestamp, datetime):
+                        cursor_ts_dt = cursor_timestamp
+                    else:
+                        cursor_ts_dt = datetime.fromisoformat(str(cursor_timestamp).replace('Z', '+00:00'))
+                    if cursor_ts_dt.tzinfo is None:
+                        cursor_ts_dt = cursor_ts_dt.replace(tzinfo=timezone.utc)
                     where_parts.append(
-                        "(block_timestamp, id) < (CAST(:cursor_timestamp AS TIMESTAMP WITH TIME ZONE), CAST(:cursor_id AS UUID))"
+                        "(block_timestamp, id) < (:cursor_timestamp, CAST(:cursor_id AS UUID))"
                     )
-                    params['cursor_timestamp'] = cursor_timestamp.isoformat()
+                    params['cursor_timestamp'] = cursor_ts_dt
                     params['cursor_id'] = cursor_id
             
             where_clause = " AND ".join(where_parts) if where_parts else "1=1"
