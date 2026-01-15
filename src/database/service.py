@@ -180,6 +180,15 @@ class DatabaseService:
                             else:
                                 block_ts_dt = datetime.now(timezone.utc)
                                 
+                            # Ensure severity is a valid string (some events pass 0 or other non-string values)
+                            severity_val = event.get("severity")
+                            if severity_val is None or severity_val == "" or severity_val == 0:
+                                severity_str = "LOW"
+                            elif isinstance(severity_val, str):
+                                severity_str = severity_val.upper() if severity_val else "LOW"
+                            else:
+                                severity_str = str(severity_val).upper() if severity_val else "LOW"
+                            
                             await session.execute(raw_insert_sql, {
                                 "event_id": event_id,
                                 "chain_id": event.get("chain_id") or "",
@@ -188,7 +197,7 @@ class DatabaseService:
                                 "block_number": event.get("block_number") or 0,
                                 "block_timestamp": block_ts_dt,
                                 "contract_address": event.get("contract_address") or "",
-                                "severity": event.get("severity", "LOW"),
+                                "severity": severity_str,
                                 "amount": amount_str,
                                 "amount_usd": amount_usd_str,
                                 "from_address": event.get("from_address"),
