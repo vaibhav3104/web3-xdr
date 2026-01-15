@@ -155,6 +155,30 @@ class DatabaseService:
                                     amount_usd_str = str(float_val)
                                 except (ValueError, TypeError):
                                     amount_usd_str = None
+                            
+                            # Parse block_timestamp - asyncpg requires datetime object, not string
+                            block_ts = event.get("block_timestamp")
+                            if block_ts is None:
+                                block_ts_dt = datetime.now(timezone.utc)
+                            elif isinstance(block_ts, datetime):
+                                # Already a datetime - ensure it's timezone aware
+                                if block_ts.tzinfo is None:
+                                    block_ts_dt = block_ts.replace(tzinfo=timezone.utc)
+                                else:
+                                    block_ts_dt = block_ts
+                            elif isinstance(block_ts, str):
+                                # Parse ISO format string to datetime
+                                try:
+                                    # Handle various ISO formats
+                                    block_ts_clean = block_ts.replace('Z', '+00:00')
+                                    block_ts_dt = datetime.fromisoformat(block_ts_clean)
+                                    if block_ts_dt.tzinfo is None:
+                                        block_ts_dt = block_ts_dt.replace(tzinfo=timezone.utc)
+                                except (ValueError, TypeError):
+                                    logger.warning("invalid_block_timestamp", value=block_ts, event_id=event_id[:16])
+                                    block_ts_dt = datetime.now(timezone.utc)
+                            else:
+                                block_ts_dt = datetime.now(timezone.utc)
                                 
                             await session.execute(raw_insert_sql, {
                                 "event_id": event_id,
@@ -162,7 +186,7 @@ class DatabaseService:
                                 "event_type": event.get("event_type") or "",
                                 "tx_hash": event.get("tx_hash") or "",
                                 "block_number": event.get("block_number") or 0,
-                                "block_timestamp": event.get("block_timestamp") or datetime.now(timezone.utc),
+                                "block_timestamp": block_ts_dt,
                                 "contract_address": event.get("contract_address") or "",
                                 "severity": event.get("severity", "LOW"),
                                 "amount": amount_str,
