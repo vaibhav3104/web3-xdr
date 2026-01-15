@@ -300,39 +300,43 @@ class DatabaseService:
                 where_parts.append("contract_address = :contract_address")
                 params['contract_address'] = contract_address
             if start_time:
-                # asyncpg requires datetime objects, not strings - no CAST needed
+                # asyncpg requires datetime objects, not strings
+                # Database stores offset-naive timestamps, so we need to pass naive datetimes
                 if isinstance(start_time, datetime):
-                    if start_time.tzinfo is None:
-                        start_time_dt = start_time.replace(tzinfo=timezone.utc)
+                    if start_time.tzinfo is not None:
+                        # Convert to UTC and remove timezone info
+                        start_time_dt = start_time.astimezone(timezone.utc).replace(tzinfo=None)
                     else:
-                        start_time_dt = start_time.astimezone(timezone.utc)
+                        start_time_dt = start_time
                 else:
-                    # Parse string to datetime
+                    # Parse string to datetime (as naive)
                     try:
                         start_time_clean = str(start_time).replace('Z', '+00:00')
                         start_time_dt = datetime.fromisoformat(start_time_clean)
-                        if start_time_dt.tzinfo is None:
-                            start_time_dt = start_time_dt.replace(tzinfo=timezone.utc)
+                        if start_time_dt.tzinfo is not None:
+                            start_time_dt = start_time_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     except (ValueError, TypeError):
-                        start_time_dt = datetime.now(timezone.utc)
+                        start_time_dt = datetime.utcnow()
                 where_parts.append("block_timestamp >= :start_time")
                 params['start_time'] = start_time_dt
             if end_time:
-                # asyncpg requires datetime objects, not strings - no CAST needed
+                # asyncpg requires datetime objects, not strings
+                # Database stores offset-naive timestamps, so we need to pass naive datetimes
                 if isinstance(end_time, datetime):
-                    if end_time.tzinfo is None:
-                        end_time_dt = end_time.replace(tzinfo=timezone.utc)
+                    if end_time.tzinfo is not None:
+                        # Convert to UTC and remove timezone info
+                        end_time_dt = end_time.astimezone(timezone.utc).replace(tzinfo=None)
                     else:
-                        end_time_dt = end_time.astimezone(timezone.utc)
+                        end_time_dt = end_time
                 else:
-                    # Parse string to datetime
+                    # Parse string to datetime (as naive)
                     try:
                         end_time_clean = str(end_time).replace('Z', '+00:00')
                         end_time_dt = datetime.fromisoformat(end_time_clean)
-                        if end_time_dt.tzinfo is None:
-                            end_time_dt = end_time_dt.replace(tzinfo=timezone.utc)
+                        if end_time_dt.tzinfo is not None:
+                            end_time_dt = end_time_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     except (ValueError, TypeError):
-                        end_time_dt = datetime.now(timezone.utc)
+                        end_time_dt = datetime.utcnow()
                 where_parts.append("block_timestamp <= :end_time")
                 params['end_time'] = end_time_dt
             if severity:
@@ -348,13 +352,16 @@ class DatabaseService:
                 cursor_data = decode_cursor(cursor)
                 if cursor_data:
                     cursor_timestamp, cursor_id = cursor_data
-                    # asyncpg requires datetime objects, not strings
+                    # asyncpg requires datetime objects, database uses naive timestamps
                     if isinstance(cursor_timestamp, datetime):
-                        cursor_ts_dt = cursor_timestamp
+                        if cursor_timestamp.tzinfo is not None:
+                            cursor_ts_dt = cursor_timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+                        else:
+                            cursor_ts_dt = cursor_timestamp
                     else:
                         cursor_ts_dt = datetime.fromisoformat(str(cursor_timestamp).replace('Z', '+00:00'))
-                    if cursor_ts_dt.tzinfo is None:
-                        cursor_ts_dt = cursor_ts_dt.replace(tzinfo=timezone.utc)
+                        if cursor_ts_dt.tzinfo is not None:
+                            cursor_ts_dt = cursor_ts_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     where_parts.append(
                         "(block_timestamp, id) < (:cursor_timestamp, CAST(:cursor_id AS UUID))"
                     )
