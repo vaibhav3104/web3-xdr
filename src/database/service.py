@@ -136,15 +136,24 @@ class DatabaseService:
                                 continue
                             
                             # Convert amount/amount_usd to string, handling None, empty, and numeric 0
+                            # asyncpg needs explicit type hints for CASE statements, so we ensure strings
                             amount_val = event.get("amount")
                             if amount_val is not None and amount_val != "":
-                                amount_str = str(amount_val) if amount_val != 0 else "0"
+                                # Convert to string, handling 0 explicitly
+                                if amount_val == 0 or amount_val == "0":
+                                    amount_str = "0"
+                                else:
+                                    amount_str = str(amount_val)
                             else:
                                 amount_str = None
                             
                             amount_usd_val = event.get("amount_usd")
                             if amount_usd_val is not None and amount_usd_val != "":
-                                amount_usd_str = str(amount_usd_val) if amount_usd_val != 0 else "0"
+                                # Convert to string, handling 0 explicitly
+                                if amount_usd_val == 0 or amount_usd_val == "0":
+                                    amount_usd_str = "0"
+                                else:
+                                    amount_usd_str = str(amount_usd_val)
                             else:
                                 amount_usd_str = None
                                 
