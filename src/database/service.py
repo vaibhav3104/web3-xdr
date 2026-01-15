@@ -95,8 +95,8 @@ class DatabaseService:
                 # Get session - connection pool handles timeouts
                 async with DatabaseManager.get_session() as session:
                     # Raw SQL INSERT - no ORM, no complications  
-                    # Use CAST instead of :: for type conversion
-                    # Match the actual table schema (from sync_service.py)
+                    # IMPORTANT: Pass amount/amount_usd as pre-converted NUMERIC strings or NULL
+                    # to avoid asyncpg type ambiguity issues
                     raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
@@ -112,8 +112,8 @@ class DatabaseService:
                         CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), 
                         :contract_address, 
                         COALESCE(:severity, 'LOW'), 
-                        CASE WHEN :amount IS NOT NULL AND CAST(:amount AS TEXT) != '' THEN CAST(:amount AS NUMERIC(38, 18)) ELSE NULL END,
-                        CASE WHEN :amount_usd IS NOT NULL AND CAST(:amount_usd AS TEXT) != '' THEN CAST(:amount_usd AS NUMERIC(20, 2)) ELSE NULL END,
+                        CAST(:amount AS NUMERIC(38, 18)),
+                        CAST(:amount_usd AS NUMERIC(20, 2)),
                         :from_address, 
                         :to_address, 
                         CASE WHEN :raw_data IS NOT NULL THEN CAST(:raw_data AS JSONB) ELSE NULL END,
@@ -135,27 +135,26 @@ class DatabaseService:
                                 await savepoint.rollback()
                                 continue
                             
-                            # Convert amount/amount_usd to string, handling None, empty, and numeric 0
-                            # asyncpg needs explicit type hints for CASE statements, so we ensure strings
+                            # Convert amount/amount_usd to string for NUMERIC casting
+                            # Pass None for NULL, or a valid numeric string
                             amount_val = event.get("amount")
+                            amount_str = None
                             if amount_val is not None and amount_val != "":
-                                # Convert to string, handling 0 explicitly
-                                if amount_val == 0 or amount_val == "0":
-                                    amount_str = "0"
-                                else:
-                                    amount_str = str(amount_val)
-                            else:
-                                amount_str = None
+                                try:
+                                    # Try to convert to float first to validate it's numeric
+                                    float_val = float(amount_val)
+                                    amount_str = str(float_val)
+                                except (ValueError, TypeError):
+                                    amount_str = None
                             
                             amount_usd_val = event.get("amount_usd")
+                            amount_usd_str = None
                             if amount_usd_val is not None and amount_usd_val != "":
-                                # Convert to string, handling 0 explicitly
-                                if amount_usd_val == 0 or amount_usd_val == "0":
-                                    amount_usd_str = "0"
-                                else:
-                                    amount_usd_str = str(amount_usd_val)
-                            else:
-                                amount_usd_str = None
+                                try:
+                                    float_val = float(amount_usd_val)
+                                    amount_usd_str = str(float_val)
+                                except (ValueError, TypeError):
+                                    amount_usd_str = None
                                 
                             await session.execute(raw_insert_sql, {
                                 "event_id": event_id,
