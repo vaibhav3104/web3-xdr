@@ -95,8 +95,8 @@ class DatabaseService:
                 # Get session - connection pool handles timeouts
                 async with DatabaseManager.get_session() as session:
                     # Raw SQL INSERT - no ORM, no complications  
-                    # IMPORTANT: Pass amount/amount_usd as pre-converted NUMERIC strings or NULL
-                    # to avoid asyncpg type ambiguity issues
+                    # IMPORTANT: All parameters must have explicit types to avoid asyncpg ambiguity
+                    # Use direct CAST for all nullable fields - pass NULL from Python, not empty string
                     raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
@@ -116,7 +116,7 @@ class DatabaseService:
                         CAST(:amount_usd AS NUMERIC(20, 2)),
                         :from_address, 
                         :to_address, 
-                        CASE WHEN :raw_data IS NOT NULL THEN CAST(:raw_data AS JSONB) ELSE NULL END,
+                        CAST(:raw_data AS JSONB),
                         NOW()
                     )
                     ON CONFLICT (event_id) DO NOTHING
