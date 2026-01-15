@@ -378,6 +378,10 @@ class Sentinel3Worker:
                                             stable_key = f"{chain_id}:{event.tx_hash}:{log_index}"
                                             event_id = hashlib.sha256(stable_key.encode()).hexdigest()[:32]
                                             
+                                            # Convert severity to string name (INFO, LOW, MEDIUM, HIGH, CRITICAL)
+                                            # Severity enum has .name for string and .value for int
+                                            severity_str = event.severity.name if hasattr(event.severity, 'name') else str(event.severity).upper()
+                                            
                                             db_event = {
                                                 "event_id": event_id,
                                                 "chain_id": chain_id,
@@ -386,9 +390,9 @@ class Sentinel3Worker:
                                                 "block_number": event.block_number,
                                                 "block_timestamp": datetime.now(timezone.utc).isoformat(),
                                                 "contract_address": event.contract_address,
-                                                "from_address": getattr(event, 'from_address', None),
-                                                "to_address": getattr(event, 'to_address', None),
-                                                "severity": event.severity.value if hasattr(event.severity, 'value') else str(event.severity),
+                                                "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
+                                                "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
+                                                "severity": severity_str,
                                                 "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
                                             }
                                             await DatabaseService.save_events_batch([db_event])

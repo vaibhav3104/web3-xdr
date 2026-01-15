@@ -288,17 +288,17 @@ class EVMListener(ChainListener):
             deployer = tx.get('from') if isinstance(tx, dict) else getattr(tx, 'from', '')
             deployer = deployer if isinstance(deployer, str) else deployer.hex() if hasattr(deployer, 'hex') else str(deployer)
             
-            logger.info(
-                "contract_deployed_detected",
-                chain=self.chain_id,
-                contract=contract_address,
-                deployer=deployer,
-                block=block_number
-            )
-            
             # Fetch bytecode
             bytecode = await self.w3.eth.get_code(contract_address)
             bytecode_hex = bytecode.hex() if hasattr(bytecode, 'hex') else str(bytecode)
+            
+            logger.info(
+                "contract_deployed",
+                chain=self.chain_id,
+                address=contract_address[:20] + "...",
+                bytecode_size=len(bytecode_hex) // 2,
+                deployer=deployer[:20] + "..."
+            )
             
             # Skip tiny bytecode (likely not a real contract)
             if len(bytecode_hex) <= 10:
@@ -310,6 +310,14 @@ class EVMListener(ChainListener):
             
             # Record that we analyzed this contract
             contract_alert_store.record_analysis(self.chain_id, False)
+            
+            # Log classifier availability
+            logger.debug(
+                "contract_analysis_starting",
+                chain=self.chain_id,
+                contract=contract_address[:20],
+                ml_available=self._classifier is not None
+            )
             
             # If ML classifier is available, analyze
             if self._classifier:

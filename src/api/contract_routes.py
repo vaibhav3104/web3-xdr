@@ -15,6 +15,7 @@ from ..telemetry.contract_alerts import (
     AlertStatus, 
     ThreatLevel
 )
+from ..database.service import DatabaseService
 
 # Try to import ML classifier
 try:
@@ -201,8 +202,30 @@ async def update_contract_alert(alert_id: str, update: AlertUpdateRequest):
 async def get_contract_stats():
     """
     Get statistics about contract threat detection.
+    
+    Combines in-memory alert stats with database event counts.
     """
+    # Get in-memory stats (alerts detected in this API instance)
     stats = contract_alert_store.get_stats()
+    
+    # Query database for actual contract deployment events
+    try:
+        # Count all contract_deploy events
+        db_stats = await DatabaseService.get_contract_deployment_stats()
+        
+        # Merge database stats with in-memory stats
+        stats["total_contracts_analyzed"] = db_stats.get("total_contracts", 0)
+        stats["contracts_by_chain"] = db_stats.get("by_chain", {})
+        
+        logger.debug(
+            "contract_stats_fetched",
+            in_memory_alerts=stats.get("total_threats_detected", 0),
+            db_contracts=db_stats.get("total_contracts", 0)
+        )
+    except Exception as e:
+        logger.warning("contract_stats_db_query_failed", error=str(e))
+        # Fall back to in-memory stats only
+    
     return StatsResponse(**stats)
 
 

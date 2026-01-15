@@ -590,6 +590,37 @@ class DatabaseService:
             result = await session.execute(query)
             return {row.event_type: row.count for row in result}
     
+    @staticmethod
+    async def get_contract_deployment_stats() -> Dict[str, Any]:
+        """
+        Get statistics about contract deployment events from the database.
+        Returns total count and breakdown by chain.
+        """
+        async with DatabaseManager.get_session() as session:
+            try:
+                # Count contract_deploy events by chain
+                sql = text("""
+                    SELECT 
+                        chain_id,
+                        COUNT(*) as count
+                    FROM events 
+                    WHERE event_type = 'contract_deploy'
+                    GROUP BY chain_id
+                """)
+                result = await session.execute(sql)
+                by_chain = {row.chain_id: row.count for row in result}
+                
+                # Total count
+                total = sum(by_chain.values())
+                
+                return {
+                    "total_contracts": total,
+                    "by_chain": by_chain
+                }
+            except Exception as e:
+                logger.error("get_contract_deployment_stats_error", error=str(e))
+                return {"total_contracts": 0, "by_chain": {}}
+    
     # =========================================================================
     # INCIDENT OPERATIONS
     # =========================================================================
