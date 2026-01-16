@@ -403,6 +403,9 @@ class Sentinel3Worker:
                                             # Severity enum has .name for string and .value for int
                                             severity_str = event.severity.name if hasattr(event.severity, 'name') else str(event.severity).upper()
                                             
+                                            # Serialize raw_data to handle HexBytes
+                                            raw_data = self._serialize_raw_data(event.raw_event if hasattr(event, 'raw_event') else {})
+                                            
                                             db_event = {
                                                 "event_id": event_id,
                                                 "chain_id": chain_id,
@@ -414,7 +417,7 @@ class Sentinel3Worker:
                                                 "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
                                                 "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
                                                 "severity": severity_str,
-                                                "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
+                                                "raw_data": raw_data,
                                             }
                                             await DatabaseService.save_events_batch([db_event])
                                             events_ingested_total.labels(
@@ -690,6 +693,29 @@ class Sentinel3Worker:
         except Exception as e:
             logger.error("failed_to_publish_predicted_incident", error=str(e))
     
+    def _serialize_raw_data(self, data: dict) -> dict:
+        """Convert HexBytes and other non-JSON-serializable types to strings."""
+        if not data:
+            return {}
+        
+        result = {}
+        for key, value in data.items():
+            if hasattr(value, 'hex'):
+                # HexBytes or similar
+                result[key] = value.hex() if callable(value.hex) else str(value)
+            elif isinstance(value, bytes):
+                result[key] = value.hex()
+            elif isinstance(value, dict):
+                result[key] = self._serialize_raw_data(value)
+            elif isinstance(value, list):
+                result[key] = [
+                    v.hex() if hasattr(v, 'hex') else str(v) if isinstance(v, bytes) else v
+                    for v in value
+                ]
+            else:
+                result[key] = value
+        return result
+    
     async def _save_event_to_db(self, event: SecurityEvent):
         """
         Event handler to save SecurityEvent to database.
@@ -710,6 +736,9 @@ class Sentinel3Worker:
             # Convert event_type to string
             event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
             
+            # Serialize raw_data to handle HexBytes
+            raw_data = self._serialize_raw_data(event.raw_event if hasattr(event, 'raw_event') else {})
+            
             db_event = {
                 "event_id": event_id,
                 "chain_id": chain_id,
@@ -721,7 +750,7 @@ class Sentinel3Worker:
                 "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
                 "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
                 "severity": severity_str,
-                "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
+                "raw_data": raw_data,
             }
             
             await DatabaseService.save_events_batch([db_event])
