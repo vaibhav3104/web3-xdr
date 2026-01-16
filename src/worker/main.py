@@ -286,6 +286,18 @@ class Sentinel3Worker:
             listener = EVMListener(listener_config)
             self.listeners[chain_id] = listener
             
+            # Connect listener and register event handler for contract deployments
+            try:
+                connected = await listener.connect()
+                if connected:
+                    # Register handler to save contract deployment events to database
+                    listener.add_event_handler(self._save_event_to_db)
+                    logger.info("listener_connected", chain_id=chain_id)
+                else:
+                    logger.warning("listener_connect_failed", chain_id=chain_id)
+            except Exception as conn_err:
+                logger.warning("listener_connect_error", chain_id=chain_id, error=str(conn_err))
+            
             logger.info("chain_initialized", chain_id=chain_id, rpc_count=len(rpc_urls))
         
         # Initialize Runtime Security Plane if enabled
@@ -354,6 +366,15 @@ class Sentinel3Worker:
                             # Get logs from last processed to head (max 10 blocks)
                             from_block = max(processed + 1, head_block - 10)
                             to_block = head_block
+                            
+                            # Process blocks via listener for contract deployment detection
+                            # This calls emit_event() which triggers _save_event_to_db handler
+                            if listener.w3 is not None:
+                                try:
+                                    for block_num in range(from_block, to_block + 1):
+                                        await listener.process_block(block_num)
+                                except Exception as listener_err:
+                                    logger.debug("listener_process_block_error", chain=chain_id, error=str(listener_err))
                             
                             try:
                                 logs = await rpc_provider.get_logs(from_block, to_block)
@@ -668,6 +689,50 @@ class Sentinel3Worker:
         
         except Exception as e:
             logger.error("failed_to_publish_predicted_incident", error=str(e))
+    
+    async def _save_event_to_db(self, event: SecurityEvent):
+        """
+        Event handler to save SecurityEvent to database.
+        Called by listener's emit_event() for contract deployments and other events.
+        """
+        from src.database.service import DatabaseService
+        import hashlib
+        
+        try:
+            chain_id = event.chain_id
+            log_index = getattr(event, 'log_index', 0)
+            stable_key = f"{chain_id}:{event.tx_hash}:{log_index}"
+            event_id = hashlib.sha256(stable_key.encode()).hexdigest()[:32]
+            
+            # Convert severity to string name
+            severity_str = event.severity.name if hasattr(event.severity, 'name') else str(event.severity).upper()
+            
+            # Convert event_type to string
+            event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+            
+            db_event = {
+                "event_id": event_id,
+                "chain_id": chain_id,
+                "event_type": event_type_str,
+                "tx_hash": event.tx_hash,
+                "block_number": event.block_number,
+                "block_timestamp": event.block_timestamp.isoformat() if hasattr(event.block_timestamp, 'isoformat') else str(event.block_timestamp),
+                "contract_address": event.contract_address,
+                "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
+                "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
+                "severity": severity_str,
+                "raw_data": event.raw_event if hasattr(event, 'raw_event') else {},
+            }
+            
+            await DatabaseService.save_events_batch([db_event])
+            logger.info(
+                "event_handler_saved",
+                chain=chain_id,
+                event_type=event_type_str,
+                tx_hash=event.tx_hash[:20] + "..."
+            )
+        except Exception as e:
+            logger.error("event_handler_save_failed", error=str(e), exc_info=True)
     
     def _log_to_security_event(self, chain_id: str, log: dict, block_number: int) -> Optional[SecurityEvent]:
         """Convert log to SecurityEvent (simplified)."""
