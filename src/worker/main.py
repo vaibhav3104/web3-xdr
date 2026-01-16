@@ -735,16 +735,41 @@ class Sentinel3Worker:
             logger.error("event_handler_save_failed", error=str(e), exc_info=True)
     
     def _log_to_security_event(self, chain_id: str, log: dict, block_number: int) -> Optional[SecurityEvent]:
-        """Convert log to SecurityEvent (simplified)."""
+        """Convert log to SecurityEvent with event classification."""
+        from src.telemetry.event_signatures import get_event_info
+        
         try:
+            # Get topic0 for event classification
+            topics = log.get("topics", [])
+            topic0 = topics[0] if topics else ""
+            if hasattr(topic0, 'hex'):
+                topic0 = topic0.hex()
+            if topic0 and not topic0.startswith("0x"):
+                topic0 = "0x" + topic0
+            
+            # Look up event info from signature database
+            event_info = get_event_info(topic0) if topic0 else {}
+            event_type = event_info.get("type", EventType.UNKNOWN)
+            event_severity = event_info.get("severity", "low")
+            
+            # Map severity string to Severity enum
+            severity_map = {
+                "info": Severity.INFO,
+                "low": Severity.LOW,
+                "medium": Severity.MEDIUM,
+                "high": Severity.HIGH,
+                "critical": Severity.CRITICAL
+            }
+            severity = severity_map.get(event_severity, Severity.LOW)
+            
             event = SecurityEvent(
                 chain_id=chain_id,
                 tx_hash=log.get("transactionHash", ""),
                 block_number=block_number,
                 log_index=log.get("logIndex", 0),
                 contract_address=log.get("address", ""),
-                event_type=EventType.UNKNOWN,
-                severity=Severity.INFO,
+                event_type=event_type,
+                severity=severity,
                 raw_event=log
             )
             return event
