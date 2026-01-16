@@ -12,12 +12,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (including PostgreSQL client)
+# Install system dependencies (including PostgreSQL client and git for foundry)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libpq-dev \
     gcc \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Foundry (Anvil) for transaction simulation
+# Using foundryup installer which downloads pre-built binaries
+ENV FOUNDRY_DIR=/usr/local/foundry
+RUN mkdir -p $FOUNDRY_DIR && \
+    curl -L https://foundry.paradigm.xyz | bash && \
+    /root/.foundry/bin/foundryup && \
+    cp /root/.foundry/bin/anvil /usr/local/bin/anvil && \
+    cp /root/.foundry/bin/cast /usr/local/bin/cast && \
+    cp /root/.foundry/bin/forge /usr/local/bin/forge && \
+    chmod +x /usr/local/bin/anvil /usr/local/bin/cast /usr/local/bin/forge && \
+    rm -rf /root/.foundry
 
 # Copy requirements first for caching
 COPY requirements.txt .
