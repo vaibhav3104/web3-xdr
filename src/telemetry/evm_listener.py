@@ -387,6 +387,27 @@ class EVMListener(ChainListener):
                         alert_id=alert.alert_id
                     )
                 else:
+                    # Safe contract - still emit event for tracking/stats
+                    event = SecurityEvent(
+                        chain_id=self.chain_id,
+                        block_number=block_number,
+                        block_timestamp=block_timestamp,
+                        tx_hash=tx_hash_hex,
+                        event_type=EventType.CONTRACT_DEPLOY,
+                        severity=Severity.INFO,  # Safe contracts get INFO severity
+                        source_address=deployer,
+                        contract_address=contract_address,
+                        raw_event={
+                            "type": "contract_deployment",
+                            "threat_category": "safe",
+                            "confidence": result.confidence,
+                            "risk_score": result.risk_score,
+                            "bytecode_size": len(bytecode_hex) // 2,
+                            "bytecode_hash": bytecode_hash
+                        }
+                    )
+                    await self.emit_event(event)
+                    
                     logger.info(
                         "contract_analyzed_safe",
                         chain=self.chain_id,
