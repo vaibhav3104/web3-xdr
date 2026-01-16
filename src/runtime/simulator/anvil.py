@@ -121,12 +121,11 @@ class AnvilSimulator(Simulator):
     
     async def _start_anvil_instance(self, port: int):
         """Start a single Anvil instance."""
-        # Start Anvil with fork
+        # Start Anvil with fork (uses latest block by default)
         cmd = [
             "anvil",
             "--port", str(port),
             "--fork-url", self.rpc_url,
-            "--fork-block-number", "latest",  # Will be updated per simulation
             "--host", "127.0.0.1",
             "--no-rate-limit",
             "--silent",  # Reduce noise
