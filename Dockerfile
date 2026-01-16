@@ -21,16 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Foundry (Anvil) for transaction simulation
-# Using foundryup installer which downloads pre-built binaries
-ENV FOUNDRY_DIR=/usr/local/foundry
-RUN mkdir -p $FOUNDRY_DIR && \
-    curl -L https://foundry.paradigm.xyz | bash && \
-    /root/.foundry/bin/foundryup && \
-    cp /root/.foundry/bin/anvil /usr/local/bin/anvil && \
-    cp /root/.foundry/bin/cast /usr/local/bin/cast && \
-    cp /root/.foundry/bin/forge /usr/local/bin/forge && \
-    chmod +x /usr/local/bin/anvil /usr/local/bin/cast /usr/local/bin/forge && \
-    rm -rf /root/.foundry
+# Download pre-built binaries directly from GitHub releases
+ENV FOUNDRY_VERSION=stable
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi && \
+    if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi && \
+    curl -L "https://github.com/foundry-rs/foundry/releases/download/stable/foundry_stable_linux_${ARCH}.tar.gz" -o /tmp/foundry.tar.gz && \
+    tar -xzf /tmp/foundry.tar.gz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/anvil /usr/local/bin/cast /usr/local/bin/forge /usr/local/bin/chisel && \
+    rm /tmp/foundry.tar.gz && \
+    anvil --version
 
 # Copy requirements first for caching
 COPY requirements.txt .
