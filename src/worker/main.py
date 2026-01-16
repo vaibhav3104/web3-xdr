@@ -548,42 +548,39 @@ class Sentinel3Worker:
                         UnbackedMintInvariant,
                         TVLVelocityInvariant,
                         TransactionVelocityInvariant,
-                        SignatureThresholdInvariant,
                     )
                     
                     # Add economic invariants (detect unbacked mints, parity violations)
+                    # MintLockParityInvariant(bridge_id, source_chain, dest_chain)
                     invariant_engine.add_invariant(MintLockParityInvariant(
-                        name=f"mint_lock_parity_{chain_id}",
                         bridge_id=chain_id,
                         source_chain=chain_id,
-                        dest_chain="*"  # All destinations
+                        dest_chain="ethereum"  # Cross-chain to ethereum
                     ))
+                    
+                    # UnbackedMintInvariant(bridge_id)
                     invariant_engine.add_invariant(UnbackedMintInvariant(
-                        name=f"unbacked_mint_{chain_id}",
                         bridge_id=chain_id
                     ))
                     
                     # Add velocity invariants (detect rapid drains)
+                    # TVLVelocityInvariant(bridge_id, max_drain_percent_per_hour, min_drain_usd)
                     invariant_engine.add_invariant(TVLVelocityInvariant(
-                        name=f"tvl_velocity_{chain_id}",
-                        max_drain_rate_per_hour=0.1,  # 10% per hour max
-                        alert_threshold=0.05  # Alert at 5%
+                        bridge_id=chain_id,
+                        max_drain_percent_per_hour=10.0,  # 10% per hour max
+                        min_drain_usd=100_000  # Alert on >$100k drain
                     ))
+                    
+                    # TransactionVelocityInvariant(bridge_id, max_tx_per_hour, spike_multiplier)
                     invariant_engine.add_invariant(TransactionVelocityInvariant(
-                        name=f"tx_velocity_{chain_id}",
-                        max_tx_per_minute=100,  # Max 100 tx/min from single address
-                        window_minutes=5
+                        bridge_id=chain_id,
+                        max_tx_per_hour=1000,  # Max 1000 tx per hour
+                        spike_multiplier=5.0  # 5x normal = alert
                     ))
                     
-                    # Add governance invariants
-                    invariant_engine.add_invariant(SignatureThresholdInvariant(
-                        name=f"sig_threshold_{chain_id}",
-                        min_signatures=2  # Require at least 2 signatures
-                    ))
-                    
-                    logger.info("invariants_registered", chain_id=chain_id, count=5)
+                    logger.info("invariants_registered", chain_id=chain_id, count=4)
                 except Exception as inv_err:
-                    logger.warning("failed_to_register_invariants", chain_id=chain_id, error=str(inv_err))
+                    logger.warning("failed_to_register_invariants", chain_id=chain_id, error=str(inv_err), exc_info=True)
                 
                 # Create runtime engine
                 runtime_engine = RuntimeEngine(
