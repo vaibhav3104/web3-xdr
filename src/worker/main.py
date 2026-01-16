@@ -558,9 +558,11 @@ class Sentinel3Worker:
                         dest_chain="ethereum"  # Cross-chain to ethereum
                     ))
                     
-                    # UnbackedMintInvariant(bridge_id)
+                    # UnbackedMintInvariant(bridge_id, source_chain, dest_chain)
                     invariant_engine.add_invariant(UnbackedMintInvariant(
-                        bridge_id=chain_id
+                        bridge_id=chain_id,
+                        source_chain=chain_id,
+                        dest_chain="ethereum"  # Cross-chain to ethereum
                     ))
                     
                     # Add velocity invariants (detect rapid drains)
