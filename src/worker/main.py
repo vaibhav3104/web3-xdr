@@ -369,12 +369,15 @@ class Sentinel3Worker:
                             
                             # Process blocks via listener for contract deployment detection
                             # This calls emit_event() which triggers _save_event_to_db handler
-                            if listener.w3 is not None:
+                            if listener is not None and listener.w3 is not None:
                                 try:
+                                    logger.debug("listener_processing_blocks", chain=chain_id, from_block=from_block, to_block=to_block)
                                     for block_num in range(from_block, to_block + 1):
                                         await listener.process_block(block_num)
                                 except Exception as listener_err:
-                                    logger.debug("listener_process_block_error", chain=chain_id, error=str(listener_err))
+                                    logger.warning("listener_process_block_error", chain=chain_id, from_block=from_block, to_block=to_block, error=str(listener_err), exc_info=True)
+                            else:
+                                logger.debug("listener_not_available", chain=chain_id, listener_exists=listener is not None, w3_exists=listener.w3 is not None if listener else False)
                             
                             try:
                                 logs = await rpc_provider.get_logs(from_block, to_block)

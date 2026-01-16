@@ -191,6 +191,7 @@ class EVMListener(ChainListener):
         Process a single block and extract security events.
         Also detects and analyzes new contract deployments.
         """
+        logger.debug("evm_listener_process_block_start", chain=self.chain_id, block_number=block_number)
         try:
             block = await self.w3.eth.get_block(block_number, full_transactions=True)
         except BlockNotFound:
@@ -293,11 +294,12 @@ class EVMListener(ChainListener):
             bytecode_hex = bytecode.hex() if hasattr(bytecode, 'hex') else str(bytecode)
             
             logger.info(
-                "contract_deployed",
+                "evm_listener_contract_deployed",
                 chain=self.chain_id,
                 address=contract_address[:20] + "...",
                 bytecode_size=len(bytecode_hex) // 2,
-                deployer=deployer[:20] + "..."
+                deployer=deployer[:20] + "...",
+                source="evm_listener"
             )
             
             # Skip tiny bytecode (likely not a real contract)
