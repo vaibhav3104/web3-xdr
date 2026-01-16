@@ -158,6 +158,11 @@ async def list_contract_alerts(
             limit=limit - len(alerts_response)
         )
         
+        logger.info("contract_alerts_db_query", 
+                    db_alerts_count=len(db_alerts),
+                    chain_filter=chain_id,
+                    in_memory_count=len(alerts_response))
+        
         for db_alert in db_alerts:
             # Check if already in response (by alert_id)
             alert_id = db_alert.get("alert_id") or db_alert.get("event_id")

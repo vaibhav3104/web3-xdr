@@ -653,9 +653,15 @@ class DatabaseService:
                 """)
                 
                 result = await session.execute(sql, params)
+                rows = result.fetchall()
+                
+                logger.info("get_contract_deploy_alerts_query", 
+                            rows_found=len(rows),
+                            chain_filter=chain_id)
+                
                 alerts = []
                 
-                for row in result:
+                for row in rows:
                     raw_data = row.raw_data if row.raw_data else {}
                     alerts.append({
                         "event_id": row.event_id,
