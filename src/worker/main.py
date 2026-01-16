@@ -904,6 +904,26 @@ class Sentinel3Worker:
             runtime_task = asyncio.create_task(self.runtime_loop())
             logger.info("runtime_loop_started")
         
+        # Start continuous learning if enabled
+        continuous_learning_task = None
+        continuous_learning_enabled = os.getenv("CONTINUOUS_LEARNING_ENABLED", "true").lower() == "true"
+        if continuous_learning_enabled:
+            try:
+                from src.ai.continuous_learning import start_continuous_learning, LearningConfig
+                
+                # Configure continuous learning with chains from config
+                chain_ids = [c.get("chain_id") for c in self.config.get("chains", []) if c.get("chain_type", "evm").lower() == "evm"]
+                learning_config = LearningConfig(
+                    chains=chain_ids[:6],  # Limit to first 6 EVM chains
+                    retrain_interval_hours=6,  # Retrain every 6 hours
+                    min_new_samples=50,  # Minimum samples before retraining
+                )
+                
+                continuous_learning_task = asyncio.create_task(start_continuous_learning(learning_config))
+                logger.info("continuous_learning_started", chains=chain_ids[:6], retrain_interval_hours=6)
+            except Exception as e:
+                logger.warning("continuous_learning_start_failed", error=str(e))
+        
         # Update uptime metric periodically
         async def update_uptime():
             while self.running:
@@ -913,18 +933,28 @@ class Sentinel3Worker:
         
         uptime_task = asyncio.create_task(update_uptime())
         
-        logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled)
+        logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled, continuous_learning=continuous_learning_enabled)
         
         # Wait for tasks
         tasks = [ingestion_task, detection_task, uptime_task]
         if runtime_task:
             tasks.append(runtime_task)
+        if continuous_learning_task:
+            tasks.append(continuous_learning_task)
         await asyncio.gather(*tasks, return_exceptions=True)
     
     async def stop(self):
         """Stop the worker gracefully."""
         logger.info("worker_stopping")
         self.running = False
+        
+        # Stop continuous learning
+        try:
+            from src.ai.continuous_learning import stop_continuous_learning
+            await stop_continuous_learning()
+            logger.info("continuous_learning_stopped")
+        except Exception as e:
+            logger.warning("continuous_learning_stop_failed", error=str(e))
         
         # Shutdown runtime engines
         if self.runtime_enabled and RUNTIME_AVAILABLE:

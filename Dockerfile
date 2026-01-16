@@ -35,7 +35,10 @@ RUN ARCH=$(uname -m) && \
 # Copy requirements first for caching
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install PyTorch CPU-only first (from PyTorch index for smaller size)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code

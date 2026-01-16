@@ -50,10 +50,9 @@ matplotlib>=3.8.0  # For plotting
 seaborn>=0.13.0  # For enhanced plots
 xgboost>=2.0.0  # Optional: for XGBoost classifier
 
-# Deep Learning (Optional - for advanced threat detection)
-# Uncomment for PyTorch support:
-# torch>=2.0.0
-# torchvision>=0.15.0
+# Deep Learning (for advanced threat detection)
+# Using CPU-only PyTorch to reduce image size (~200MB vs ~2GB)
+torch>=2.0.0
 
 # AI/LLM Integration (Optional)
 # openai>=1.0.0
