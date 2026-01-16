@@ -621,6 +621,60 @@ class DatabaseService:
                 logger.error("get_contract_deployment_stats_error", error=str(e))
                 return {"total_contracts": 0, "by_chain": {}}
     
+    @staticmethod
+    async def get_contract_deploy_alerts(
+        chain_id: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get contract deployment events from the database for the alerts list.
+        Returns events with event_type='contract_deploy'.
+        """
+        async with DatabaseManager.get_session() as session:
+            try:
+                where_parts = ["event_type = 'contract_deploy'"]
+                params = {"limit": limit}
+                
+                if chain_id:
+                    where_parts.append("chain_id = :chain_id")
+                    params["chain_id"] = chain_id
+                
+                where_clause = " AND ".join(where_parts)
+                
+                sql = text(f"""
+                    SELECT 
+                        event_id, chain_id, tx_hash, block_number,
+                        block_timestamp, contract_address, severity,
+                        from_address, raw_data
+                    FROM events 
+                    WHERE {where_clause}
+                    ORDER BY block_timestamp DESC
+                    LIMIT :limit
+                """)
+                
+                result = await session.execute(sql, params)
+                alerts = []
+                
+                for row in result:
+                    raw_data = row.raw_data if row.raw_data else {}
+                    alerts.append({
+                        "event_id": row.event_id,
+                        "alert_id": raw_data.get("alert_id", row.event_id),
+                        "chain_id": row.chain_id,
+                        "tx_hash": row.tx_hash,
+                        "block_number": row.block_number,
+                        "block_timestamp": row.block_timestamp.isoformat() if row.block_timestamp else "",
+                        "contract_address": row.contract_address,
+                        "severity": row.severity,
+                        "from_address": row.from_address,
+                        "raw_data": raw_data
+                    })
+                
+                return alerts
+            except Exception as e:
+                logger.error("get_contract_deploy_alerts_error", error=str(e))
+                return []
+    
     # =========================================================================
     # INCIDENT OPERATIONS
     # =========================================================================

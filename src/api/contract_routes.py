@@ -102,8 +102,12 @@ async def list_contract_alerts(
 ):
     """
     List all contract threat alerts with optional filtering.
+    
+    Combines in-memory alerts with contract_deploy events from database.
     """
-    # Parse filters
+    alerts_response = []
+    
+    # First, get alerts from in-memory store (if any)
     status_filter = None
     if status:
         try:
@@ -118,15 +122,15 @@ async def list_contract_alerts(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid threat_level: {threat_level}")
     
-    alerts = contract_alert_store.get_all_alerts(
+    in_memory_alerts = contract_alert_store.get_all_alerts(
         chain_id=chain_id,
         status=status_filter,
         threat_level=threat_filter,
         limit=limit
     )
     
-    return [
-        AlertResponse(
+    for a in in_memory_alerts:
+        alerts_response.append(AlertResponse(
             alert_id=a.alert_id,
             timestamp=a.timestamp.isoformat(),
             chain_id=a.chain_id,
@@ -145,9 +149,78 @@ async def list_contract_alerts(
             bytecode_hash=a.bytecode_hash,
             status=a.status.value,
             notes=a.notes
+        ))
+    
+    # Also query contract_deploy events from database
+    try:
+        db_alerts = await DatabaseService.get_contract_deploy_alerts(
+            chain_id=chain_id,
+            limit=limit - len(alerts_response)
         )
-        for a in alerts
-    ]
+        
+        for db_alert in db_alerts:
+            # Check if already in response (by alert_id)
+            alert_id = db_alert.get("alert_id") or db_alert.get("event_id")
+            if any(a.alert_id == alert_id for a in alerts_response):
+                continue
+            
+            # Parse raw_data for threat info
+            raw_data = db_alert.get("raw_data", {})
+            
+            # Parse confidence (may be hex float string)
+            confidence = raw_data.get("confidence", 0)
+            if isinstance(confidence, str):
+                try:
+                    confidence = float.fromhex(confidence)
+                except:
+                    confidence = 0.5
+            
+            # Parse risk_score
+            risk_score = raw_data.get("risk_score", 0)
+            if isinstance(risk_score, str):
+                try:
+                    risk_score = float.fromhex(risk_score)
+                except:
+                    risk_score = 50.0
+            
+            # Map severity to threat_level
+            severity = db_alert.get("severity", "medium").lower()
+            threat_level_map = {
+                "critical": "critical",
+                "high": "high", 
+                "medium": "medium",
+                "low": "low",
+                "info": "safe"
+            }
+            threat_lvl = threat_level_map.get(severity, "medium")
+            
+            alerts_response.append(AlertResponse(
+                alert_id=alert_id,
+                timestamp=db_alert.get("block_timestamp", ""),
+                chain_id=db_alert.get("chain_id", ""),
+                contract_address=db_alert.get("contract_address", ""),
+                deployer_address=raw_data.get("deployer", "") or db_alert.get("from_address", ""),
+                tx_hash=db_alert.get("tx_hash", ""),
+                block_number=db_alert.get("block_number", 0),
+                threat_category=raw_data.get("threat_category", "unknown"),
+                threat_level=threat_lvl,
+                confidence=confidence,
+                risk_score=risk_score,
+                risk_factors=raw_data.get("risk_factors", []),
+                similar_exploits=raw_data.get("similar_exploits", []),
+                recommendation=raw_data.get("recommendation", "Review contract code"),
+                bytecode_size=raw_data.get("bytecode_size", 0),
+                bytecode_hash=raw_data.get("bytecode_hash", ""),
+                status="active",
+                notes=""
+            ))
+    except Exception as e:
+        logger.warning("failed_to_query_db_contract_alerts", error=str(e))
+    
+    # Sort by timestamp descending
+    alerts_response.sort(key=lambda x: x.timestamp, reverse=True)
+    
+    return alerts_response[:limit]
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
