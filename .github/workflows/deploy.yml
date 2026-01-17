@@ -3,7 +3,10 @@
 # Staging: Push to 'develop' branch → deploys to web3-xdr (staging)
 # Production: Push to 'main' branch → deploys to web3-xdr-production
 # 
-# NEW: Multi-stage build includes Runtime Security Plane with Python worker
+# Features:
+# - Multi-stage build includes Runtime Security Plane with Python worker
+# - Redis Memorystore integration via VPC connector
+# - Cloud SQL Proxy for PostgreSQL
 # =============================================================================
 
 name: Deploy Sentinel3
