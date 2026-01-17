@@ -830,6 +830,49 @@ class DatabaseService:
                 raise
     
     @staticmethod
+    async def get_incidents(
+        severity: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get incidents from the database with optional filtering.
+        """
+        async with DatabaseManager.get_session() as session:
+            try:
+                query = select(IncidentModel).order_by(IncidentModel.created_at.desc())
+                
+                if severity:
+                    query = query.where(IncidentModel.severity == severity.upper())
+                
+                if status:
+                    query = query.where(IncidentModel.status == status.upper())
+                
+                query = query.limit(limit)
+                
+                result = await session.execute(query)
+                incidents = result.scalars().all()
+                
+                return [
+                    {
+                        "id": inc.incident_id,
+                        "title": inc.title,
+                        "severity": inc.severity.lower() if inc.severity else "medium",
+                        "status": inc.status.lower() if inc.status else "open",
+                        "attack_type": inc.attack_type or "unknown",
+                        "confidence": inc.confidence or 0.5,
+                        "total_loss_usd": inc.total_loss_usd or 0,
+                        "affected_chains": inc.affected_chains or [],
+                        "created_at": inc.created_at,
+                        "event_count": inc.event_count or 0,
+                    }
+                    for inc in incidents
+                ]
+            except Exception as e:
+                logger.error("get_incidents_error", error=str(e))
+                return []
+    
+    @staticmethod
     async def get_incident_stats() -> Dict[str, Any]:
         """
         Get incident statistics.

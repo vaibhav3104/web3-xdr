@@ -145,33 +145,60 @@ async def list_incidents(
 ):
     """
     List all incidents with optional filtering.
-    Only shows real incidents (from monitor or attack simulator).
+    Fetches from both in-memory state and database.
     """
     from ..shared_state import monitor_state
+    from ..database.service import DatabaseService
     
-    incidents = monitor_state.get_incidents()
+    all_incidents = []
+    seen_ids = set()
     
-    # Convert real incidents to response format
-    all_incidents = [
-        IncidentSummary(
-            id=i.id,
-            title=i.title,
-            severity=i.severity.lower() if i.severity else "medium",
-            status=i.status.lower() if i.status else "open",
-            attack_type=i.attack_type,
-            confidence=i.confidence,
-            total_loss_usd=i.total_loss_usd,
-            affected_chains=i.affected_chains,
-            created_at=i.created_at,
+    # 1. Get incidents from in-memory state (simulator, etc.)
+    memory_incidents = monitor_state.get_incidents()
+    for i in memory_incidents:
+        if i.id not in seen_ids:
+            seen_ids.add(i.id)
+            all_incidents.append(IncidentSummary(
+                id=i.id,
+                title=i.title,
+                severity=i.severity.lower() if i.severity else "medium",
+                status=i.status.lower() if i.status else "open",
+                attack_type=i.attack_type,
+                confidence=i.confidence,
+                total_loss_usd=i.total_loss_usd,
+                affected_chains=i.affected_chains,
+                created_at=i.created_at,
+            ))
+    
+    # 2. Get incidents from database (worker-created)
+    try:
+        db_incidents = await DatabaseService.get_incidents(
+            severity=severity,
+            status=status,
+            limit=limit * 2  # Fetch more to account for overlap
         )
-        for i in incidents
-    ]
+        for inc in db_incidents:
+            if inc["id"] not in seen_ids:
+                seen_ids.add(inc["id"])
+                all_incidents.append(IncidentSummary(
+                    id=inc["id"],
+                    title=inc["title"] or "Security Incident",
+                    severity=inc["severity"],
+                    status=inc["status"],
+                    attack_type=inc["attack_type"],
+                    confidence=inc["confidence"],
+                    total_loss_usd=inc["total_loss_usd"],
+                    affected_chains=inc["affected_chains"],
+                    created_at=inc["created_at"],
+                ))
+    except Exception as e:
+        logger.warning("db_incidents_fetch_failed", error=str(e))
     
-    # Filter by severity
+    # Filter by severity (for in-memory incidents)
     if severity:
         all_incidents = [i for i in all_incidents if i.severity == severity.lower()]
     
-    # Filter by status
+    # Filter by status (for in-memory incidents)
     if status:
         all_incidents = [i for i in all_incidents if i.status == status.lower()]
     
@@ -636,24 +663,38 @@ async def debug_db_connection():
 async def get_statistics():
     """
     Get real-time system statistics and metrics.
-    Only counts real incidents (no simulated demos).
+    Counts incidents from both memory and database.
     """
     from ..shared_state import monitor_state
+    from ..database.service import DatabaseService
     
     stats = monitor_state.get_stats()
-    incidents = monitor_state.get_incidents()
+    memory_incidents = monitor_state.get_incidents()
     
     uptime = 0
     if stats["start_time"]:
         uptime = int((datetime.utcnow() - stats["start_time"]).total_seconds())
     
-    # Count real incidents only
-    total_incidents = len(incidents)
-    active_incidents = len([i for i in incidents if i.status.lower() in ("open", "investigating")])
-    critical_count = len([i for i in incidents if i.severity.upper() == "CRITICAL"])
-    high_count = len([i for i in incidents if i.severity.upper() == "HIGH"])
-    medium_count = len([i for i in incidents if i.severity.upper() == "MEDIUM"])
-    low_count = len([i for i in incidents if i.severity.upper() == "LOW"])
+    # Count in-memory incidents
+    total_incidents = len(memory_incidents)
+    active_incidents = len([i for i in memory_incidents if i.status.lower() in ("open", "investigating")])
+    critical_count = len([i for i in memory_incidents if i.severity.upper() == "CRITICAL"])
+    high_count = len([i for i in memory_incidents if i.severity.upper() == "HIGH"])
+    medium_count = len([i for i in memory_incidents if i.severity.upper() == "MEDIUM"])
+    low_count = len([i for i in memory_incidents if i.severity.upper() == "LOW"])
+    
+    # Also count database incidents
+    try:
+        db_stats = await DatabaseService.get_incident_stats()
+        total_incidents += db_stats.get("total", 0)
+        active_incidents += db_stats.get("active", 0)
+        by_severity = db_stats.get("by_severity", {})
+        critical_count += by_severity.get("CRITICAL", 0)
+        high_count += by_severity.get("HIGH", 0)
+        medium_count += by_severity.get("MEDIUM", 0)
+        low_count += by_severity.get("LOW", 0)
+    except Exception as e:
+        logger.warning("db_incident_stats_failed", error=str(e))
     
     return {
         "total_events": stats["total_events"],

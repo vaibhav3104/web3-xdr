@@ -852,6 +852,57 @@ class Sentinel3Worker:
             logger.error("log_conversion_failed", error=str(e))
             return None
     
+    async def _create_incident_from_rule(
+        self,
+        rule,
+        event_data: Dict,
+        db_event: Dict,
+        match_details: Dict
+    ):
+        """Create an incident when a HIGH/CRITICAL rule is triggered."""
+        from src.database.service import DatabaseService
+        
+        try:
+            # Generate unique incident ID based on rule and event
+            chain_id = event_data.get("chain_id", "unknown")
+            tx_hash = event_data.get("tx_hash", "")[:16]
+            incident_id = f"inc_{rule.id}_{chain_id}_{tx_hash}_{int(datetime.now(timezone.utc).timestamp())}"
+            
+            # Build incident data
+            incident_data = {
+                "incident_id": incident_id,
+                "title": f"[{rule.severity.upper()}] {rule.name}",
+                "summary": rule.description or f"Rule {rule.name} triggered on {chain_id}",
+                "severity": rule.severity.upper(),
+                "status": "OPEN_PENDING",
+                "attack_type": rule.category or "RULE_TRIGGERED",
+                "confidence": rule.confidence or 0.8,
+                "total_loss_usd": 0,  # Will be updated if amount is available
+                "affected_chains": [chain_id],
+                "event_ids": [db_event.get("event_id", "")],
+                "rule_ids": [rule.id],
+                "recommended_actions": rule.recommended_actions or [
+                    "Review the transaction details",
+                    "Check related transactions",
+                    "Investigate the involved addresses"
+                ],
+                "cluster_key": f"{rule.id}_{chain_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
+            }
+            
+            # Save to database
+            saved_id = await DatabaseService.save_incident(incident_data)
+            if saved_id:
+                logger.info(
+                    "incident_created_from_rule",
+                    incident_id=saved_id,
+                    rule_id=rule.id,
+                    rule_name=rule.name,
+                    severity=rule.severity,
+                    chain=chain_id
+                )
+        except Exception as e:
+            logger.error("incident_creation_failed", error=str(e), rule_id=rule.id)
+    
     async def detection_loop(self):
         """Loop B: Consume events from bus and process."""
         logger.info("detection_loop_started")
@@ -936,6 +987,15 @@ class Sentinel3Worker:
                                         db_event["severity"] = "CRITICAL"
                                     elif match.rule.is_high and db_event["severity"] not in ["CRITICAL"]:
                                         db_event["severity"] = "HIGH"
+                                    
+                                    # Create incident for HIGH and CRITICAL severity rules
+                                    if match.rule.severity.upper() in ["HIGH", "CRITICAL"]:
+                                        await self._create_incident_from_rule(
+                                            rule=match.rule,
+                                            event_data=event_data,
+                                            db_event=db_event,
+                                            match_details=match.match_details
+                                        )
                         except Exception as rule_err:
                             logger.debug("rule_evaluation_error", error=str(rule_err))
                         
