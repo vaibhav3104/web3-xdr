@@ -663,57 +663,164 @@ async def debug_db_connection():
     return debug_info
 
 
+# Cache for stats with TTL
+_stats_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl_seconds": 30  # Cache for 30 seconds
+}
+
 @router.get("/stats")
 async def get_statistics():
     """
     Get real-time system statistics and metrics.
-    Counts incidents from both memory and database.
+    
+    ENHANCED: Hybrid stats from database + in-memory with 30-second caching.
+    - Database provides persistent historical stats
+    - In-memory provides real-time counters
+    - Cache reduces database load
     """
     from ..shared_state import monitor_state
     from ..database.service import DatabaseService
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    import time
     
-    stats = monitor_state.get_stats()
+    # Check cache
+    cache_valid = (
+        _stats_cache["data"] is not None and 
+        _stats_cache["timestamp"] is not None and
+        (time.time() - _stats_cache["timestamp"]) < _stats_cache["ttl_seconds"]
+    )
+    
+    if cache_valid:
+        logger.debug("stats_cache_hit")
+        return _stats_cache["data"]
+    
+    logger.debug("stats_cache_miss_fetching")
+    
+    # Get in-memory stats (real-time counters)
+    memory_stats = monitor_state.get_stats()
     memory_incidents = monitor_state.get_incidents()
     
+    # Calculate uptime
     uptime = 0
-    if stats["start_time"]:
-        uptime = int((datetime.utcnow() - stats["start_time"]).total_seconds())
+    if memory_stats["start_time"]:
+        uptime = int((datetime.utcnow() - memory_stats["start_time"]).total_seconds())
     
-    # Count in-memory incidents
+    # Initialize counters
+    total_events = memory_stats.get("total_events", 0)
+    events_by_chain = dict(memory_stats.get("events_by_chain", {}))
+    events_by_type = dict(memory_stats.get("events_by_type", {}))
+    events_by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+    last_event_time = memory_stats.get("last_event_time")
+    blocks_scanned = memory_stats.get("blocks_scanned", 0)
+    
+    # Query database for persistent stats
+    try:
+        async with DatabaseManager.get_session() as session:
+            # Total events count
+            count_result = await session.execute(text("SELECT COUNT(*) FROM events"))
+            db_total_events = count_result.scalar() or 0
+            
+            # Events by chain
+            chain_result = await session.execute(text("""
+                SELECT chain_id, COUNT(*) as cnt 
+                FROM events 
+                GROUP BY chain_id
+            """))
+            for row in chain_result.fetchall():
+                chain_id = row[0]
+                count = row[1]
+                events_by_chain[chain_id] = count
+            
+            # Events by type
+            type_result = await session.execute(text("""
+                SELECT event_type, COUNT(*) as cnt 
+                FROM events 
+                GROUP BY event_type
+            """))
+            for row in type_result.fetchall():
+                event_type = row[0] or "unknown"
+                count = row[1]
+                events_by_type[event_type] = count
+            
+            # Events by severity
+            severity_result = await session.execute(text("""
+                SELECT UPPER(severity), COUNT(*) as cnt 
+                FROM events 
+                WHERE severity IS NOT NULL
+                GROUP BY UPPER(severity)
+            """))
+            for row in severity_result.fetchall():
+                sev = row[0] or "INFO"
+                count = row[1]
+                if sev in events_by_severity:
+                    events_by_severity[sev] = count
+            
+            # Latest event time
+            time_result = await session.execute(text("""
+                SELECT MAX(block_timestamp) FROM events
+            """))
+            db_last_event = time_result.scalar()
+            if db_last_event:
+                if last_event_time is None or db_last_event > last_event_time:
+                    last_event_time = db_last_event
+            
+            # Use database total (more accurate than in-memory)
+            total_events = db_total_events
+            
+            logger.debug("stats_db_query_success", total_events=total_events, chains=len(events_by_chain))
+    except Exception as e:
+        logger.warning("stats_db_query_failed", error=str(e))
+        # Fall back to in-memory stats only
+    
+    # Count incidents from memory
     total_incidents = len(memory_incidents)
     active_incidents = len([i for i in memory_incidents if i.status.lower() in ("open", "investigating")])
-    critical_count = len([i for i in memory_incidents if i.severity.upper() == "CRITICAL"])
-    high_count = len([i for i in memory_incidents if i.severity.upper() == "HIGH"])
-    medium_count = len([i for i in memory_incidents if i.severity.upper() == "MEDIUM"])
-    low_count = len([i for i in memory_incidents if i.severity.upper() == "LOW"])
+    critical_incidents = len([i for i in memory_incidents if i.severity.upper() == "CRITICAL"])
+    high_incidents = len([i for i in memory_incidents if i.severity.upper() == "HIGH"])
+    medium_incidents = len([i for i in memory_incidents if i.severity.upper() == "MEDIUM"])
+    low_incidents = len([i for i in memory_incidents if i.severity.upper() == "LOW"])
     
     # Also count database incidents
     try:
-        db_stats = await DatabaseService.get_incident_stats()
-        total_incidents += db_stats.get("total", 0)
-        active_incidents += db_stats.get("active", 0)
-        by_severity = db_stats.get("by_severity", {})
-        critical_count += by_severity.get("CRITICAL", 0)
-        high_count += by_severity.get("HIGH", 0)
-        medium_count += by_severity.get("MEDIUM", 0)
-        low_count += by_severity.get("LOW", 0)
+        db_incident_stats = await DatabaseService.get_incident_stats()
+        total_incidents += db_incident_stats.get("total", 0)
+        active_incidents += db_incident_stats.get("active", 0)
+        by_severity = db_incident_stats.get("by_severity", {})
+        critical_incidents += by_severity.get("CRITICAL", 0)
+        high_incidents += by_severity.get("HIGH", 0)
+        medium_incidents += by_severity.get("MEDIUM", 0)
+        low_incidents += by_severity.get("LOW", 0)
     except Exception as e:
         logger.warning("db_incident_stats_failed", error=str(e))
     
-    return {
-        "total_events": stats["total_events"],
+    # Build response
+    response = {
+        "total_events": total_events,
         "total_incidents": total_incidents,
         "active_incidents": active_incidents,
-        "critical_alerts": critical_count,
-        "high_alerts": high_count,
-        "medium_alerts": medium_count,
-        "low_alerts": low_count,
-        "blocks_scanned": stats["blocks_scanned"],
-        "events_by_chain": stats["events_by_chain"],
-        "events_by_type": stats["events_by_type"],
+        "critical_alerts": critical_incidents,
+        "high_alerts": high_incidents,
+        "medium_alerts": medium_incidents,
+        "low_alerts": low_incidents,
+        "blocks_scanned": blocks_scanned,
+        "events_by_chain": events_by_chain,
+        "events_by_type": events_by_type,
+        "events_by_severity": events_by_severity,
         "uptime_seconds": uptime,
-        "last_event_time": stats["last_event_time"].isoformat() if stats["last_event_time"] else None,
+        "last_event_time": last_event_time.isoformat() if last_event_time else None,
+        "cache_ttl_seconds": _stats_cache["ttl_seconds"],
     }
+    
+    # Update cache
+    _stats_cache["data"] = response
+    _stats_cache["timestamp"] = time.time()
+    
+    logger.info("stats_fetched", total_events=total_events, total_incidents=total_incidents)
+    
+    return response
 
 
 @router.get("/chains")

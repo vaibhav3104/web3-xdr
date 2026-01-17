@@ -1065,16 +1065,21 @@ class Sentinel3Worker:
                 
                 continuous_learning_task = asyncio.create_task(start_continuous_learning(learning_config))
                 
-                # Add callback to save contract deployments to database
+                # Add callback to save contract deployments to database AND create incidents for threats
                 async def save_contract_to_db(analysis):
-                    """Save contract analysis from continuous learning to database"""
+                    """
+                    Save contract analysis from continuous learning to database.
+                    ENHANCED: Auto-creates incidents for detected threats.
+                    """
                     try:
                         from src.database.service import DatabaseService
                         from src.models.events import EventType, Severity
+                        from src.models.incidents import IncidentStatus
                         import uuid
                         import json
                         
                         contract = analysis.contract
+                        event_id = str(uuid.uuid4())
                         
                         # Map threat category to severity
                         severity = Severity.INFO
@@ -1089,7 +1094,7 @@ class Sentinel3Worker:
                                 severity = Severity.LOW
                         
                         event_data = {
-                            "event_id": str(uuid.uuid4()),
+                            "event_id": event_id,
                             "chain_id": contract.chain,
                             "block_number": contract.block_number,
                             "block_timestamp": contract.timestamp.isoformat() if contract.timestamp else datetime.now(timezone.utc).isoformat(),
@@ -1115,6 +1120,67 @@ class Sentinel3Worker:
                         
                         await DatabaseService.save_events_batch([event_data])
                         logger.info("continuous_learning_contract_saved", chain=contract.chain, address=contract.address[:20], is_threat=analysis.is_threat)
+                        
+                        # AUTO-CREATE INCIDENT FOR THREATS
+                        if analysis.is_threat and severity.value >= Severity.MEDIUM.value:
+                            try:
+                                # Generate unique incident ID
+                                incident_id = f"inc_ml_{contract.chain}_{contract.address[:10]}_{int(datetime.now(timezone.utc).timestamp())}"
+                                
+                                # Map threat category to attack type
+                                threat_to_attack = {
+                                    "reentrancy_exploit": "Reentrancy Attack",
+                                    "flash_loan_exploit": "Flash Loan Attack",
+                                    "rug_pull": "Rug Pull",
+                                    "honeypot": "Honeypot Contract",
+                                    "phishing": "Phishing Contract",
+                                    "price_manipulation": "Price Manipulation",
+                                    "access_control": "Access Control Vulnerability",
+                                    "integer_overflow": "Integer Overflow",
+                                }
+                                attack_type = threat_to_attack.get(analysis.threat_category, f"Malicious Contract ({analysis.threat_category})")
+                                
+                                # Build incident data
+                                incident_data = {
+                                    "incident_id": incident_id,
+                                    "title": f"[{severity.name}] {attack_type} Detected on {contract.chain.title()}",
+                                    "summary": f"ML Contract Scanner detected a potentially malicious contract deployment. "
+                                               f"Contract {contract.address} deployed by {contract.deployer or 'unknown'} "
+                                               f"has been classified as '{analysis.threat_category}' with {analysis.confidence:.1%} confidence "
+                                               f"and risk score of {analysis.risk_score:.1%}.",
+                                    "severity": severity.name,
+                                    "status": IncidentStatus.OPEN_PENDING.value,
+                                    "attack_type": attack_type,
+                                    "confidence": analysis.confidence,
+                                    "total_loss_usd": 0.0,  # Unknown at detection time
+                                    "affected_chains": [contract.chain],
+                                    "event_ids": [event_id],
+                                    "rule_ids": ["ml_contract_scanner"],
+                                    "created_at": datetime.now(timezone.utc),
+                                    "recommended_actions": [
+                                        f"Review contract code at {contract.address}",
+                                        "Check deployer wallet history for suspicious patterns",
+                                        "Monitor for interactions with known DeFi protocols",
+                                        "Consider adding contract to blocklist if confirmed malicious",
+                                    ],
+                                    "affected_contracts": [contract.address],
+                                    "affected_addresses": [contract.deployer] if contract.deployer else [],
+                                }
+                                
+                                saved_incident_id = await DatabaseService.save_incident(incident_data)
+                                if saved_incident_id:
+                                    logger.info(
+                                        "threat_incident_created",
+                                        incident_id=saved_incident_id,
+                                        severity=severity.name,
+                                        threat_category=analysis.threat_category,
+                                        chain=contract.chain,
+                                        contract=contract.address[:20],
+                                        confidence=f"{analysis.confidence:.1%}"
+                                    )
+                            except Exception as inc_error:
+                                logger.error("threat_incident_creation_failed", error=str(inc_error), exc_info=True)
+                        
                     except Exception as e:
                         logger.error("continuous_learning_save_error", error=str(e), exc_info=True)
                 

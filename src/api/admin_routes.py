@@ -680,3 +680,97 @@ async def get_rule_triggers(limit: int = 10):
         traceback.print_exc()
         return {"triggers": []}
 
+
+# ============================================================================
+# Maintenance Endpoints
+# ============================================================================
+
+@router.post("/maintenance/fix-timestamps")
+async def fix_stale_timestamps(
+    hours_threshold: int = 3
+):
+    """
+    Fix events with stale/incorrect block_timestamps.
+    
+    Some events were saved with datetime.now() as block_timestamp instead of
+    the actual blockchain block timestamp. This endpoint fixes them by using
+    created_at as a more accurate timestamp.
+    
+    Args:
+        hours_threshold: Events where block_timestamp is more than this many
+                        hours before created_at will be fixed. Default: 3 hours.
+    
+    Returns:
+        Stats about affected and fixed events.
+    """
+    from ..database.service import DatabaseService
+    
+    result = await DatabaseService.fix_stale_timestamps(hours_threshold=hours_threshold)
+    return result
+
+
+@router.get("/maintenance/timestamp-stats")
+async def get_timestamp_stats():
+    """
+    Get statistics about event timestamps to identify potential issues.
+    
+    Returns:
+        Stats about timestamp distribution and potential anomalies.
+    """
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    
+    async with DatabaseManager.get_session() as session:
+        try:
+            # Get timestamp distribution stats
+            stats_sql = text("""
+                SELECT 
+                    COUNT(*) as total_events,
+                    COUNT(CASE WHEN created_at - block_timestamp > INTERVAL '3 hours' THEN 1 END) as stale_3h,
+                    COUNT(CASE WHEN created_at - block_timestamp > INTERVAL '1 hour' THEN 1 END) as stale_1h,
+                    COUNT(CASE WHEN created_at - block_timestamp > INTERVAL '10 minutes' THEN 1 END) as stale_10m,
+                    MIN(block_timestamp) as oldest_block_ts,
+                    MAX(block_timestamp) as newest_block_ts,
+                    MIN(created_at) as oldest_created,
+                    MAX(created_at) as newest_created
+                FROM events
+            """)
+            
+            result = await session.execute(stats_sql)
+            row = result.fetchone()
+            
+            # Get recent events with stale timestamps
+            recent_stale_sql = text("""
+                SELECT chain_id, event_type, block_timestamp, created_at,
+                       EXTRACT(EPOCH FROM (created_at - block_timestamp))/3600 as hours_diff
+                FROM events
+                WHERE created_at - block_timestamp > INTERVAL '1 hour'
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+            
+            recent_result = await session.execute(recent_stale_sql)
+            recent_stale = []
+            for r in recent_result.fetchall():
+                recent_stale.append({
+                    "chain_id": r[0],
+                    "event_type": r[1],
+                    "block_timestamp": str(r[2]) if r[2] else None,
+                    "created_at": str(r[3]) if r[3] else None,
+                    "hours_diff": round(r[4], 2) if r[4] else None
+                })
+            
+            return {
+                "total_events": row[0] if row else 0,
+                "stale_events_3h": row[1] if row else 0,
+                "stale_events_1h": row[2] if row else 0,
+                "stale_events_10m": row[3] if row else 0,
+                "oldest_block_timestamp": str(row[4]) if row and row[4] else None,
+                "newest_block_timestamp": str(row[5]) if row and row[5] else None,
+                "oldest_created_at": str(row[6]) if row and row[6] else None,
+                "newest_created_at": str(row[7]) if row and row[7] else None,
+                "recent_stale_events": recent_stale
+            }
+        except Exception as e:
+            return {"error": str(e)}
+

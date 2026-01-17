@@ -1021,3 +1021,86 @@ class DatabaseService:
             count = result.rowcount
             logger.info("old_events_cleaned", count=count, days=days)
             return count
+    
+    @staticmethod
+    async def fix_stale_timestamps(hours_threshold: int = 3) -> Dict[str, Any]:
+        """
+        Fix events with stale block_timestamps.
+        
+        Some events were saved with incorrect block_timestamps (e.g., datetime.now() 
+        instead of actual block timestamp). This method identifies and updates them
+        by using created_at as a proxy for the actual timestamp.
+        
+        Events are considered "stale" if:
+        - block_timestamp is more than hours_threshold hours before created_at
+        - This indicates the block_timestamp was not the actual blockchain timestamp
+        
+        Returns stats about fixed events.
+        """
+        from sqlalchemy import text
+        
+        async with DatabaseManager.get_session() as session:
+            try:
+                # First, count affected events
+                count_sql = text("""
+                    SELECT COUNT(*) as cnt,
+                           MIN(block_timestamp) as min_ts,
+                           MAX(block_timestamp) as max_ts
+                    FROM events 
+                    WHERE created_at - block_timestamp > INTERVAL ':hours hours'
+                """.replace(':hours', str(hours_threshold)))
+                
+                count_result = await session.execute(count_sql)
+                count_row = count_result.fetchone()
+                affected_count = count_row[0] if count_row else 0
+                
+                if affected_count == 0:
+                    logger.info("no_stale_timestamps_found", threshold_hours=hours_threshold)
+                    return {
+                        "status": "ok",
+                        "affected_count": 0,
+                        "fixed_count": 0,
+                        "message": "No stale timestamps found"
+                    }
+                
+                logger.info(
+                    "stale_timestamps_found",
+                    affected_count=affected_count,
+                    min_ts=str(count_row[1]) if count_row else None,
+                    max_ts=str(count_row[2]) if count_row else None,
+                    threshold_hours=hours_threshold
+                )
+                
+                # Update stale timestamps to use created_at (which is when we actually received the event)
+                # This is more accurate than the incorrect block_timestamp
+                update_sql = text("""
+                    UPDATE events 
+                    SET block_timestamp = created_at
+                    WHERE created_at - block_timestamp > INTERVAL ':hours hours'
+                """.replace(':hours', str(hours_threshold)))
+                
+                result = await session.execute(update_sql)
+                fixed_count = result.rowcount
+                await session.commit()
+                
+                logger.info(
+                    "stale_timestamps_fixed",
+                    fixed_count=fixed_count,
+                    threshold_hours=hours_threshold
+                )
+                
+                return {
+                    "status": "ok",
+                    "affected_count": affected_count,
+                    "fixed_count": fixed_count,
+                    "message": f"Fixed {fixed_count} events with stale timestamps"
+                }
+                
+            except Exception as e:
+                logger.error("fix_stale_timestamps_error", error=str(e), exc_info=True)
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "affected_count": 0,
+                    "fixed_count": 0
+                }
