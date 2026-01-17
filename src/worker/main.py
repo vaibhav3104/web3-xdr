@@ -1065,6 +1065,7 @@ class Sentinel3Worker:
                         from src.database.service import DatabaseService
                         from src.models.events import EventType, Severity
                         import uuid
+                        import json
                         
                         contract = analysis.contract
                         
