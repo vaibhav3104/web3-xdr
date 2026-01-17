@@ -410,13 +410,20 @@ class Sentinel3Worker:
                                             # Serialize raw_data to handle HexBytes
                                             raw_data = self._serialize_raw_data(event.raw_event if hasattr(event, 'raw_event') else {})
                                             
+                                            # Use actual block timestamp from event, fallback to now
+                                            block_ts = event.block_timestamp if hasattr(event, 'block_timestamp') and event.block_timestamp else datetime.now(timezone.utc)
+                                            if hasattr(block_ts, 'isoformat'):
+                                                block_ts_str = block_ts.isoformat()
+                                            else:
+                                                block_ts_str = str(block_ts)
+                                            
                                             db_event = {
                                                 "event_id": event_id,
                                                 "chain_id": chain_id,
                                                 "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
                                                 "tx_hash": event.tx_hash,
                                                 "block_number": event.block_number,
-                                                "block_timestamp": datetime.now(timezone.utc).isoformat(),
+                                                "block_timestamp": block_ts_str,
                                                 "contract_address": event.contract_address,
                                                 "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
                                                 "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
