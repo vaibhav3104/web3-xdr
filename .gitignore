@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+*.log
+logs/
+deploy-output.log
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary status/progress markdown files (keep only docs/)
+*_STATUS*.md
+*_COMPLETE*.md
+*_SUMMARY*.md
+*_PROGRESS*.md
+*_RESULTS*.md
+*_IMPLEMENTATION*.md
+*_FIX*.md
+*_SETUP*.md
+*_GUIDE*.md
+*_VERIFICATION*.md
+PHASE*.md
+DEPLOY_*.md
+QUICK_*.md
+SENTINEL3_PROMPT.md
+
+# Keep essential docs
+!README.md
+!DEPLOYMENT.md
+!docs/*.md
+!config/rules/README.md
+!deploy/*.md
+!tests/README.md
+!scripts/README*.md
+!src/ai/training/README.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+*.pem
+*.key
+secrets.yaml
+.env.local
+.env.production
+
+# Local data that shouldn't be committed
+data/continuous_learning/
+data/bytecode/*.json
+!data/bytecode/.gitkeep
+data/models/*.pkl
+data/models/*.pt
+!data/models/.gitkeep
