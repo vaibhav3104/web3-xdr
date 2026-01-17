@@ -859,6 +859,13 @@ class Sentinel3Worker:
         # Import database service for event persistence
         from src.database.service import DatabaseService
         
+        # Load YAML detection rules
+        from src.rules.engine import RuleEngine
+        rule_engine = RuleEngine()
+        rules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "rules")
+        rules_loaded = rule_engine.load_rules_from_directory(rules_dir)
+        logger.info("yaml_rules_loaded", count=rules_loaded, stats=rule_engine.stats())
+        
         while self.running:
             try:
                 # Consume batch of events
@@ -908,6 +915,29 @@ class Sentinel3Worker:
                             chain=chain_id,
                             status=event_data.get("status", "unknown")
                         )
+                        
+                        # Evaluate YAML rules against this event
+                        try:
+                            rule_matches = rule_engine.evaluate(event_data)
+                            if rule_matches:
+                                for match in rule_matches:
+                                    logger.warning(
+                                        "yaml_rule_triggered",
+                                        rule_id=match.rule.id,
+                                        rule_name=match.rule.name,
+                                        severity=match.rule.severity,
+                                        confidence=match.rule.confidence,
+                                        chain=chain_id,
+                                        event_type=event_data.get("event_type"),
+                                        tx_hash=event_data.get("tx_hash", "")[:20]
+                                    )
+                                    # Update event severity based on rule
+                                    if match.rule.is_critical:
+                                        db_event["severity"] = "CRITICAL"
+                                    elif match.rule.is_high and db_event["severity"] not in ["CRITICAL"]:
+                                        db_event["severity"] = "HIGH"
+                        except Exception as rule_err:
+                            logger.debug("rule_evaluation_error", error=str(rule_err))
                         
                         worker_events_processed_total.labels(
                             chain=chain_id,
