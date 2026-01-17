@@ -221,11 +221,16 @@ class EVMListener(ChainListener):
         # CONTRACT DEPLOYMENT DETECTION
         # =====================================================
         if self.analyze_deployments:
+            contract_deploy_count = 0
             for tx in block.transactions:
                 # Contract deployment = tx.to is None
                 tx_to = tx.get('to') if isinstance(tx, dict) else getattr(tx, 'to', None)
                 if tx_to is None:
+                    contract_deploy_count += 1
                     await self._analyze_contract_deployment(tx, block_timestamp, block_number)
+            
+            if contract_deploy_count > 0:
+                logger.info("evm_listener_block_contracts", chain=self.chain_id, block=block_number, tx_count=len(block.transactions), contract_deploys=contract_deploy_count)
         
         # =====================================================
         # LOG PROCESSING (existing code)
