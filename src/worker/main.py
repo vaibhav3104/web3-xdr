@@ -955,7 +955,7 @@ class Sentinel3Worker:
         continuous_learning_enabled = os.getenv("CONTINUOUS_LEARNING_ENABLED", "true").lower() == "true"
         if continuous_learning_enabled:
             try:
-                from src.ai.continuous_learning import start_continuous_learning, LearningConfig
+                from src.ai.continuous_learning import start_continuous_learning, get_learning_system, LearningConfig
                 
                 # Configure continuous learning with chains from config
                 chain_ids = [c.get("chain_id") for c in self.config.get("chains", []) if c.get("chain_type", "evm").lower() == "evm"]
@@ -966,6 +966,75 @@ class Sentinel3Worker:
                 )
                 
                 continuous_learning_task = asyncio.create_task(start_continuous_learning(learning_config))
+                
+                # Add callback to save contract deployments to database
+                async def save_contract_to_db(analysis):
+                    """Save contract analysis from continuous learning to database"""
+                    try:
+                        from src.database.service import DatabaseService
+                        from src.models.events import EventType, Severity
+                        import uuid
+                        
+                        contract = analysis.contract
+                        
+                        # Map threat category to severity
+                        severity = Severity.INFO
+                        if analysis.is_threat:
+                            if analysis.risk_score > 0.7:
+                                severity = Severity.CRITICAL
+                            elif analysis.risk_score > 0.5:
+                                severity = Severity.HIGH
+                            elif analysis.risk_score > 0.3:
+                                severity = Severity.MEDIUM
+                            else:
+                                severity = Severity.LOW
+                        
+                        event_data = {
+                            "event_id": str(uuid.uuid4()),
+                            "chain_id": contract.chain,
+                            "block_number": contract.block_number,
+                            "block_timestamp": contract.timestamp.isoformat() if contract.timestamp else datetime.now(timezone.utc).isoformat(),
+                            "tx_hash": contract.tx_hash or "",
+                            "event_type": "contract_deploy",
+                            "severity": severity.name,
+                            "from_address": contract.deployer or "",
+                            "to_address": "",
+                            "contract_address": contract.address,
+                            "amount": "",
+                            "amount_usd": "",
+                            "token_symbol": "",
+                            "raw_data": json.dumps({
+                                "threat_category": analysis.threat_category,
+                                "risk_score": analysis.risk_score,
+                                "confidence": analysis.confidence,
+                                "is_threat": analysis.is_threat,
+                                "alerts": analysis.alerts,
+                                "bytecode_size": contract.bytecode_length,
+                                "source": "continuous_learning"
+                            })
+                        }
+                        
+                        await DatabaseService.save_events_batch([event_data])
+                        logger.info("continuous_learning_contract_saved", chain=contract.chain, address=contract.address[:20], is_threat=analysis.is_threat)
+                    except Exception as e:
+                        logger.error("continuous_learning_save_error", error=str(e), exc_info=True)
+                
+                # Wait a bit for the learning system to initialize, then add callback
+                await asyncio.sleep(2)
+                learning_system = get_learning_system()
+                if learning_system:
+                    learning_system.add_threat_callback(save_contract_to_db)
+                    # Also add callback for all analyses (not just threats)
+                    # We'll use the analysis callback from the collector directly
+                    if learning_system.collector:
+                        original_callback = learning_system.collector.analysis_callback
+                        async def combined_callback(analysis):
+                            if original_callback:
+                                await original_callback(analysis)
+                            await save_contract_to_db(analysis)
+                        learning_system.collector.analysis_callback = combined_callback
+                        logger.info("continuous_learning_db_callback_registered")
+                
                 logger.info("continuous_learning_started", chains=chain_ids[:6], retrain_interval_hours=6)
             except Exception as e:
                 logger.warning("continuous_learning_start_failed", error=str(e))
