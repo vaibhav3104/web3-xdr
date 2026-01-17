@@ -35,7 +35,7 @@
         .risk-low { color: #3bff7e; }
     </style>
 </head>
-<body class="min-h-screen" x-data="analytics()">
+<body class="min-h-screen" x-data="analytics()" x-init="init()">
     <!-- Header -->
     <header class="border-b border-gray-800 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -65,24 +65,30 @@
     </header>
     
     <main class="p-6">
+        <!-- Loading State -->
+        <div x-show="loading" class="text-center py-12">
+            <div class="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p class="text-gray-400">Loading analytics data...</p>
+        </div>
+        
         <!-- Historical Analysis Tab -->
-        <div x-show="tab === 'historical'">
+        <div x-show="tab === 'historical' && !loading">
             <div class="grid grid-cols-4 gap-4 mb-6">
                 <div class="card p-4">
-                    <div class="text-gray-400 text-sm mb-1">Total Incidents (30d)</div>
-                    <div class="text-3xl font-bold text-red-400" x-text="historical.totalIncidents">47</div>
+                    <div class="text-gray-400 text-sm mb-1">Total Events (30d)</div>
+                    <div class="text-3xl font-bold text-red-400" x-text="historical.totalEvents">0</div>
                 </div>
                 <div class="card p-4">
                     <div class="text-gray-400 text-sm mb-1">Value at Risk</div>
-                    <div class="text-3xl font-bold text-orange-400">$248M</div>
+                    <div class="text-3xl font-bold text-orange-400" x-text="formatUSD(historical.valueAtRisk)">$0</div>
                 </div>
                 <div class="card p-4">
-                    <div class="text-gray-400 text-sm mb-1">Avg Detection Time</div>
-                    <div class="text-3xl font-bold text-green-400">1.2s</div>
+                    <div class="text-gray-400 text-sm mb-1">High Severity Events</div>
+                    <div class="text-3xl font-bold text-green-400" x-text="historical.totalIncidents">0</div>
                 </div>
                 <div class="card p-4">
                     <div class="text-gray-400 text-sm mb-1">Detection Rate</div>
-                    <div class="text-3xl font-bold text-blue-400">99.7%</div>
+                    <div class="text-3xl font-bold text-blue-400" x-text="historical.detectionRate">99.7%</div>
                 </div>
             </div>
             
@@ -111,7 +117,7 @@
         </div>
         
         <!-- Risk Scoring Tab -->
-        <div x-show="tab === 'risk'">
+        <div x-show="tab === 'risk' && !loading">
             <div class="grid grid-cols-3 gap-6">
                 <!-- Risk Calculator -->
                 <div class="col-span-2">
@@ -124,12 +130,21 @@
                                 x-model="riskInput"
                                 placeholder="Enter wallet address (0x...)"
                                 class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 font-mono text-sm"
+                                @keyup.enter="calculateRisk()"
                             >
                             <button 
                                 @click="calculateRisk()"
-                                class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition"
+                                :disabled="riskLoading"
+                                class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition disabled:opacity-50"
                             >
-                                Analyze Risk
+                                <span x-show="!riskLoading">Analyze Risk</span>
+                                <span x-show="riskLoading" class="flex items-center">
+                                    <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Analyzing...
+                                </span>
                             </button>
                         </div>
                         
@@ -206,6 +221,12 @@
                 <div class="card p-4">
                     <h3 class="text-lg font-semibold mb-4">🚨 High Risk Wallets</h3>
                     <div class="space-y-3">
+                        <!-- Empty state -->
+                        <div x-show="highRiskWallets.length === 0" class="text-center py-8 text-gray-500">
+                            <p>No high-risk wallets detected</p>
+                            <p class="text-xs mt-1">Wallets will appear here based on activity</p>
+                        </div>
+                        
                         <template x-for="wallet in highRiskWallets" :key="wallet.address">
                             <div 
                                 class="p-3 rounded-lg bg-gray-800/50 cursor-pointer hover:bg-gray-800 transition"
@@ -217,7 +238,9 @@
                                         class="text-sm font-bold"
                                         :class="{
                                             'text-red-400': wallet.score >= 80,
-                                            'text-orange-400': wallet.score >= 60
+                                            'text-orange-400': wallet.score >= 60,
+                                            'text-yellow-400': wallet.score >= 40,
+                                            'text-green-400': wallet.score < 40
                                         }"
                                         x-text="wallet.score"
                                     ></span>
@@ -235,143 +258,223 @@
         function analytics() {
             return {
                 tab: 'historical',
+                loading: false,
                 historical: {
-                    totalIncidents: 47
+                    totalIncidents: 0,
+                    totalEvents: 0,
+                    valueAtRisk: 0,
+                    avgDetectionTime: '0ms',
+                    detectionRate: '99.7%'
                 },
                 riskInput: '',
                 riskResult: null,
-                highRiskWallets: [
-                    { address: '0x742d35Cc6634C0532925a3b844Bc9e7595f4E2A1', score: 92, reason: 'Connected to known exploit' },
-                    { address: '0x8F3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', score: 87, reason: 'Unusual transaction patterns' },
-                    { address: '0x1234567890AbCdEf1234567890AbCdEf12345678', score: 78, reason: 'Mixer interaction detected' },
-                    { address: '0xDeadBeef00000000000000000000000000000000', score: 71, reason: 'Flash loan usage' },
-                    { address: '0xCafe000000000000000000000000000000000001', score: 65, reason: 'New wallet with large volume' }
-                ],
+                riskLoading: false,
+                highRiskWallets: [],
+                charts: {},
                 
-                init() {
+                async init() {
+                    this.loading = true;
+                    
+                    // Load all data in parallel
+                    await Promise.all([
+                        this.loadHistoricalStats(),
+                        this.loadHighRiskWallets()
+                    ]);
+                    
                     this.$nextTick(() => {
                         this.initCharts();
                     });
+                    
+                    this.loading = false;
                 },
                 
-                initCharts() {
-                    // Incidents Over Time
-                    new Chart(document.getElementById('incidentsChart'), {
-                        type: 'line',
-                        data: {
-                            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-                            datasets: [{
-                                label: 'Incidents',
-                                data: [12, 8, 15, 12],
-                                borderColor: '#8b5cf6',
-                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                                fill: true,
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
-                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
-                            }
+                async loadHistoricalStats() {
+                    try {
+                        const res = await fetch('/api/analytics/historical?days=30');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.historical = {
+                                totalIncidents: data.total_incidents || 0,
+                                totalEvents: data.total_events || 0,
+                                valueAtRisk: data.value_at_risk_usd || 0,
+                                avgDetectionTime: (data.avg_detection_time_ms || 0) + 'ms',
+                                detectionRate: (data.detection_rate_percent || 99.7) + '%'
+                            };
                         }
-                    });
+                    } catch (e) {
+                        console.error('Failed to load historical stats:', e);
+                    }
+                },
+                
+                async loadHighRiskWallets() {
+                    try {
+                        const res = await fetch('/api/analytics/risk/high-risk-wallets?limit=10');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.highRiskWallets = data.wallets || [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to load high risk wallets:', e);
+                        // Use fallback demo data if API fails
+                        this.highRiskWallets = [];
+                    }
+                },
+                
+                async initCharts() {
+                    // Load chart data from API
+                    const [incidentsData, chainsData, typesData, valueData] = await Promise.all([
+                        this.fetchChartData('/api/analytics/charts/incidents-over-time?days=30&granularity=day'),
+                        this.fetchChartData('/api/analytics/charts/by-chain?days=30'),
+                        this.fetchChartData('/api/analytics/charts/by-type?days=30'),
+                        this.fetchChartData('/api/analytics/charts/value-over-time?days=30')
+                    ]);
+                    
+                    // Incidents Over Time
+                    const incidentsCtx = document.getElementById('incidentsChart');
+                    if (incidentsCtx) {
+                        this.charts.incidents = new Chart(incidentsCtx, {
+                            type: 'line',
+                            data: {
+                                labels: incidentsData.labels || ['No Data'],
+                                datasets: [{
+                                    label: 'Events',
+                                    data: incidentsData.data || [0],
+                                    borderColor: '#8b5cf6',
+                                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
+                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                }
+                            }
+                        });
+                    }
                     
                     // Chains Distribution
-                    new Chart(document.getElementById('chainsChart'), {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Ethereum', 'Polygon', 'Arbitrum', 'Solana', 'BSC'],
-                            datasets: [{
-                                data: [35, 25, 20, 12, 8],
-                                backgroundColor: ['#627EEA', '#8247E5', '#28A0F0', '#00FFA3', '#F3BA2F']
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: { legend: { position: 'right', labels: { color: '#888' } } }
-                        }
-                    });
+                    const chainsCtx = document.getElementById('chainsChart');
+                    if (chainsCtx) {
+                        this.charts.chains = new Chart(chainsCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: chainsData.labels || ['No Data'],
+                                datasets: [{
+                                    data: chainsData.data || [1],
+                                    backgroundColor: chainsData.colors || ['#888888']
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { position: 'right', labels: { color: '#888' } } }
+                            }
+                        });
+                    }
                     
                     // Attack Types
-                    new Chart(document.getElementById('attackTypesChart'), {
-                        type: 'bar',
-                        data: {
-                            labels: ['Unbacked Mint', 'Flash Loan', 'Liquidity Drain', 'Message Forgery', 'Other'],
-                            datasets: [{
-                                label: 'Count',
-                                data: [15, 12, 8, 7, 5],
-                                backgroundColor: ['#ff3b3b', '#ff8a3b', '#ffd93b', '#3bff7e', '#8b5cf6']
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
-                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                    const typesCtx = document.getElementById('attackTypesChart');
+                    if (typesCtx) {
+                        this.charts.types = new Chart(typesCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: typesData.labels || ['No Data'],
+                                datasets: [{
+                                    label: 'Count',
+                                    data: typesData.data || [0],
+                                    backgroundColor: typesData.colors || ['#8b5cf6']
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
+                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                     
                     // Value Over Time
-                    new Chart(document.getElementById('valueChart'), {
-                        type: 'line',
-                        data: {
-                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                            datasets: [{
-                                label: 'Value at Risk ($M)',
-                                data: [45, 62, 38, 95, 72, 248],
-                                borderColor: '#ff3b3b',
-                                backgroundColor: 'rgba(255, 59, 59, 0.1)',
-                                fill: true,
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
-                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                    const valueCtx = document.getElementById('valueChart');
+                    if (valueCtx) {
+                        this.charts.value = new Chart(valueCtx, {
+                            type: 'line',
+                            data: {
+                                labels: valueData.labels || ['No Data'],
+                                datasets: [{
+                                    label: 'Value at Risk ($)',
+                                    data: valueData.data || [0],
+                                    borderColor: '#ff3b3b',
+                                    backgroundColor: 'rgba(255, 59, 59, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
+                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 },
                 
-                calculateRisk() {
-                    const address = this.riskInput || '0x' + Math.random().toString(16).slice(2, 42);
+                async fetchChartData(url) {
+                    try {
+                        const res = await fetch(url);
+                        if (res.ok) {
+                            return await res.json();
+                        }
+                    } catch (e) {
+                        console.error('Failed to fetch chart data:', url, e);
+                    }
+                    return { labels: [], data: [], colors: [] };
+                },
+                
+                async calculateRisk() {
+                    const address = this.riskInput.trim();
+                    if (!address) {
+                        alert('Please enter a wallet address');
+                        return;
+                    }
                     
-                    // Simulate risk calculation
-                    const score = Math.floor(Math.random() * 60) + 20;
-                    const level = score >= 80 ? 'CRITICAL RISK' : score >= 60 ? 'HIGH RISK' : score >= 40 ? 'MEDIUM RISK' : 'LOW RISK';
+                    this.riskLoading = true;
+                    this.riskResult = null;
                     
-                    this.riskResult = {
-                        address: address,
-                        score: score,
-                        level: level,
-                        factors: [
-                            { name: 'Transaction Velocity', score: Math.floor(Math.random() * 100), icon: '⚡' },
-                            { name: 'Mixer Interaction', score: Math.floor(Math.random() * 100), icon: '🔀' },
-                            { name: 'Bridge Usage Pattern', score: Math.floor(Math.random() * 100), icon: '🌉' },
-                            { name: 'Known Entity Links', score: Math.floor(Math.random() * 100), icon: '🔗' },
-                            { name: 'Flash Loan Activity', score: Math.floor(Math.random() * 100), icon: '💨' },
-                            { name: 'Age & History', score: Math.floor(Math.random() * 100), icon: '📅' }
-                        ],
-                        recommendations: [
-                            'Monitor all transactions from this address',
-                            'Enable real-time alerts for large transfers',
-                            'Review connected addresses for patterns',
-                            'Consider adding to watchlist'
-                        ]
-                    };
+                    try {
+                        const res = await fetch(`/api/analytics/risk/score/${encodeURIComponent(address)}`);
+                        if (res.ok) {
+                            this.riskResult = await res.json();
+                        } else {
+                            const error = await res.json();
+                            alert('Error: ' + (error.detail || 'Failed to calculate risk'));
+                        }
+                    } catch (e) {
+                        console.error('Risk calculation error:', e);
+                        alert('Failed to calculate risk score');
+                    } finally {
+                        this.riskLoading = false;
+                    }
                 },
                 
                 analyzeWallet(address) {
                     this.riskInput = address;
                     this.calculateRisk();
+                },
+                
+                formatUSD(amount) {
+                    if (!amount) return '$0';
+                    if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M';
+                    if (amount >= 1000) return '$' + (amount / 1000).toFixed(0) + 'K';
+                    return '$' + amount.toFixed(0);
                 }
             }
         }

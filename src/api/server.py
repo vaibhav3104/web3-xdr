@@ -24,6 +24,7 @@ from .parser_routes import router as parser_router
 from .alert_routes import router as alert_router
 from .contract_routes import router as contract_router
 from .scorecard_routes import router as scorecard_router
+from .analytics_routes import router as analytics_router
 
 # WebSocket feed removed - War Room dashboard no longer used
 WEBSOCKET_AVAILABLE = False
@@ -155,6 +156,9 @@ def create_app(
     
     # Include Scorecard/ROI routes
     app.include_router(scorecard_router)
+    
+    # Include Analytics routes
+    app.include_router(analytics_router, prefix="/api")
     
     # Health check
     @app.get("/health")
