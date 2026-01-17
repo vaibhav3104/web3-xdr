@@ -102,6 +102,7 @@ class ContinuousLearningSystem:
         # Callbacks
         self.threat_callbacks: List[Callable] = []
         self.training_callbacks: List[Callable] = []
+        self.analysis_callbacks: List[Callable] = []  # Called for ALL analyzed contracts
         
         # Data storage
         self.collected_samples: List[Dict] = []
@@ -267,6 +268,13 @@ class ContinuousLearningSystem:
             # Log
             status = "🔴 THREAT" if analysis.is_threat else "🟢 SAFE"
             print(f"{datetime.now().strftime('%H:%M:%S')} | {status} | {analysis.contract.chain:10} | {analysis.contract.address[:16]}... | {analysis.threat_category}")
+            
+            # Call registered analysis callbacks (for ALL contracts, not just threats)
+            for callback in self.analysis_callbacks:
+                try:
+                    await callback(analysis)
+                except Exception as e:
+                    logger.error("analysis_callback_error", error=str(e))
         
         async def on_threat(analysis: ContractAnalysis):
             """Handle detected threat"""
@@ -564,6 +572,10 @@ class ContinuousLearningSystem:
     def add_threat_callback(self, callback: Callable):
         """Add a callback for threat detection"""
         self.threat_callbacks.append(callback)
+    
+    def add_analysis_callback(self, callback: Callable):
+        """Add a callback for ALL analyzed contracts (threats and safe)"""
+        self.analysis_callbacks.append(callback)
     
     def add_training_callback(self, callback: Callable):
         """Add a callback for model training"""

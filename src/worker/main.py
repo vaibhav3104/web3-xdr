@@ -1053,17 +1053,10 @@ class Sentinel3Worker:
                 await asyncio.sleep(2)
                 learning_system = get_learning_system()
                 if learning_system:
-                    learning_system.add_threat_callback(save_contract_to_db)
-                    # Also add callback for all analyses (not just threats)
-                    # We'll use the analysis callback from the collector directly
-                    if learning_system.collector:
-                        original_callback = learning_system.collector.analysis_callback
-                        async def combined_callback(analysis):
-                            if original_callback:
-                                await original_callback(analysis)
-                            await save_contract_to_db(analysis)
-                        learning_system.collector.analysis_callback = combined_callback
-                        logger.info("continuous_learning_db_callback_registered")
+                    # Register callback for ALL analyzed contracts (threats and safe)
+                    # This uses the new add_analysis_callback method
+                    learning_system.add_analysis_callback(save_contract_to_db)
+                    logger.info("continuous_learning_db_callback_registered", callback_type="analysis")
                 
                 logger.info("continuous_learning_started", chains=chain_ids[:6], retrain_interval_hours=6)
             except Exception as e:
