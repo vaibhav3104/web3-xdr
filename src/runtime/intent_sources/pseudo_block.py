@@ -69,6 +69,12 @@ class PseudoIntentBlockSource(PendingTxSource):
             # Get current block height
             latest_block = await self.rpc_provider.get_block_number()
             
+            # Ensure types are correct (RPC might return hex strings)
+            if isinstance(latest_block, str):
+                latest_block = int(latest_block, 16) if latest_block.startswith("0x") else int(latest_block)
+            if isinstance(self.last_processed_block, str):
+                self.last_processed_block = int(self.last_processed_block, 16) if self.last_processed_block.startswith("0x") else int(self.last_processed_block)
+            
             if latest_block <= self.last_processed_block:
                 return []  # No new blocks
             
