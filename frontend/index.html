@@ -104,7 +104,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen" x-data="dashboard()" x-init="checkAuth()">
+<body class="min-h-screen" x-data="dashboard()" x-init="checkAuth(); init()">
     <!-- Header -->
     <header class="border-b border-gray-800 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -353,23 +353,23 @@
                         <h2 class="text-lg font-semibold">🔴 Live Event Feed</h2>
                     </div>
                     <div class="p-4 max-h-[300px] overflow-y-auto scrollbar-thin space-y-2">
-                        <template x-for="event in recentEvents" :key="event.event_id">
+                        <template x-for="event in recentEvents" :key="event.id || event.event_id">
                             <div class="p-2 rounded bg-gray-800/50 text-sm">
                                 <div class="flex items-center justify-between mb-1">
                                     <span 
                                         class="px-2 py-0.5 rounded text-xs font-semibold"
                                         :class="{
-                                            'bg-red-500/20 text-red-400': event.severity === 'critical',
-                                            'bg-orange-500/20 text-orange-400': event.severity === 'high',
-                                            'bg-yellow-500/20 text-yellow-400': event.severity === 'medium',
-                                            'bg-green-500/20 text-green-400': event.severity === 'low'
+                                            'bg-red-500/20 text-red-400': (event.severity || '').toLowerCase() === 'critical',
+                                            'bg-orange-500/20 text-orange-400': (event.severity || '').toLowerCase() === 'high',
+                                            'bg-yellow-500/20 text-yellow-400': (event.severity || '').toLowerCase() === 'medium',
+                                            'bg-green-500/20 text-green-400': (event.severity || '').toLowerCase() === 'low' || (event.severity || '').toLowerCase() === 'info'
                                         }"
-                                        x-text="event.event_type"
+                                        x-text="event.event_type || 'event'"
                                     ></span>
-                                    <span class="text-gray-500 text-xs uppercase" x-text="event.chain_id"></span>
+                                    <span class="text-gray-500 text-xs uppercase" x-text="event.chain || event.chain_id"></span>
                                 </div>
-                                <div class="text-gray-400 font-mono text-xs truncate" x-text="'TX: ' + event.tx_hash"></div>
-                                <div class="text-gray-500 text-xs" x-text="'Block: ' + (event.block_number || '')"></div>
+                                <div class="text-gray-400 font-mono text-xs truncate" x-text="'TX: ' + (event.tx_hash || '').substring(0, 20) + '...'"></div>
+                                <div class="text-gray-500 text-xs" x-text="'Block: ' + (event.block || event.block_number || 'N/A')"></div>
                             </div>
                         </template>
                         
@@ -501,9 +501,11 @@
                         const res = await fetch('/api/events?limit=20');
                         if (!res.ok) throw new Error('API error');
                         const data = await res.json();
-                        this.recentEvents = data;
+                        // API returns { events: [...], returned: N } - extract the events array
+                        this.recentEvents = data.events || data || [];
+                        console.log('Loaded events:', this.recentEvents.length);
                     } catch (e) {
-                        console.log('Events API not ready');
+                        console.log('Events API not ready:', e);
                     }
                 },
                 
