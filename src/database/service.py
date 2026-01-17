@@ -348,6 +348,7 @@ class DatabaseService:
             #     params['status'] = status.upper()
             
             # Cursor-based pagination (preferred over OFFSET)
+            # Now using created_at for cursor since we order by created_at
             if cursor:
                 cursor_data = decode_cursor(cursor)
                 if cursor_data:
@@ -363,7 +364,7 @@ class DatabaseService:
                         if cursor_ts_dt.tzinfo is not None:
                             cursor_ts_dt = cursor_ts_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     where_parts.append(
-                        "(block_timestamp, id) < (:cursor_timestamp, CAST(:cursor_id AS UUID))"
+                        "(created_at, id) < (:cursor_timestamp, CAST(:cursor_id AS UUID))"
                     )
                     params['cursor_timestamp'] = cursor_ts_dt
                     params['cursor_id'] = cursor_id
@@ -373,13 +374,15 @@ class DatabaseService:
             # Query using raw SQL with cursor pagination
             # Order by (block_timestamp DESC, id DESC) for stable cursor
             # Note: status column doesn't exist in the actual table, removed from query
+            # Order by created_at DESC to show most recently ingested events first
+            # This is more useful than block_timestamp which is when the block was mined
             sql = f"""
                 SELECT id, event_id, chain_id, event_type, tx_hash, block_number,
                        block_timestamp, contract_address, severity, amount, amount_usd,
                        from_address, to_address, raw_data, created_at
                 FROM events
                 WHERE {where_clause}
-                ORDER BY block_timestamp DESC, id DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT :limit
             """
             params['limit'] = limit + 1  # Fetch one extra to check if there's more

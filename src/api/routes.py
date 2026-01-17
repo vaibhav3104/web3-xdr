@@ -573,21 +573,25 @@ async def debug_events():
             # 4. Get time range
             time_result = await session.execute(text("""
                 SELECT 
-                    MIN(block_timestamp) as oldest,
-                    MAX(block_timestamp) as newest
+                    MIN(block_timestamp) as oldest_block_time,
+                    MAX(block_timestamp) as newest_block_time,
+                    MIN(created_at) as oldest_created,
+                    MAX(created_at) as newest_created
                 FROM events
             """))
             time_row = time_result.fetchone()
             if time_row:
                 debug_info["oldest_event_time"] = str(time_row[0]) if time_row[0] else None
                 debug_info["latest_event_time"] = str(time_row[1]) if time_row[1] else None
+                debug_info["oldest_created_at"] = str(time_row[2]) if time_row[2] else None
+                debug_info["latest_created_at"] = str(time_row[3]) if time_row[3] else None
             
-            # 5. Get 5 sample events (most recent)
+            # 5. Get 5 sample events (most recently ingested by created_at)
             sample_result = await session.execute(text("""
                 SELECT id, event_id, chain_id, event_type, tx_hash, block_number, 
                        block_timestamp, severity, contract_address
                 FROM events 
-                ORDER BY block_timestamp DESC NULLS LAST
+                ORDER BY created_at DESC NULLS LAST
                 LIMIT 5
             """))
             for row in sample_result.fetchall():
