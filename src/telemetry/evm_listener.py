@@ -18,6 +18,7 @@ import structlog
 
 from web3 import AsyncWeb3, AsyncHTTPProvider
 from web3.exceptions import BlockNotFound
+from web3.middleware import ExtraDataToPOAMiddleware
 from eth_abi import decode
 
 from .base import ChainListener, ListenerConfig, BlockMetadata
@@ -141,6 +142,14 @@ class EVMListener(ChainListener):
             # Create robust provider with all available URLs
             self._provider = RobustAsyncHTTPProvider(self._rpc_urls)
             self.w3 = AsyncWeb3(self._provider)
+            
+            # Inject POA middleware for chains like Polygon, BSC, Avalanche, etc.
+            # This handles the extraData field that POA chains use
+            # POA chains: polygon, bsc, avalanche, optimism, base, arbitrum
+            poa_chains = ["polygon", "bsc", "avalanche", "optimism", "base", "arbitrum"]
+            if self.chain_id.lower() in poa_chains:
+                self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+                logger.info("poa_middleware_injected", chain=self.chain_id)
             
             # Test connection by getting chain ID (more reliable than is_connected())
             # is_connected() can return False even when RPC is responding
