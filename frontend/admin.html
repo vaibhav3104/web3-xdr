@@ -207,7 +207,7 @@
 
     <div class="flex">
         <!-- Sidebar -->
-        <aside class="w-64 min-h-screen border-r border-gray-800 p-4">
+        <aside class="w-64 min-h-screen border-r border-gray-800 p-4 relative flex flex-col">
             <div class="flex items-center space-x-3 mb-8 px-2">
                 <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
                     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,9 +288,13 @@
                 </a>
             </nav>
             
-            <div class="absolute bottom-4 left-4 right-4 space-y-2">
+            <!-- Spacer to push footer to bottom -->
+            <div class="flex-grow"></div>
+            
+            <!-- Fixed Footer -->
+            <div class="mt-auto pt-4 space-y-2 border-t border-gray-800">
                 <!-- User Info -->
-                <div class="px-2 py-3 border-t border-gray-800" x-show="currentUser">
+                <div class="px-2 py-3" x-show="currentUser">
                     <div class="flex items-center space-x-3 mb-2">
                         <div class="w-8 h-8 rounded-full bg-indigo-500/30 flex items-center justify-center text-sm font-semibold">
                             <span x-text="currentUser?.username?.charAt(0).toUpperCase()"></span>
@@ -364,13 +368,23 @@
                 <div class="card p-6">
                     <h2 class="text-lg font-semibold mb-4">Recent Rule Triggers</h2>
                     <div class="space-y-3">
+                        <!-- Empty state -->
+                        <div x-show="recentTriggers.length === 0" class="text-center py-8 text-gray-500">
+                            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <p>No rule triggers yet</p>
+                            <p class="text-sm mt-1">Rules will appear here when they match events</p>
+                        </div>
+                        
+                        <!-- Triggers list -->
                         <template x-for="trigger in recentTriggers" :key="trigger.id">
                             <div class="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
                                 <div class="flex items-center space-x-3">
                                     <span class="badge" :class="'badge-' + trigger.severity" x-text="trigger.severity"></span>
-                                    <span x-text="trigger.ruleName"></span>
+                                    <span x-text="trigger.ruleName || trigger.rule_name"></span>
                                 </div>
-                                <span class="text-gray-500 text-sm" x-text="trigger.time"></span>
+                                <span class="text-gray-500 text-sm" x-text="trigger.time || trigger.triggered_at"></span>
                             </div>
                         </template>
                     </div>
@@ -781,10 +795,13 @@
                     await this.loadChains();
                     await this.loadStats();
                     await this.loadAlertingConfig();
-                    this.loadLogs();
+                    await this.loadLogs();
                     
-                    // Refresh stats periodically
-                    setInterval(() => this.loadStats(), 5000);
+                    // Refresh stats and triggers periodically
+                    setInterval(() => {
+                        this.loadStats();
+                        this.loadLogs();
+                    }, 10000);
                 },
                 
                 async loadRules() {
@@ -877,21 +894,29 @@
                     } catch (e) {}
                 },
                 
-                loadLogs() {
+                async loadLogs() {
                     this.logs = [
-                        { id: 1, timestamp: '18:45:47', level: 'info', message: `Rule engine loaded ${this.rules.length} rules from 4 files` },
-                        { id: 2, timestamp: '18:45:48', level: 'info', message: 'Connected to Ethereum (Block 24,148,651)' },
-                        { id: 3, timestamp: '18:45:48', level: 'info', message: 'Connected to Polygon (Block 81,129,079)' },
-                        { id: 4, timestamp: '18:45:48', level: 'info', message: 'Connected to Arbitrum (Block 168,523,801)' },
-                        { id: 5, timestamp: '18:45:49', level: 'info', message: 'Loaded DeFi protocol rules: Aave, Uniswap, Compound, MakerDAO, Curve, Lido' },
-                        { id: 6, timestamp: '18:45:50', level: 'warning', message: 'Rule velocity-spike-201 triggered' },
-                        { id: 7, timestamp: '18:46:00', level: 'info', message: 'Processed 500 events' },
+                        { id: 1, timestamp: new Date().toLocaleTimeString(), level: 'info', message: `Rule engine loaded ${this.rules.length} rules from 4 files` },
+                        { id: 2, timestamp: new Date().toLocaleTimeString(), level: 'info', message: 'Connected to Ethereum' },
+                        { id: 3, timestamp: new Date().toLocaleTimeString(), level: 'info', message: 'Connected to Polygon' },
+                        { id: 4, timestamp: new Date().toLocaleTimeString(), level: 'info', message: 'Connected to Arbitrum' },
+                        { id: 5, timestamp: new Date().toLocaleTimeString(), level: 'info', message: 'Loaded DeFi protocol rules: Aave, Uniswap, Compound, MakerDAO, Curve, Lido' },
                     ];
                     
-                    this.recentTriggers = [
-                        { id: 1, ruleName: 'Transaction Velocity Spike', severity: 'medium', time: '2 min ago' },
-                        { id: 2, ruleName: 'Failed Transaction Spike', severity: 'low', time: '5 min ago' },
-                    ];
+                    // Load recent rule triggers from API
+                    try {
+                        const res = await fetch('/api/admin/rule-triggers?limit=10');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.recentTriggers = data.triggers || [];
+                        } else {
+                            // No triggers yet - show empty state
+                            this.recentTriggers = [];
+                        }
+                    } catch (e) {
+                        console.log('No recent rule triggers found');
+                        this.recentTriggers = [];
+                    }
                 },
                 
                 viewRuleYaml(rule) {

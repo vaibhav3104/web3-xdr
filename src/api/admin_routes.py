@@ -572,3 +572,111 @@ async def get_system_logs(limit: int = 100):
         ]
     }
 
+
+@router.get("/rule-triggers")
+async def get_rule_triggers(limit: int = 10):
+    """
+    Get recent rule triggers from the database.
+    
+    Returns events that have been flagged by YAML rules with severity > INFO.
+    """
+    from ..database.service import DatabaseService
+    
+    try:
+        # Query events that were triggered by rules (severity > INFO indicates a rule match)
+        # Events with higher severity are typically rule-triggered
+        events = await DatabaseService.get_events(
+            limit=limit,
+            severity="HIGH"  # Get high+ severity events which are typically rule-triggered
+        )
+        
+        # Also get critical and medium events
+        critical_events = await DatabaseService.get_events(
+            limit=limit,
+            severity="CRITICAL"
+        )
+        
+        medium_events = await DatabaseService.get_events(
+            limit=limit,
+            severity="MEDIUM"
+        )
+        
+        # Combine and sort by timestamp
+        all_events = events + critical_events + medium_events
+        
+        # Convert to trigger format
+        triggers = []
+        seen_ids = set()
+        
+        for event in all_events:
+            event_id = event.get('event_id', event.get('id', ''))
+            if event_id in seen_ids:
+                continue
+            seen_ids.add(event_id)
+            
+            # Determine rule name from event type or raw_data
+            event_type = event.get('event_type', 'unknown')
+            raw_data = event.get('raw_data', {}) or {}
+            rule_name = raw_data.get('matched_rule', None)
+            
+            if not rule_name:
+                # Generate rule name from event type
+                rule_name = f"{event_type.replace('_', ' ').title()} Detected"
+            
+            # Calculate relative time
+            timestamp = event.get('block_timestamp')
+            if timestamp:
+                if isinstance(timestamp, str):
+                    from datetime import datetime
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    except:
+                        timestamp = None
+                
+                if timestamp:
+                    from datetime import datetime, timezone
+                    now = datetime.now(timezone.utc)
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    diff = now - timestamp
+                    minutes = int(diff.total_seconds() / 60)
+                    
+                    if minutes < 1:
+                        time_str = "just now"
+                    elif minutes < 60:
+                        time_str = f"{minutes} min ago"
+                    elif minutes < 1440:
+                        time_str = f"{minutes // 60} hr ago"
+                    else:
+                        time_str = f"{minutes // 1440} days ago"
+                else:
+                    time_str = "unknown"
+            else:
+                time_str = "unknown"
+            
+            severity = event.get('severity', 'medium')
+            if isinstance(severity, str):
+                severity = severity.lower()
+            
+            triggers.append({
+                "id": event_id,
+                "ruleName": rule_name,
+                "rule_name": rule_name,
+                "severity": severity,
+                "time": time_str,
+                "triggered_at": time_str,
+                "chain": event.get('chain_id', 'unknown'),
+                "tx_hash": event.get('tx_hash', '')
+            })
+        
+        # Sort by most recent and limit
+        triggers = triggers[:limit]
+        
+        return {"triggers": triggers}
+        
+    except Exception as e:
+        import traceback
+        print(f"Error getting rule triggers: {e}")
+        traceback.print_exc()
+        return {"triggers": []}
+
