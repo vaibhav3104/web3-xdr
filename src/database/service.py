@@ -665,10 +665,18 @@ class DatabaseService:
                 alerts = []
                 
                 for row in rows:
+                    # Parse raw_data - it may be a JSON string or dict
                     raw_data = row.raw_data if row.raw_data else {}
+                    if isinstance(raw_data, str):
+                        try:
+                            import json
+                            raw_data = json.loads(raw_data)
+                        except (json.JSONDecodeError, TypeError):
+                            raw_data = {}
+                    
                     alerts.append({
                         "event_id": row.event_id,
-                        "alert_id": raw_data.get("alert_id", row.event_id),
+                        "alert_id": raw_data.get("alert_id", row.event_id) if isinstance(raw_data, dict) else row.event_id,
                         "chain_id": row.chain_id,
                         "tx_hash": row.tx_hash,
                         "block_number": row.block_number,
@@ -676,7 +684,7 @@ class DatabaseService:
                         "contract_address": row.contract_address,
                         "severity": row.severity,
                         "from_address": row.from_address,
-                        "raw_data": raw_data
+                        "raw_data": raw_data if isinstance(raw_data, dict) else {}
                     })
                 
                 return alerts
