@@ -30,6 +30,11 @@ class IncidentSummary(BaseModel):
     affected_chains: List[str]
     created_at: datetime
     event_count: int = 0  # Phase 4: Number of events
+    # Contract and address info for ML-detected threats
+    affected_contracts: Optional[List[str]] = None
+    affected_addresses: Optional[List[str]] = None
+    summary: Optional[str] = None
+    recommended_actions: Optional[List[str]] = None
     
     class Config:
         from_attributes = True
@@ -168,6 +173,10 @@ async def list_incidents(
                 total_loss_usd=i.total_loss_usd,
                 affected_chains=i.affected_chains,
                 created_at=i.created_at,
+                affected_contracts=getattr(i, 'affected_contracts', None),
+                affected_addresses=getattr(i, 'affected_addresses', None),
+                summary=getattr(i, 'summary', None),
+                recommended_actions=getattr(i, 'recommended_actions', None),
             ))
     
     # 2. Get incidents from database (worker-created)
@@ -190,6 +199,10 @@ async def list_incidents(
                     total_loss_usd=inc["total_loss_usd"],
                     affected_chains=inc["affected_chains"],
                     created_at=inc["created_at"],
+                    affected_contracts=inc.get("affected_contracts"),
+                    affected_addresses=inc.get("affected_addresses"),
+                    summary=inc.get("summary"),
+                    recommended_actions=inc.get("recommended_actions"),
                 ))
     except Exception as e:
         logger.warning("db_incidents_fetch_failed", error=str(e))

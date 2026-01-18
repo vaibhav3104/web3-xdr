@@ -978,6 +978,11 @@ class DatabaseService:
                         "affected_chains": inc.affected_chains or [],
                         "created_at": inc.created_at,
                         "event_count": inc.event_count or 0,
+                        # Additional fields for ML-detected threats
+                        "affected_contracts": inc.affected_contracts or [],
+                        "affected_addresses": inc.affected_addresses or [],
+                        "summary": inc.summary,
+                        "recommended_actions": inc.recommended_actions or [],
                     }
                     for inc in incidents
                 ]
