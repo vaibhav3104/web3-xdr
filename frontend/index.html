@@ -350,6 +350,112 @@
                                     <p class="mt-1 text-sm text-gray-300" x-text="selectedIncident.summary"></p>
                                 </div>
                             </template>
+                            
+                            <!-- ML Analysis Section (for ML-triggered incidents) -->
+                            <template x-if="mlAnalysisDetails">
+                                <div class="pt-3 border-t border-gray-700">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-purple-400 text-xs uppercase tracking-wide font-semibold">🤖 ML Detection Analysis</span>
+                                        <span class="text-xs text-gray-500">Why this was flagged</span>
+                                    </div>
+                                    
+                                    <!-- Threat Category -->
+                                    <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 mb-2">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="text-gray-400 text-xs">Threat Category</span>
+                                            <span class="px-2 py-1 rounded text-xs font-mono"
+                                                :class="{
+                                                    'bg-red-500/20 text-red-400': ['reentrancy_exploit', 'flash_loan_exploit', 'bridge_exploit'].includes(mlAnalysisDetails.threat_category),
+                                                    'bg-orange-500/20 text-orange-400': ['rug_pull', 'honeypot', 'price_manipulation'].includes(mlAnalysisDetails.threat_category),
+                                                    'bg-yellow-500/20 text-yellow-400': mlAnalysisDetails.threat_category === 'unknown_threat',
+                                                    'bg-green-500/20 text-green-400': mlAnalysisDetails.threat_category === 'safe'
+                                                }"
+                                                x-text="formatThreatCategory(mlAnalysisDetails.threat_category)">
+                                            </span>
+                                        </div>
+                                        
+                                        <!-- Risk Score -->
+                                        <div class="mb-2">
+                                            <div class="flex items-center justify-between text-xs mb-1">
+                                                <span class="text-gray-400">Risk Score</span>
+                                                <span class="font-mono" 
+                                                    :class="{
+                                                        'text-red-400': mlAnalysisDetails.risk_score >= 70,
+                                                        'text-orange-400': mlAnalysisDetails.risk_score >= 40 && mlAnalysisDetails.risk_score < 70,
+                                                        'text-yellow-400': mlAnalysisDetails.risk_score >= 20 && mlAnalysisDetails.risk_score < 40,
+                                                        'text-green-400': mlAnalysisDetails.risk_score < 20
+                                                    }"
+                                                    x-text="mlAnalysisDetails.risk_score?.toFixed(1) + '/100'">
+                                                </span>
+                                            </div>
+                                            <div class="w-full bg-gray-700 rounded-full h-2">
+                                                <div class="h-2 rounded-full transition-all duration-500"
+                                                    :class="{
+                                                        'bg-red-500': mlAnalysisDetails.risk_score >= 70,
+                                                        'bg-orange-500': mlAnalysisDetails.risk_score >= 40 && mlAnalysisDetails.risk_score < 70,
+                                                        'bg-yellow-500': mlAnalysisDetails.risk_score >= 20 && mlAnalysisDetails.risk_score < 40,
+                                                        'bg-green-500': mlAnalysisDetails.risk_score < 20
+                                                    }"
+                                                    :style="'width: ' + Math.min(mlAnalysisDetails.risk_score || 0, 100) + '%'">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- ML Confidence -->
+                                        <div class="mb-2">
+                                            <div class="flex items-center justify-between text-xs mb-1">
+                                                <span class="text-gray-400">ML Confidence</span>
+                                                <span class="font-mono text-purple-400" x-text="((mlAnalysisDetails.confidence || 0) * 100).toFixed(0) + '%'"></span>
+                                            </div>
+                                            <div class="w-full bg-gray-700 rounded-full h-2">
+                                                <div class="h-2 rounded-full bg-purple-500 transition-all duration-500"
+                                                    :style="'width: ' + ((mlAnalysisDetails.confidence || 0) * 100) + '%'">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Bytecode Size -->
+                                        <div class="flex items-center justify-between text-xs" x-show="mlAnalysisDetails.bytecode_size">
+                                            <span class="text-gray-400">Bytecode Size</span>
+                                            <span class="font-mono text-gray-300" x-text="(mlAnalysisDetails.bytecode_size || 0).toLocaleString() + ' bytes'"></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Detection Alerts/Reasons -->
+                                    <template x-if="mlAnalysisDetails.alerts?.length > 0">
+                                        <div class="bg-gray-800/50 rounded-lg p-3">
+                                            <span class="text-gray-400 text-xs uppercase tracking-wide">Detection Reasons</span>
+                                            <ul class="mt-2 space-y-1">
+                                                <template x-for="(alert, idx) in mlAnalysisDetails.alerts" :key="idx">
+                                                    <li class="flex items-start space-x-2 text-xs">
+                                                        <span class="text-yellow-400 mt-0.5">⚠️</span>
+                                                        <span class="text-gray-300" x-text="alert"></span>
+                                                    </li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                    
+                                    <!-- Source -->
+                                    <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+                                        <span>Source: <span class="font-mono" x-text="mlAnalysisDetails.source || 'ml_contract_scanner'"></span></span>
+                                        <span x-show="mlAnalysisDetails.is_threat" class="text-red-400">⚡ Flagged as Threat</span>
+                                    </div>
+                                </div>
+                            </template>
+                            
+                            <!-- Loading indicator for ML analysis -->
+                            <template x-if="loadingMlAnalysis">
+                                <div class="pt-3 border-t border-gray-700">
+                                    <div class="flex items-center space-x-2 text-purple-400 text-sm">
+                                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span>Loading ML analysis details...</span>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                         
                         <div class="mt-6 space-y-2">
@@ -429,6 +535,65 @@
                                             </template>
                                         </ul>
                                     </div>
+                                    
+                                    <!-- ML Analysis Details in Modal -->
+                                    <div x-show="mlAnalysisDetails" class="pt-4 border-t border-gray-700">
+                                        <h4 class="text-sm font-semibold text-purple-400 mb-3">🤖 ML Detection Analysis</h4>
+                                        <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4 space-y-3">
+                                            <div class="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <span class="text-xs text-gray-500">Threat Category</span>
+                                                    <p class="font-mono text-sm" 
+                                                        :class="{
+                                                            'text-red-400': ['reentrancy_exploit', 'flash_loan_exploit', 'bridge_exploit'].includes(mlAnalysisDetails?.threat_category),
+                                                            'text-orange-400': ['rug_pull', 'honeypot', 'price_manipulation'].includes(mlAnalysisDetails?.threat_category),
+                                                            'text-yellow-400': mlAnalysisDetails?.threat_category === 'unknown_threat',
+                                                            'text-green-400': mlAnalysisDetails?.threat_category === 'safe'
+                                                        }"
+                                                        x-text="formatThreatCategory(mlAnalysisDetails?.threat_category)">
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span class="text-xs text-gray-500">Risk Score</span>
+                                                    <p class="font-mono text-sm"
+                                                        :class="{
+                                                            'text-red-400': mlAnalysisDetails?.risk_score >= 70,
+                                                            'text-orange-400': mlAnalysisDetails?.risk_score >= 40 && mlAnalysisDetails?.risk_score < 70,
+                                                            'text-yellow-400': mlAnalysisDetails?.risk_score >= 20 && mlAnalysisDetails?.risk_score < 40,
+                                                            'text-green-400': mlAnalysisDetails?.risk_score < 20
+                                                        }"
+                                                        x-text="(mlAnalysisDetails?.risk_score || 0).toFixed(1) + ' / 100'">
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span class="text-xs text-gray-500">ML Confidence</span>
+                                                    <p class="font-mono text-sm text-purple-400" x-text="((mlAnalysisDetails?.confidence || 0) * 100).toFixed(0) + '%'"></p>
+                                                </div>
+                                                <div>
+                                                    <span class="text-xs text-gray-500">Bytecode Size</span>
+                                                    <p class="font-mono text-sm text-gray-300" x-text="(mlAnalysisDetails?.bytecode_size || 0).toLocaleString() + ' bytes'"></p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div x-show="mlAnalysisDetails?.alerts?.length > 0">
+                                                <span class="text-xs text-gray-500">Detection Reasons</span>
+                                                <ul class="mt-1 space-y-1">
+                                                    <template x-for="(alert, idx) in (mlAnalysisDetails?.alerts || [])" :key="idx">
+                                                        <li class="flex items-start space-x-2 text-sm">
+                                                            <span class="text-yellow-400">⚠️</span>
+                                                            <span class="text-gray-300" x-text="alert"></span>
+                                                        </li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div class="flex items-center justify-between text-xs pt-2 border-t border-purple-500/20">
+                                                <span class="text-gray-500">Source: <span class="font-mono" x-text="mlAnalysisDetails?.source || 'ml_contract_scanner'"></span></span>
+                                                <span x-show="mlAnalysisDetails?.is_threat" class="text-red-400 font-semibold">⚡ Flagged as Threat</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="pt-4 border-t border-gray-700">
                                         <h4 class="text-sm font-semibold text-gray-400 mb-2">Incident ID</h4>
                                         <p class="text-xs font-mono text-gray-500" x-text="selectedIncident?.id || selectedIncident?.incident_id"></p>
@@ -530,6 +695,8 @@
                 pauseInProgress: false,
                 acknowledgeInProgress: false,
                 showExplanation: false,
+                mlAnalysisDetails: null,
+                loadingMlAnalysis: false,
                 filters: {
                     severity: ''
                 },
@@ -642,6 +809,83 @@
                     this.selectedIncident = incident;
                     this.aiAnalysis = null;
                     this.showExplanation = false;
+                    this.mlAnalysisDetails = null;
+                    
+                    // Load ML analysis details if this is an ML-triggered incident
+                    const incidentId = incident?.id || incident?.incident_id || '';
+                    if (incidentId.startsWith('inc_ml_') || incident?.attack_type?.includes('Malicious Contract')) {
+                        this.loadMlAnalysisDetails(incidentId);
+                    }
+                },
+                
+                async loadMlAnalysisDetails(incidentId) {
+                    if (!incidentId) return;
+                    
+                    this.loadingMlAnalysis = true;
+                    this.mlAnalysisDetails = null;
+                    
+                    try {
+                        const res = await fetch(`/api/debug/incident/${encodeURIComponent(incidentId)}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            
+                            // Extract ML analysis from the response
+                            if (data.ml_analysis) {
+                                this.mlAnalysisDetails = data.ml_analysis;
+                            } else if (data.associated_events?.length > 0) {
+                                // Try to extract from event raw_data
+                                for (const evt of data.associated_events) {
+                                    if (evt.raw_data && (evt.raw_data.threat_category || evt.raw_data.risk_score)) {
+                                        this.mlAnalysisDetails = {
+                                            threat_category: evt.raw_data.threat_category,
+                                            risk_score: evt.raw_data.risk_score,
+                                            confidence: evt.raw_data.confidence,
+                                            is_threat: evt.raw_data.is_threat,
+                                            alerts: evt.raw_data.alerts || [],
+                                            bytecode_size: evt.raw_data.bytecode_size,
+                                            source: evt.raw_data.source || 'ml_contract_scanner'
+                                        };
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // If still no ML analysis, try to parse from incident data
+                            if (!this.mlAnalysisDetails && data.incident) {
+                                const summary = data.incident.summary || '';
+                                // Try to extract details from summary text
+                                const threatMatch = summary.match(/classified as '([^']+)'/);
+                                const confidenceMatch = summary.match(/(\d+\.?\d*)% confidence/);
+                                const riskMatch = summary.match(/risk score of (\d+\.?\d*)/);
+                                
+                                if (threatMatch || confidenceMatch || riskMatch) {
+                                    this.mlAnalysisDetails = {
+                                        threat_category: threatMatch ? threatMatch[1] : 'unknown_threat',
+                                        confidence: confidenceMatch ? parseFloat(confidenceMatch[1]) / 100 : 0.5,
+                                        risk_score: riskMatch ? parseFloat(riskMatch[1]) : 50,
+                                        is_threat: true,
+                                        alerts: [],
+                                        source: 'ml_contract_scanner'
+                                    };
+                                }
+                            }
+                            
+                            console.log('ML Analysis loaded:', this.mlAnalysisDetails);
+                        }
+                    } catch (e) {
+                        console.error('Failed to load ML analysis:', e);
+                    } finally {
+                        this.loadingMlAnalysis = false;
+                    }
+                },
+                
+                formatThreatCategory(category) {
+                    if (!category) return 'Unknown';
+                    // Convert snake_case to Title Case
+                    return category
+                        .split('_')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
                 },
                 
                 viewExplanation(incident) {
