@@ -300,15 +300,80 @@
                                 <span x-show="!aiAnalyzing">🤖 AI Analysis</span>
                                 <span x-show="aiAnalyzing" class="animate-pulse">⏳ Analyzing...</span>
                             </button>
-                            <button class="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-semibold transition">
-                                🔴 Emergency Pause
+                            <button 
+                                class="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-semibold transition"
+                                @click="emergencyPause(selectedIncident)"
+                                :disabled="pauseInProgress"
+                            >
+                                <span x-show="!pauseInProgress">🔴 Emergency Pause</span>
+                                <span x-show="pauseInProgress" class="animate-pulse">⏳ Pausing...</span>
                             </button>
-                            <button class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">
-                                View Full Explanation
+                            <button 
+                                class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition"
+                                @click="viewExplanation(selectedIncident)"
+                            >
+                                📋 View Full Explanation
                             </button>
-                            <button class="w-full py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
-                                Acknowledge
+                            <button 
+                                class="w-full py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition"
+                                @click="acknowledgeIncident(selectedIncident)"
+                                :disabled="acknowledgeInProgress"
+                            >
+                                <span x-show="!acknowledgeInProgress">✅ Acknowledge</span>
+                                <span x-show="acknowledgeInProgress" class="animate-pulse">⏳ Processing...</span>
                             </button>
+                        </div>
+                        
+                        <!-- Explanation Modal -->
+                        <div x-show="showExplanation" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @click.self="showExplanation = false">
+                            <div class="card max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-xl font-bold">Incident Explanation</h3>
+                                    <button @click="showExplanation = false" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                                </div>
+                                <div class="space-y-4">
+                                    <div>
+                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Summary</h4>
+                                        <p class="text-sm" x-text="selectedIncident?.summary || selectedIncident?.title"></p>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Attack Type</h4>
+                                        <p class="text-sm" x-text="selectedIncident?.attack_type"></p>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Affected Chains</h4>
+                                        <div class="flex flex-wrap gap-2">
+                                            <template x-for="chain in (selectedIncident?.affected_chains || [])" :key="chain">
+                                                <span class="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs" x-text="chain"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Confidence</h4>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex-1 bg-gray-700 rounded-full h-2">
+                                                <div class="h-2 rounded-full bg-purple-500" :style="'width: ' + ((selectedIncident?.confidence || 0) * 100) + '%'"></div>
+                                            </div>
+                                            <span class="text-sm font-mono" x-text="((selectedIncident?.confidence || 0) * 100).toFixed(0) + '%'"></span>
+                                        </div>
+                                    </div>
+                                    <div x-show="selectedIncident?.recommended_actions?.length > 0">
+                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Recommended Actions</h4>
+                                        <ul class="space-y-1">
+                                            <template x-for="(action, i) in (selectedIncident?.recommended_actions || [])" :key="i">
+                                                <li class="text-sm flex items-start space-x-2">
+                                                    <span class="text-purple-400" x-text="(i+1) + '.'"></span>
+                                                    <span x-text="action"></span>
+                                                </li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                    <div class="pt-4 border-t border-gray-700">
+                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Incident ID</h4>
+                                        <p class="text-xs font-mono text-gray-500" x-text="selectedIncident?.id || selectedIncident?.incident_id"></p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -401,6 +466,9 @@
                 selectedIncident: null,
                 aiAnalysis: null,
                 aiAnalyzing: false,
+                pauseInProgress: false,
+                acknowledgeInProgress: false,
+                showExplanation: false,
                 filters: {
                     severity: ''
                 },
@@ -512,6 +580,108 @@
                 selectIncident(incident) {
                     this.selectedIncident = incident;
                     this.aiAnalysis = null;
+                    this.showExplanation = false;
+                },
+                
+                viewExplanation(incident) {
+                    if (!incident) return;
+                    this.showExplanation = true;
+                },
+                
+                async acknowledgeIncident(incident) {
+                    if (!incident) return;
+                    
+                    this.acknowledgeInProgress = true;
+                    try {
+                        const incidentId = incident.id || incident.incident_id;
+                        
+                        // Try the acknowledge endpoint
+                        let res = await fetch(`/api/incidents/${incidentId}/acknowledge`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + localStorage.getItem('xdr_token')
+                            }
+                        });
+                        
+                        // If endpoint doesn't exist, try updating status directly
+                        if (res.status === 404 || res.status === 405) {
+                            res = await fetch(`/api/incidents/${incidentId}/status`, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': 'Bearer ' + localStorage.getItem('xdr_token')
+                                },
+                                body: JSON.stringify({ status: 'acknowledged' })
+                            });
+                        }
+                        
+                        if (res.ok) {
+                            // Update local state
+                            incident.status = 'ACKNOWLEDGED';
+                            this.showNotification('✅ Incident acknowledged successfully', 'success');
+                            // Refresh incidents
+                            await this.loadIncidents();
+                        } else {
+                            // Even if API fails, mark locally
+                            incident.status = 'ACKNOWLEDGED';
+                            this.showNotification('✅ Incident acknowledged (locally)', 'warning');
+                        }
+                    } catch (e) {
+                        console.error('Acknowledge error:', e);
+                        // Mark locally even on error
+                        incident.status = 'ACKNOWLEDGED';
+                        this.showNotification('✅ Incident acknowledged (locally)', 'warning');
+                    } finally {
+                        this.acknowledgeInProgress = false;
+                    }
+                },
+                
+                async emergencyPause(incident) {
+                    if (!incident) return;
+                    
+                    // Confirm before pausing
+                    const confirmed = confirm(
+                        '⚠️ EMERGENCY PAUSE\n\n' +
+                        'This will attempt to pause affected protocols.\n\n' +
+                        'Incident: ' + incident.title + '\n' +
+                        'Chains: ' + (incident.affected_chains || []).join(', ') + '\n\n' +
+                        'Are you sure you want to proceed?'
+                    );
+                    
+                    if (!confirmed) return;
+                    
+                    this.pauseInProgress = true;
+                    try {
+                        // Try to pause via Guardian API
+                        const res = await fetch('/api/guardian/emergency-pause', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + localStorage.getItem('xdr_token')
+                            },
+                            body: JSON.stringify({
+                                incident_id: incident.id || incident.incident_id,
+                                chains: incident.affected_chains || [],
+                                reason: 'Emergency pause triggered from dashboard for: ' + incident.title
+                            })
+                        });
+                        
+                        if (res.ok) {
+                            const result = await res.json();
+                            alert('🔴 Emergency pause initiated!\n\n' + 
+                                  'Status: ' + (result.status || 'Pending') + '\n' +
+                                  'Protocols affected: ' + (result.protocols_paused || 0));
+                        } else {
+                            const error = await res.json().catch(() => ({}));
+                            alert('❌ Pause failed: ' + (error.detail || 'Guardian API not available'));
+                        }
+                    } catch (e) {
+                        console.error('Emergency pause error:', e);
+                        alert('❌ Emergency pause failed. Guardian system may not be configured.');
+                    } finally {
+                        this.pauseInProgress = false;
+                    }
                 },
                 
                 async analyzeWithAI(incident) {
@@ -587,6 +757,26 @@
                 logout() {
                     localStorage.removeItem('xdr_token');
                     window.location.href = '/frontend/login.html';
+                },
+                
+                showNotification(message, type = 'info') {
+                    // Create notification element
+                    const notification = document.createElement('div');
+                    notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-x-0 ${
+                        type === 'success' ? 'bg-green-600' :
+                        type === 'error' ? 'bg-red-600' :
+                        type === 'warning' ? 'bg-yellow-600' :
+                        'bg-blue-600'
+                    }`;
+                    notification.innerHTML = `<span class="text-white font-medium">${message}</span>`;
+                    document.body.appendChild(notification);
+                    
+                    // Auto-remove after 3 seconds
+                    setTimeout(() => {
+                        notification.style.opacity = '0';
+                        notification.style.transform = 'translateX(100%)';
+                        setTimeout(() => notification.remove(), 300);
+                    }, 3000);
                 }
             }
         }

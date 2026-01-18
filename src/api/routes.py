@@ -291,6 +291,91 @@ async def get_incident_details(incident_id: str):
     )
 
 
+class IncidentStatusUpdate(BaseModel):
+    """Request body for updating incident status."""
+    status: str
+
+
+@router.post("/incidents/{incident_id}/acknowledge")
+async def acknowledge_incident(incident_id: str):
+    """
+    Acknowledge an incident.
+    
+    This marks the incident as acknowledged, indicating that
+    a security analyst has reviewed it.
+    """
+    from ..shared_state import monitor_state
+    from ..database.service import DatabaseService
+    
+    logger.info("acknowledge_incident_request", incident_id=incident_id)
+    
+    # Try to update in database first
+    try:
+        updated = await DatabaseService.update_incident_status(
+            incident_id=incident_id,
+            status="ACKNOWLEDGED"
+        )
+        if updated:
+            logger.info("incident_acknowledged_in_db", incident_id=incident_id)
+            return {"status": "acknowledged", "incident_id": incident_id, "source": "database"}
+    except Exception as e:
+        logger.warning("db_acknowledge_failed", incident_id=incident_id, error=str(e))
+    
+    # Fallback to in-memory update
+    incidents = monitor_state.get_incidents()
+    for incident in incidents:
+        if incident.id == incident_id or getattr(incident, 'incident_id', '') == incident_id:
+            incident.status = "ACKNOWLEDGED"
+            logger.info("incident_acknowledged_in_memory", incident_id=incident_id)
+            return {"status": "acknowledged", "incident_id": incident_id, "source": "memory"}
+    
+    raise HTTPException(status_code=404, detail="Incident not found")
+
+
+@router.put("/incidents/{incident_id}/status")
+async def update_incident_status(incident_id: str, body: IncidentStatusUpdate):
+    """
+    Update the status of an incident.
+    
+    Valid statuses: OPEN_PENDING, ACKNOWLEDGED, INVESTIGATING, RESOLVED, CLOSED
+    """
+    from ..shared_state import monitor_state
+    from ..database.service import DatabaseService
+    
+    valid_statuses = ["OPEN_PENDING", "ACKNOWLEDGED", "INVESTIGATING", "RESOLVED", "CLOSED"]
+    new_status = body.status.upper()
+    
+    if new_status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+        )
+    
+    logger.info("update_incident_status_request", incident_id=incident_id, new_status=new_status)
+    
+    # Try to update in database first
+    try:
+        updated = await DatabaseService.update_incident_status(
+            incident_id=incident_id,
+            status=new_status
+        )
+        if updated:
+            logger.info("incident_status_updated_in_db", incident_id=incident_id, status=new_status)
+            return {"status": new_status, "incident_id": incident_id, "source": "database"}
+    except Exception as e:
+        logger.warning("db_status_update_failed", incident_id=incident_id, error=str(e))
+    
+    # Fallback to in-memory update
+    incidents = monitor_state.get_incidents()
+    for incident in incidents:
+        if incident.id == incident_id or getattr(incident, 'incident_id', '') == incident_id:
+            incident.status = new_status
+            logger.info("incident_status_updated_in_memory", incident_id=incident_id, status=new_status)
+            return {"status": new_status, "incident_id": incident_id, "source": "memory"}
+    
+    raise HTTPException(status_code=404, detail="Incident not found")
+
+
 @router.get("/events")
 async def list_events(
     chain_id: Optional[str] = Query(None, description="Filter by chain"),
