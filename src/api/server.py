@@ -26,6 +26,22 @@ from .contract_routes import router as contract_router
 from .scorecard_routes import router as scorecard_router
 from .analytics_routes import router as analytics_router
 
+# Protocol monitoring routes
+try:
+    from .protocol_routes import router as protocol_router
+    PROTOCOL_ROUTES_AVAILABLE = True
+except ImportError:
+    PROTOCOL_ROUTES_AVAILABLE = False
+    protocol_router = None
+
+# Public API routes
+try:
+    from .public_api import router as public_api_router
+    PUBLIC_API_AVAILABLE = True
+except ImportError:
+    PUBLIC_API_AVAILABLE = False
+    public_api_router = None
+
 # WebSocket feed removed - War Room dashboard no longer used
 WEBSOCKET_AVAILABLE = False
 websocket_feed = None
@@ -156,6 +172,16 @@ def create_app(
     
     # Include Scorecard/ROI routes
     app.include_router(scorecard_router)
+    
+    # Include Protocol monitoring routes
+    if PROTOCOL_ROUTES_AVAILABLE and protocol_router:
+        app.include_router(protocol_router, prefix="/api")
+        logger.info("protocol_routes_registered")
+    
+    # Include Public API routes
+    if PUBLIC_API_AVAILABLE and public_api_router:
+        app.include_router(public_api_router, prefix="/api")
+        logger.info("public_api_routes_registered")
     
     # Include Analytics routes
     app.include_router(analytics_router, prefix="/api")
