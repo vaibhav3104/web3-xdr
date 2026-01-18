@@ -139,18 +139,38 @@ def main():
     print("-" * 50)
     
     try:
-        # Prepare training data
-        bytecodes = [s["bytecode"] for s in training_samples]
-        labels = [s["label"] for s in training_samples]
+        # Prepare training data in the expected format
+        # Format: List of {"bytecode": str, "label": str}
+        extractor = classifier.extractor
+        
+        train_data = []
+        for sample in training_samples:
+            # Extract features for each sample
+            features = extractor.extract_features(sample["bytecode"])
+            feature_vector = extractor.features_to_vector(features)
+            
+            train_data.append({
+                "bytecode": sample["bytecode"],
+                "features": feature_vector,
+                "label": sample["label"]
+            })
+        
+        # Split into train/val (80/20)
+        split_idx = int(len(train_data) * 0.8)
+        train_set = train_data[:split_idx]
+        val_set = train_data[split_idx:]
+        
+        print(f"   Training samples: {len(train_set)}")
+        print(f"   Validation samples: {len(val_set)}")
         
         # Train
         history = classifier.train(
-            bytecodes=bytecodes,
-            labels=labels,
+            train_data=train_set,
+            val_data=val_set,
             epochs=50,
             batch_size=16,
             learning_rate=0.001,
-            validation_split=0.2
+            early_stopping_patience=10
         )
         
         print("\n✅ Training completed!")
@@ -161,11 +181,14 @@ def main():
             "training_date": datetime.now().isoformat(),
             "epochs": 50,
             "samples": len(training_samples),
+            "train_samples": len(train_set),
+            "val_samples": len(val_set),
             "categories": list(threat_patterns.keys()),
             "device": str(classifier.device),
             "final_train_loss": history.get("train_loss", [])[-1] if history.get("train_loss") else None,
             "final_val_loss": history.get("val_loss", [])[-1] if history.get("val_loss") else None,
-            "final_val_accuracy": history.get("val_accuracy", [])[-1] if history.get("val_accuracy") else None,
+            "final_train_acc": history.get("train_acc", [])[-1] if history.get("train_acc") else None,
+            "final_val_acc": history.get("val_acc", [])[-1] if history.get("val_acc") else None,
         }
         
         metrics_path = model_dir / "transformer_training_metrics.json"
@@ -174,7 +197,9 @@ def main():
         print(f"   Metrics saved to: {metrics_path}")
         
     except Exception as e:
+        import traceback
         print(f"\n⚠️ Training error: {e}")
+        traceback.print_exc()
         print("   Saving untrained model weights...")
         classifier._save_weights()
     
