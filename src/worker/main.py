@@ -1149,7 +1149,7 @@ class Sentinel3Worker:
                                                f"has been classified as '{analysis.threat_category}' with {analysis.confidence:.1%} confidence "
                                                f"and risk score of {analysis.risk_score:.1%}.",
                                     "severity": severity.name,
-                                    "status": IncidentStatus.OPEN_PENDING.value,
+                                    "status": "open",  # Use string directly to avoid enum conflicts
                                     "attack_type": attack_type,
                                     "confidence": analysis.confidence,
                                     "total_loss_usd": 0.0,  # Unknown at detection time
