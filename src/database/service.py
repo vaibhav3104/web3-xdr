@@ -867,6 +867,8 @@ class DatabaseService:
                     confidence=incident_data.get("confidence", 0.5),
                     total_loss_usd=incident_data.get("total_loss_usd", 0),
                     affected_chains=incident_data.get("affected_chains", []),
+                    affected_contracts=incident_data.get("affected_contracts", []),  # Contract addresses
+                    affected_addresses=incident_data.get("affected_addresses", []),  # Deployer/attacker addresses
                     event_ids=incident_data.get("event_ids", []),
                     violation_ids=incident_data.get("violation_ids", []),
                     rule_ids=incident_data.get("rule_ids", []),
