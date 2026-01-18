@@ -795,6 +795,190 @@ async def debug_incidents():
     return debug_info
 
 
+@router.get("/debug/incident/{incident_id}")
+async def debug_incident_details(incident_id: str):
+    """
+    DEBUG ENDPOINT: Get full details for a specific incident by ID.
+    
+    Returns all incident data including:
+    - Full incident record
+    - Associated events with raw_data
+    - ML analysis details (for ML-triggered incidents)
+    
+    Example: /api/debug/incident/inc_ml_polygon_0x24a7c517_1768742361
+    """
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    import traceback
+    import json
+    
+    debug_info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "incident_id": incident_id,
+        "found": False,
+        "incident": None,
+        "associated_events": [],
+        "ml_analysis": None,
+        "errors": []
+    }
+    
+    try:
+        async with DatabaseManager.get_session() as session:
+            # Get full incident record
+            incident_result = await session.execute(text("""
+                SELECT 
+                    id, incident_id, cluster_key, title, summary,
+                    severity, status, attack_type, confidence, total_loss_usd,
+                    event_count, affected_chains, affected_contracts, affected_addresses,
+                    event_ids, violation_ids, rule_ids, recommended_actions,
+                    explanation_json, created_at, updated_at
+                FROM incidents 
+                WHERE incident_id = :incident_id
+            """), {"incident_id": incident_id})
+            
+            row = incident_result.fetchone()
+            if row:
+                debug_info["found"] = True
+                debug_info["incident"] = {
+                    "id": str(row[0]),
+                    "incident_id": row[1],
+                    "cluster_key": row[2],
+                    "title": row[3],
+                    "summary": row[4],
+                    "severity": row[5],
+                    "status": row[6],
+                    "attack_type": row[7],
+                    "confidence": float(row[8]) if row[8] else None,
+                    "total_loss_usd": float(row[9]) if row[9] else 0.0,
+                    "event_count": row[10],
+                    "affected_chains": row[11],
+                    "affected_contracts": row[12],
+                    "affected_addresses": row[13],
+                    "event_ids": row[14],
+                    "violation_ids": row[15],
+                    "rule_ids": row[16],
+                    "recommended_actions": row[17],
+                    "explanation_json": row[18],
+                    "created_at": str(row[19]),
+                    "updated_at": str(row[20]),
+                }
+                
+                # Get associated events
+                event_ids = row[14] or []
+                if event_ids:
+                    # Build a query to get events by their IDs
+                    events_result = await session.execute(text("""
+                        SELECT 
+                            event_id, chain_id, block_number, block_timestamp,
+                            tx_hash, event_type, severity, from_address, to_address,
+                            contract_address, amount, amount_usd, raw_data
+                        FROM events 
+                        WHERE event_id = ANY(:event_ids)
+                        ORDER BY block_timestamp DESC
+                    """), {"event_ids": event_ids})
+                    
+                    for evt_row in events_result.fetchall():
+                        raw_data = evt_row[12]
+                        # Parse raw_data if it's a string
+                        if isinstance(raw_data, str):
+                            try:
+                                raw_data = json.loads(raw_data)
+                            except:
+                                pass
+                        
+                        event_data = {
+                            "event_id": evt_row[0],
+                            "chain_id": evt_row[1],
+                            "block_number": evt_row[2],
+                            "block_timestamp": str(evt_row[3]) if evt_row[3] else None,
+                            "tx_hash": evt_row[4],
+                            "event_type": evt_row[5],
+                            "severity": evt_row[6],
+                            "from_address": evt_row[7],
+                            "to_address": evt_row[8],
+                            "contract_address": evt_row[9],
+                            "amount": evt_row[10],
+                            "amount_usd": evt_row[11],
+                            "raw_data": raw_data,
+                        }
+                        debug_info["associated_events"].append(event_data)
+                        
+                        # Extract ML analysis from raw_data if present
+                        if raw_data and isinstance(raw_data, dict):
+                            if "threat_category" in raw_data or "risk_score" in raw_data:
+                                debug_info["ml_analysis"] = {
+                                    "threat_category": raw_data.get("threat_category"),
+                                    "risk_score": raw_data.get("risk_score"),
+                                    "confidence": raw_data.get("confidence"),
+                                    "is_threat": raw_data.get("is_threat"),
+                                    "alerts": raw_data.get("alerts", []),
+                                    "bytecode_size": raw_data.get("bytecode_size"),
+                                    "source": raw_data.get("source"),
+                                }
+                
+                # If no events found by ID, try to find by contract address
+                if not debug_info["associated_events"]:
+                    contracts = row[12] or []
+                    if contracts:
+                        contract_events_result = await session.execute(text("""
+                            SELECT 
+                                event_id, chain_id, block_number, block_timestamp,
+                                tx_hash, event_type, severity, from_address, to_address,
+                                contract_address, amount, amount_usd, raw_data
+                            FROM events 
+                            WHERE contract_address = ANY(:contracts)
+                            ORDER BY block_timestamp DESC
+                            LIMIT 10
+                        """), {"contracts": contracts})
+                        
+                        for evt_row in contract_events_result.fetchall():
+                            raw_data = evt_row[12]
+                            if isinstance(raw_data, str):
+                                try:
+                                    raw_data = json.loads(raw_data)
+                                except:
+                                    pass
+                            
+                            event_data = {
+                                "event_id": evt_row[0],
+                                "chain_id": evt_row[1],
+                                "block_number": evt_row[2],
+                                "block_timestamp": str(evt_row[3]) if evt_row[3] else None,
+                                "tx_hash": evt_row[4],
+                                "event_type": evt_row[5],
+                                "severity": evt_row[6],
+                                "from_address": evt_row[7],
+                                "to_address": evt_row[8],
+                                "contract_address": evt_row[9],
+                                "amount": evt_row[10],
+                                "amount_usd": evt_row[11],
+                                "raw_data": raw_data,
+                            }
+                            debug_info["associated_events"].append(event_data)
+                            
+                            # Extract ML analysis
+                            if raw_data and isinstance(raw_data, dict):
+                                if "threat_category" in raw_data or "risk_score" in raw_data:
+                                    debug_info["ml_analysis"] = {
+                                        "threat_category": raw_data.get("threat_category"),
+                                        "risk_score": raw_data.get("risk_score"),
+                                        "confidence": raw_data.get("confidence"),
+                                        "is_threat": raw_data.get("is_threat"),
+                                        "alerts": raw_data.get("alerts", []),
+                                        "bytecode_size": raw_data.get("bytecode_size"),
+                                        "source": raw_data.get("source"),
+                                    }
+            else:
+                debug_info["errors"].append(f"Incident not found: {incident_id}")
+                
+    except Exception as e:
+        debug_info["errors"].append(f"{type(e).__name__}: {str(e)}")
+        debug_info["errors"].append(traceback.format_exc()[-500:])
+        logger.error("DEBUG_INCIDENT_DETAILS_ERROR", error=str(e), incident_id=incident_id)
+    
+    return debug_info
+
+
 @router.get("/debug/db-connection")
 async def debug_db_connection():
     """
