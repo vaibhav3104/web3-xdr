@@ -581,13 +581,22 @@ async def list_events(
         "events": [
             {
                 "id": e.get("id"),
+                "event_id": e.get("event_id"),
                 "chain": e.get("chain"),
+                "chain_id": e.get("chain_id"),
                 "event_type": e.get("event_type"),
                 "tx_hash": e.get("tx_hash"),
                 "block": e.get("block"),
+                "block_number": e.get("block_number"),
                 "contract": e.get("contract"),
+                "contract_address": e.get("contract_address"),
+                "from_address": e.get("from_address"),
+                "to_address": e.get("to_address"),
                 "severity": e.get("severity"),
                 "timestamp": e.get("timestamp"),
+                "amount": e.get("amount"),
+                "amount_usd": e.get("amount_usd"),
+                "raw_data": e.get("data", {}),
                 "data": e.get("data", {})
             }
             for e in event_dicts
