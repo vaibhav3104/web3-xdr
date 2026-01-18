@@ -15,8 +15,27 @@ from pydantic import BaseModel, Field
 import structlog
 
 from ..protocols.aave import aave_monitor
-from ..protocols.uniswap import uniswap_monitor
 from ..protocols.compound import compound_monitor
+from ..protocols.uniswap import uniswap_monitor
+from ..protocols.makerdao import makerdao_monitor
+from ..protocols.spark import spark_monitor
+from ..protocols.morpho import morpho_monitor
+from ..protocols.curve import curve_monitor
+from ..protocols.balancer import balancer_monitor
+from ..protocols.sushiswap import sushiswap_monitor
+from ..protocols.pancakeswap import pancakeswap_monitor
+from ..protocols.lido import lido_monitor
+from ..protocols.rocketpool import rocketpool_monitor
+from ..protocols.eigenlayer import eigenlayer_monitor
+from ..protocols.wormhole import wormhole_monitor
+from ..protocols.layerzero import layerzero_monitor
+from ..protocols.stargate import stargate_monitor
+from ..protocols.across import across_monitor
+from ..protocols.gmx import gmx_monitor
+from ..protocols.dydx import dydx_monitor
+from ..protocols.synthetix import synthetix_monitor
+from ..protocols.yearn import yearn_monitor
+from ..protocols.convex import convex_monitor
 
 logger = structlog.get_logger(__name__)
 
@@ -98,9 +117,39 @@ class ProtocolListResponse(BaseModel):
 # =============================================================================
 
 PROTOCOL_MONITORS = {
+    # Lending
     "aave_v3": aave_monitor,
-    "uniswap": uniswap_monitor,
     "compound": compound_monitor,
+    "makerdao": makerdao_monitor,
+    "spark": spark_monitor,
+    "morpho": morpho_monitor,
+    
+    # DEX
+    "uniswap": uniswap_monitor,
+    "curve": curve_monitor,
+    "balancer": balancer_monitor,
+    "sushiswap": sushiswap_monitor,
+    "pancakeswap": pancakeswap_monitor,
+    
+    # Liquid Staking
+    "lido": lido_monitor,
+    "rocketpool": rocketpool_monitor,
+    "eigenlayer": eigenlayer_monitor,
+    
+    # Bridges
+    "wormhole": wormhole_monitor,
+    "layerzero": layerzero_monitor,
+    "stargate": stargate_monitor,
+    "across": across_monitor,
+    
+    # Derivatives
+    "gmx": gmx_monitor,
+    "dydx": dydx_monitor,
+    "synthetix": synthetix_monitor,
+    
+    # Yield
+    "yearn": yearn_monitor,
+    "convex": convex_monitor,
 }
 
 PROTOCOL_INFO = {
@@ -130,7 +179,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum"],
         "description": "Decentralized stablecoin (DAI) issuer",
         "website": "https://makerdao.com",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "spark": {
         "id": "spark",
@@ -139,7 +188,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum"],
         "description": "DAI-focused lending market (MakerDAO)",
         "website": "https://spark.fi",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "morpho": {
         "id": "morpho",
@@ -148,7 +197,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "base"],
         "description": "Peer-to-peer lending optimizer",
         "website": "https://morpho.org",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     
     # === DEX PROTOCOLS ===
@@ -168,7 +217,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "base"],
         "description": "Stablecoin-focused AMM",
         "website": "https://curve.fi",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "balancer": {
         "id": "balancer",
@@ -177,7 +226,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "base"],
         "description": "Multi-asset AMM and liquidity protocol",
         "website": "https://balancer.fi",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "sushiswap": {
         "id": "sushiswap",
@@ -186,7 +235,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche"],
         "description": "Community-driven DEX",
         "website": "https://sushi.com",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "pancakeswap": {
         "id": "pancakeswap",
@@ -195,7 +244,7 @@ PROTOCOL_INFO = {
         "chains": ["bsc", "ethereum", "arbitrum", "base"],
         "description": "Leading BSC DEX",
         "website": "https://pancakeswap.finance",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     
     # === LIQUID STAKING ===
@@ -206,7 +255,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon"],
         "description": "Liquid staking for ETH (stETH)",
         "website": "https://lido.fi",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "rocketpool": {
         "id": "rocketpool",
@@ -215,7 +264,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum"],
         "description": "Decentralized ETH staking (rETH)",
         "website": "https://rocketpool.net",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "eigenlayer": {
         "id": "eigenlayer",
@@ -224,7 +273,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum"],
         "description": "ETH restaking protocol",
         "website": "https://eigenlayer.xyz",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     
     # === BRIDGES ===
@@ -235,7 +284,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "bsc", "solana"],
         "description": "Cross-chain messaging and bridge",
         "website": "https://wormhole.com",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "layerzero": {
         "id": "layerzero",
@@ -244,7 +293,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "bsc", "base"],
         "description": "Omnichain interoperability protocol",
         "website": "https://layerzero.network",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "stargate": {
         "id": "stargate",
@@ -253,7 +302,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "bsc", "base"],
         "description": "Native asset bridge (LayerZero)",
         "website": "https://stargate.finance",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "across": {
         "id": "across",
@@ -262,7 +311,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "base"],
         "description": "Fast cross-chain bridge",
         "website": "https://across.to",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     
     # === DERIVATIVES ===
@@ -273,7 +322,7 @@ PROTOCOL_INFO = {
         "chains": ["arbitrum", "avalanche"],
         "description": "Decentralized perpetual exchange",
         "website": "https://gmx.io",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "dydx": {
         "id": "dydx",
@@ -282,7 +331,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum"],
         "description": "Decentralized derivatives exchange",
         "website": "https://dydx.exchange",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "synthetix": {
         "id": "synthetix",
@@ -291,7 +340,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "optimism"],
         "description": "Synthetic assets protocol",
         "website": "https://synthetix.io",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     
     # === YIELD AGGREGATORS ===
@@ -302,7 +351,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism"],
         "description": "Yield optimization vaults",
         "website": "https://yearn.fi",
-        "has_monitor": False,
+        "has_monitor": True,
     },
     "convex": {
         "id": "convex",
@@ -311,7 +360,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum"],
         "description": "Curve yield booster",
         "website": "https://convexfinance.com",
-        "has_monitor": False,
+        "has_monitor": True,
     },
 }
 

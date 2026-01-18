@@ -1,0 +1,910 @@
+# ============================================================================
+# PROTOCOL-SPECIFIC ALERT RULES
+# Comprehensive monitoring rules for all 21 DeFi protocols
+# ============================================================================
+
+rules:
+  # ==========================================================================
+  # LENDING PROTOCOLS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # AAVE V3
+  # --------------------------------------------------------------------------
+  - id: aave-liquidation-critical
+    name: Aave Large Liquidation
+    description: Critical liquidation event on Aave V3 exceeding $500K
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    protocol: aave_v3
+    detection:
+      type: event
+      event_type: LiquidationCall
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: aave-health-factor-warning
+    name: Aave Health Factor Warning
+    description: Position health factor approaching liquidation threshold
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: aave_v3
+    detection:
+      type: invariant
+      invariant: HEALTH_FACTOR
+      conditions:
+        - field: health_factor
+          operator: lt
+          value: 1.2
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: aave-flash-loan-attack
+    name: Aave Flash Loan Attack Pattern
+    description: Suspicious flash loan activity with high value
+    severity: high
+    confidence: 0.80
+    enabled: true
+    protocol: aave_v3
+    detection:
+      type: event
+      event_type: FlashLoan
+      chain: any
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # COMPOUND
+  # --------------------------------------------------------------------------
+  - id: compound-liquidation-critical
+    name: Compound Large Liquidation
+    description: Critical liquidation event on Compound
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    protocol: compound
+    detection:
+      type: event
+      event_type: LiquidateBorrow
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: compound-utilization-spike
+    name: Compound Utilization Spike
+    description: Market utilization exceeds 95%
+    severity: high
+    confidence: 0.90
+    enabled: true
+    protocol: compound
+    detection:
+      type: invariant
+      invariant: UTILIZATION_RATE
+      conditions:
+        - field: utilization
+          operator: gt
+          value: 95
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # MAKERDAO
+  # --------------------------------------------------------------------------
+  - id: makerdao-emergency-shutdown
+    name: MakerDAO Emergency Shutdown
+    description: CRITICAL - Emergency shutdown (Cage) triggered
+    severity: critical
+    confidence: 1.0
+    enabled: true
+    protocol: makerdao
+    detection:
+      type: event
+      event_type: Cage
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: runbook
+        steps:
+          - "1. IMMEDIATELY verify shutdown legitimacy"
+          - "2. Check governance forum for announcements"
+          - "3. Prepare user communication"
+          - "4. Monitor vault liquidation queues"
+
+  - id: makerdao-vault-liquidation
+    name: MakerDAO Vault Liquidation
+    description: Large vault liquidation (Bite/Bark)
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: makerdao
+    detection:
+      type: event
+      event_type:
+        - Bite
+        - Bark
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 250000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: makerdao-governance-change
+    name: MakerDAO Parameter Change
+    description: Governance parameter modification detected
+    severity: high
+    confidence: 0.90
+    enabled: true
+    protocol: makerdao
+    detection:
+      type: event
+      event_type: File
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # SPARK PROTOCOL
+  # --------------------------------------------------------------------------
+  - id: spark-liquidation
+    name: Spark Protocol Liquidation
+    description: Liquidation on Spark lending market
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: spark
+    detection:
+      type: event
+      event_type: LiquidationCall
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 100000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # MORPHO
+  # --------------------------------------------------------------------------
+  - id: morpho-liquidation
+    name: Morpho Liquidation
+    description: Liquidation on Morpho P2P lending
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: morpho
+    detection:
+      type: event
+      event_type: Liquidate
+      chain: any
+    thresholds:
+      min_amount_usd: 100000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # DEX PROTOCOLS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # UNISWAP
+  # --------------------------------------------------------------------------
+  - id: uniswap-high-price-impact
+    name: Uniswap High Price Impact
+    description: Swap with unusually high price impact (potential manipulation)
+    severity: critical
+    confidence: 0.85
+    enabled: true
+    protocol: uniswap
+    detection:
+      type: event
+      event_type: Swap
+      chain: any
+    thresholds:
+      price_impact_percent: 5.0
+      min_amount_usd: 100000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P1
+
+  - id: uniswap-large-liquidity-removal
+    name: Uniswap Large LP Removal
+    description: Large liquidity removal (potential rug pull)
+    severity: high
+    confidence: 0.80
+    enabled: true
+    protocol: uniswap
+    detection:
+      type: event
+      event_type: Burn
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # CURVE FINANCE
+  # --------------------------------------------------------------------------
+  - id: curve-depeg-warning
+    name: Curve Stablecoin Depeg Warning
+    description: High price impact on stablecoin pool (potential depeg)
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    protocol: curve
+    detection:
+      type: event
+      event_type: TokenExchange
+      chain: any
+    thresholds:
+      price_impact_percent: 2.0
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: runbook
+        steps:
+          - "1. Check stablecoin prices on multiple sources"
+          - "2. Verify pool balance ratios"
+          - "3. Monitor for continued depeg"
+          - "4. Alert affected protocol teams"
+
+  - id: curve-admin-change
+    name: Curve Admin Change
+    description: Pool admin change detected
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: curve
+    detection:
+      type: event
+      event_type: NewAdmin
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # BALANCER
+  # --------------------------------------------------------------------------
+  - id: balancer-flash-loan
+    name: Balancer Flash Loan
+    description: Flash loan from Balancer vault
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: balancer
+    detection:
+      type: event
+      event_type: FlashLoan
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: balancer-authorizer-change
+    name: Balancer Authorizer Change
+    description: CRITICAL - Vault authorizer changed
+    severity: critical
+    confidence: 1.0
+    enabled: true
+    protocol: balancer
+    detection:
+      type: event
+      event_type: AuthorizerChanged
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # --------------------------------------------------------------------------
+  # SUSHISWAP
+  # --------------------------------------------------------------------------
+  - id: sushiswap-large-swap
+    name: SushiSwap Large Swap
+    description: Large swap on SushiSwap
+    severity: medium
+    confidence: 0.80
+    enabled: true
+    protocol: sushiswap
+    detection:
+      type: event
+      event_type: Swap
+      chain: any
+    thresholds:
+      min_amount_usd: 250000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # --------------------------------------------------------------------------
+  # PANCAKESWAP
+  # --------------------------------------------------------------------------
+  - id: pancakeswap-large-swap
+    name: PancakeSwap Large Swap
+    description: Large swap on PancakeSwap
+    severity: medium
+    confidence: 0.80
+    enabled: true
+    protocol: pancakeswap
+    detection:
+      type: event
+      event_type:
+        - Swap
+        - SwapV3
+      chain: any
+    thresholds:
+      min_amount_usd: 250000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # LIQUID STAKING PROTOCOLS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # LIDO
+  # --------------------------------------------------------------------------
+  - id: lido-large-withdrawal
+    name: Lido Large Withdrawal Request
+    description: Large stETH withdrawal request
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: lido
+    detection:
+      type: event
+      event_type: WithdrawalRequested
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: lido-validator-exit
+    name: Lido Validator Exit
+    description: Validator exit request detected
+    severity: medium
+    confidence: 0.90
+    enabled: true
+    protocol: lido
+    detection:
+      type: event
+      event_type: ValidatorExitRequest
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # --------------------------------------------------------------------------
+  # ROCKET POOL
+  # --------------------------------------------------------------------------
+  - id: rocketpool-minipool-destroyed
+    name: Rocket Pool Minipool Destroyed
+    description: Minipool destruction event
+    severity: medium
+    confidence: 0.90
+    enabled: true
+    protocol: rocketpool
+    detection:
+      type: event
+      event_type: MinipoolDestroyed
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: rocketpool-large-withdrawal
+    name: Rocket Pool Large Withdrawal
+    description: Large rETH burn
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: rocketpool
+    detection:
+      type: event
+      event_type: TokensBurned
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # EIGENLAYER
+  # --------------------------------------------------------------------------
+  - id: eigenlayer-slashing
+    name: EigenLayer Operator Slashed
+    description: CRITICAL - Operator slashing event
+    severity: critical
+    confidence: 1.0
+    enabled: true
+    protocol: eigenlayer
+    detection:
+      type: event
+      event_type: OperatorSlashed
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: runbook
+        steps:
+          - "1. Identify slashed operator"
+          - "2. Assess impact on delegators"
+          - "3. Verify slashing legitimacy"
+          - "4. Communicate with affected users"
+
+  - id: eigenlayer-large-withdrawal
+    name: EigenLayer Large Withdrawal
+    description: Large restaking withdrawal
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: eigenlayer
+    detection:
+      type: event
+      event_type: WithdrawalQueued
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # BRIDGE PROTOCOLS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # WORMHOLE
+  # --------------------------------------------------------------------------
+  - id: wormhole-guardian-change
+    name: Wormhole Guardian Set Changed
+    description: CRITICAL - Guardian set modification
+    severity: critical
+    confidence: 1.0
+    enabled: true
+    protocol: wormhole
+    detection:
+      type: event
+      event_type: GuardianSetAdded
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: wormhole-contract-upgrade
+    name: Wormhole Contract Upgrade
+    description: CRITICAL - Bridge contract upgraded
+    severity: critical
+    confidence: 1.0
+    enabled: true
+    protocol: wormhole
+    detection:
+      type: event
+      event_type: ContractUpgraded
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: wormhole-large-transfer
+    name: Wormhole Large Bridge Transfer
+    description: Large cross-chain transfer
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: wormhole
+    detection:
+      type: event
+      event_type: LogMessagePublished
+      chain: any
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # LAYERZERO
+  # --------------------------------------------------------------------------
+  - id: layerzero-config-change
+    name: LayerZero Trusted Remote Changed
+    description: Trusted remote configuration modified
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: layerzero
+    detection:
+      type: event
+      event_type: SetTrustedRemote
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: layerzero-large-transfer
+    name: LayerZero Large OFT Transfer
+    description: Large OFT token transfer
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: layerzero
+    detection:
+      type: event
+      event_type: SendToChain
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # STARGATE
+  # --------------------------------------------------------------------------
+  - id: stargate-large-swap
+    name: Stargate Large Bridge Swap
+    description: Large cross-chain swap
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: stargate
+    detection:
+      type: event
+      event_type: Swap
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: stargate-liquidity-drain
+    name: Stargate Pool Liquidity Drain
+    description: Large liquidity removal from pool
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: stargate
+    detection:
+      type: event
+      event_type: Burn
+      chain: any
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # ACROSS
+  # --------------------------------------------------------------------------
+  - id: across-large-deposit
+    name: Across Large Bridge Deposit
+    description: Large bridge deposit
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: across
+    detection:
+      type: event
+      event_type: FundsDeposited
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: across-root-bundle
+    name: Across Root Bundle Executed
+    description: Root bundle execution on HubPool
+    severity: medium
+    confidence: 0.90
+    enabled: true
+    protocol: across
+    detection:
+      type: event
+      event_type: RootBundleExecuted
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # DERIVATIVES PROTOCOLS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # GMX
+  # --------------------------------------------------------------------------
+  - id: gmx-liquidation
+    name: GMX Position Liquidation
+    description: Position liquidation on GMX
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: gmx
+    detection:
+      type: event
+      event_type: LiquidatePosition
+      chain: any
+    thresholds:
+      min_amount_usd: 100000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: gmx-large-position
+    name: GMX Large Position Change
+    description: Large position opened or closed
+    severity: medium
+    confidence: 0.80
+    enabled: true
+    protocol: gmx
+    detection:
+      type: event
+      event_type:
+        - IncreasePosition
+        - DecreasePosition
+      chain: any
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: gmx-glp-withdrawal
+    name: GMX Large GLP Withdrawal
+    description: Large GLP liquidity removal
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: gmx
+    detection:
+      type: event
+      event_type: RemoveLiquidity
+      chain: any
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # DYDX
+  # --------------------------------------------------------------------------
+  - id: dydx-forced-trade
+    name: dYdX Forced Trade Request
+    description: Forced trade (potential liquidation)
+    severity: high
+    confidence: 0.90
+    enabled: true
+    protocol: dydx
+    detection:
+      type: event
+      event_type: LogForcedTradeRequest
+      chain: ethereum
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: dydx-large-withdrawal
+    name: dYdX Large Withdrawal
+    description: Large withdrawal from dYdX
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: dydx
+    detection:
+      type: event
+      event_type: LogWithdrawalPerformed
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # SYNTHETIX
+  # --------------------------------------------------------------------------
+  - id: synthetix-liquidation
+    name: Synthetix Account Liquidation
+    description: Account liquidation on Synthetix
+    severity: high
+    confidence: 0.95
+    enabled: true
+    protocol: synthetix
+    detection:
+      type: event
+      event_type: AccountLiquidated
+      chain: any
+    thresholds:
+      min_amount_usd: 100000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: synthetix-large-exchange
+    name: Synthetix Large Synth Exchange
+    description: Large synth exchange
+    severity: medium
+    confidence: 0.80
+    enabled: true
+    protocol: synthetix
+    detection:
+      type: event
+      event_type: SynthExchange
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # YIELD PROTOCOLS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # YEARN FINANCE
+  # --------------------------------------------------------------------------
+  - id: yearn-emergency-shutdown
+    name: Yearn Vault Emergency Shutdown
+    description: CRITICAL - Vault emergency shutdown
+    severity: critical
+    confidence: 1.0
+    enabled: true
+    protocol: yearn
+    detection:
+      type: event
+      event_type: EmergencyShutdown
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: runbook
+        steps:
+          - "1. Identify affected vault"
+          - "2. Assess user funds at risk"
+          - "3. Verify shutdown legitimacy"
+          - "4. Coordinate with Yearn team"
+
+  - id: yearn-strategy-revoked
+    name: Yearn Strategy Revoked
+    description: Strategy revoked from vault
+    severity: high
+    confidence: 0.90
+    enabled: true
+    protocol: yearn
+    detection:
+      type: event
+      event_type: StrategyRevoked
+      chain: any
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: yearn-large-withdrawal
+    name: Yearn Large Vault Withdrawal
+    description: Large withdrawal from vault
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: yearn
+    detection:
+      type: event
+      event_type: Withdraw
+      chain: any
+    thresholds:
+      min_amount_usd: 500000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # --------------------------------------------------------------------------
+  # CONVEX FINANCE
+  # --------------------------------------------------------------------------
+  - id: convex-large-withdrawal
+    name: Convex Large Withdrawal
+    description: Large withdrawal from Convex pool
+    severity: high
+    confidence: 0.85
+    enabled: true
+    protocol: convex
+    detection:
+      type: event
+      event_type: Withdrawn
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: convex-large-lock
+    name: Convex Large CVX Lock
+    description: Large CVX lock (vlCVX)
+    severity: low
+    confidence: 0.80
+    enabled: true
+    protocol: convex
+    detection:
+      type: event
+      event_type: Locked
+      chain: ethereum
+    thresholds:
+      min_amount_usd: 1000000
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P4
