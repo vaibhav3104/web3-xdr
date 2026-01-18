@@ -116,10 +116,17 @@ class AutoContractCollector:
         - "cnn": Fast pattern detection in opcode sequences
         - "mlp": Fastest, feature-based classification
         - "random_forest": Sklearn RandomForest (no GPU required)
+        
+        Device selection via ML_DEVICE env var:
+        - "auto" (default): CUDA > MPS (Apple Silicon) > CPU
+        - "cuda": Force NVIDIA GPU
+        - "mps": Force Apple Silicon GPU
+        - "cpu": Force CPU only
         """
         if self._classifier is None:
             # Get model type from environment (default: transformer for highest accuracy)
             model_type = os.getenv("ML_MODEL_TYPE", "transformer").lower()
+            device = os.getenv("ML_DEVICE", "auto").lower()
             
             try:
                 if model_type == "random_forest":
@@ -145,19 +152,30 @@ class AutoContractCollector:
                         logger.info(
                             "loading_deep_classifier",
                             model_type=model_type,
-                            model_path=model_path
+                            model_path=model_path,
+                            requested_device=device
                         )
                         
                         self._classifier = DeepContractClassifier(
                             model_type=model_type,
-                            model_path=model_path
+                            model_path=model_path,
+                            device=device
                         )
+                        
+                        # Determine if GPU is being used
+                        device_str = str(self._classifier.device)
+                        gpu_type = "none"
+                        if "cuda" in device_str:
+                            gpu_type = "nvidia_cuda"
+                        elif "mps" in device_str:
+                            gpu_type = "apple_mps"
                         
                         logger.info(
                             "deep_classifier_loaded",
                             model_type=model_type,
-                            device=str(self._classifier.device),
-                            gpu_available=str(self._classifier.device) != "cpu"
+                            device=device_str,
+                            gpu_type=gpu_type,
+                            gpu_accelerated=gpu_type != "none"
                         )
                     else:
                         # Fallback to RandomForest if PyTorch not available

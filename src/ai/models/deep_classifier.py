@@ -370,9 +370,17 @@ class DeepContractClassifier:
         self.model_type = model_type
         self.model_path = model_path or f"./data/models/deep_{model_type}.pt"
         
-        # Set device
+        # Set device (priority: CUDA > MPS > CPU)
         if device == "auto":
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+                logger.info("using_cuda_gpu")
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+                logger.info("using_apple_mps_gpu")
+            else:
+                self.device = torch.device("cpu")
+                logger.info("using_cpu")
         else:
             self.device = torch.device(device)
         
