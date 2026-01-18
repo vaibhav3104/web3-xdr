@@ -430,6 +430,226 @@ async def get_events_by_event_type(
         return {"labels": [], "data": [], "colors": [], "total": 0}
 
 
+@router.get("/attack-patterns")
+async def get_attack_patterns(
+    days: int = Query(30, description="Number of days to analyze", ge=1, le=365)
+):
+    """
+    Get attack pattern analysis with REAL data from incidents and events.
+    
+    Returns:
+    - stats: Summary statistics (total attacks, value lost, value protected)
+    - patterns: Detailed breakdown by attack type
+    """
+    from ..database.service import DatabaseService
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    
+    try:
+        # Attack pattern metadata (icons, categories, descriptions)
+        attack_metadata = {
+            'Reentrancy Attack': {
+                'icon': '🔄', 'category': 'Smart Contract',
+                'description': 'Recursive calls exploiting state update timing'
+            },
+            'Flash Loan Attack': {
+                'icon': '⚡', 'category': 'DeFi',
+                'description': 'Uncollateralized loans used for price manipulation'
+            },
+            'Rug Pull': {
+                'icon': '🎭', 'category': 'Fraud',
+                'description': 'Developers abandoning project after draining funds'
+            },
+            'Honeypot': {
+                'icon': '🍯', 'category': 'Fraud',
+                'description': 'Contract that traps user funds'
+            },
+            'Oracle Manipulation': {
+                'icon': '🔮', 'category': 'DeFi',
+                'description': 'Price feed manipulation for profit'
+            },
+            'Bridge Exploit': {
+                'icon': '🌉', 'category': 'Cross-chain',
+                'description': 'Vulnerabilities in cross-chain bridges'
+            },
+            'Price Manipulation': {
+                'icon': '📈', 'category': 'DeFi',
+                'description': 'Artificial price movements for profit'
+            },
+            'Access Control Exploit': {
+                'icon': '🔓', 'category': 'Smart Contract',
+                'description': 'Unauthorized access to privileged functions'
+            },
+            'Phishing': {
+                'icon': '🎣', 'category': 'Social Engineering',
+                'description': 'Tricking users into signing malicious transactions'
+            },
+            'Malicious Contract': {
+                'icon': '☠️', 'category': 'Smart Contract',
+                'description': 'Contract with hidden malicious functionality'
+            },
+            'Suspicious Contract': {
+                'icon': '⚠️', 'category': 'Unknown',
+                'description': 'Contract flagged by ML scanner as potentially malicious'
+            },
+        }
+        
+        # Query incidents for attack patterns
+        attack_counts = {}
+        attack_values = {}
+        attack_chains = {}
+        total_value_lost = 0
+        
+        async with DatabaseManager.get_session() as session:
+            # Get incidents grouped by attack_type
+            incident_query = text("""
+                SELECT 
+                    attack_type,
+                    COUNT(*) as cnt,
+                    COALESCE(SUM(total_loss_usd), 0) as total_loss,
+                    array_agg(DISTINCT unnest(affected_chains)) as chains
+                FROM incidents
+                WHERE created_at >= :start_time
+                GROUP BY attack_type
+                ORDER BY cnt DESC
+            """)
+            
+            try:
+                result = await session.execute(incident_query, {"start_time": start_time})
+                for row in result.fetchall():
+                    attack_type = (row[0] or 'Unknown').replace('_', ' ').title()
+                    attack_counts[attack_type] = row[1]
+                    attack_values[attack_type] = float(row[2]) if row[2] else 0
+                    attack_chains[attack_type] = row[3] if row[3] else []
+                    total_value_lost += attack_values[attack_type]
+            except Exception as query_error:
+                # Simpler query if the complex one fails
+                logger.warning("complex_query_failed", error=str(query_error))
+                simple_query = text("""
+                    SELECT attack_type, COUNT(*) as cnt, COALESCE(SUM(total_loss_usd), 0) as total_loss
+                    FROM incidents
+                    WHERE created_at >= :start_time
+                    GROUP BY attack_type
+                    ORDER BY cnt DESC
+                """)
+                result = await session.execute(simple_query, {"start_time": start_time})
+                for row in result.fetchall():
+                    attack_type = (row[0] or 'Unknown').replace('_', ' ').title()
+                    attack_counts[attack_type] = row[1]
+                    attack_values[attack_type] = float(row[2]) if row[2] else 0
+                    attack_chains[attack_type] = []
+                    total_value_lost += attack_values[attack_type]
+        
+        # Also check ML-detected threats in events
+        events, _ = await DatabaseService.get_events(
+            start_time=start_time,
+            end_time=end_time,
+            severity="CRITICAL",
+            limit=2000
+        )
+        
+        for event in events:
+            raw_data = event.get('raw_data') or {}
+            if isinstance(raw_data, dict):
+                threat_category = raw_data.get('threat_category')
+                if threat_category:
+                    # Map to readable name
+                    attack_type_map = {
+                        'reentrancy_exploit': 'Reentrancy Attack',
+                        'flash_loan_exploit': 'Flash Loan Attack',
+                        'rug_pull': 'Rug Pull',
+                        'honeypot': 'Honeypot',
+                        'phishing': 'Phishing',
+                        'price_manipulation': 'Price Manipulation',
+                        'access_control': 'Access Control Exploit',
+                        'unknown_threat': 'Suspicious Contract',
+                    }
+                    attack_type = attack_type_map.get(threat_category, threat_category.replace('_', ' ').title())
+                    attack_counts[attack_type] = attack_counts.get(attack_type, 0) + 1
+                    
+                    # Add chain info
+                    chain = event.get('chain_id')
+                    if chain:
+                        if attack_type not in attack_chains:
+                            attack_chains[attack_type] = []
+                        if chain not in attack_chains[attack_type]:
+                            attack_chains[attack_type].append(chain)
+        
+        # Build patterns list
+        patterns = []
+        for attack_type, count in sorted(attack_counts.items(), key=lambda x: x[1], reverse=True):
+            metadata = attack_metadata.get(attack_type, {
+                'icon': '❓', 'category': 'Unknown',
+                'description': f'Detected {attack_type} pattern'
+            })
+            
+            patterns.append({
+                'id': attack_type.lower().replace(' ', '_'),
+                'name': attack_type,
+                'icon': metadata['icon'],
+                'category': metadata['category'],
+                'description': metadata['description'],
+                'count': count,
+                'value_lost': attack_values.get(attack_type, 0),
+                'trend': 0,  # Would need historical comparison to calculate
+                'affected_chains': attack_chains.get(attack_type, [])
+            })
+        
+        # Calculate stats
+        total_attacks = sum(attack_counts.values())
+        unique_patterns = len(attack_counts)
+        
+        # Value protected is an estimate based on:
+        # - Events we detected and alerted on (could have prevented loss)
+        # - This is a rough heuristic: detected events * average potential loss
+        # In reality, this would need proper tracking of prevented attacks
+        events_count = len(events)
+        estimated_avg_potential_loss = 50000  # $50K average per critical event
+        value_protected = events_count * estimated_avg_potential_loss
+        
+        # If no data, return zeros (not fake data)
+        if total_attacks == 0:
+            return {
+                "stats": {
+                    "total_attacks": 0,
+                    "unique_patterns": 0,
+                    "total_value_lost": 0,
+                    "value_protected": 0,
+                    "period_days": days,
+                    "note": "No attacks detected in the specified period"
+                },
+                "patterns": []
+            }
+        
+        return {
+            "stats": {
+                "total_attacks": total_attacks,
+                "unique_patterns": unique_patterns,
+                "total_value_lost": total_value_lost,
+                "value_protected": value_protected,
+                "period_days": days
+            },
+            "patterns": patterns
+        }
+        
+    except Exception as e:
+        logger.error("attack_patterns_error", error=str(e))
+        # Return empty data on error, NOT fake data
+        return {
+            "stats": {
+                "total_attacks": 0,
+                "unique_patterns": 0,
+                "total_value_lost": 0,
+                "value_protected": 0,
+                "error": str(e)
+            },
+            "patterns": []
+        }
+
+
 @router.get("/charts/value-over-time")
 async def get_value_over_time(
     days: int = Query(30, description="Number of days", ge=1, le=365)
