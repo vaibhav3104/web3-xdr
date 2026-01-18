@@ -42,9 +42,13 @@ except ImportError:
     PUBLIC_API_AVAILABLE = False
     public_api_router = None
 
-# WebSocket feed removed - War Room dashboard no longer used
-WEBSOCKET_AVAILABLE = False
-websocket_feed = None
+# WebSocket real-time feed
+try:
+    from .websocket_routes import router as websocket_router, get_ws_manager
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
+    websocket_router = None
 
 # Runtime Security Plane routes
 try:
@@ -126,6 +130,30 @@ def create_app(
         allow_headers=["*"],
     )
     
+    # Security middleware (rate limiting, headers, logging)
+    try:
+        from .middleware.security import (
+            RateLimitMiddleware,
+            SecurityHeadersMiddleware,
+            RequestLoggingMiddleware
+        )
+        
+        # Add security headers to all responses
+        app.add_middleware(SecurityHeadersMiddleware)
+        
+        # Rate limiting (can be disabled via env var)
+        if os.getenv("ENABLE_RATE_LIMITING", "true").lower() == "true":
+            app.add_middleware(RateLimitMiddleware)
+            logger.info("rate_limiting_enabled")
+        
+        # Request logging for audit trail
+        if os.getenv("ENABLE_REQUEST_LOGGING", "true").lower() == "true":
+            app.add_middleware(RequestLoggingMiddleware)
+            logger.info("request_logging_enabled")
+            
+    except ImportError as e:
+        logger.warning("security_middleware_not_loaded", error=str(e))
+    
     # Include main API routes
     app.include_router(router, prefix="/api")
     
@@ -190,6 +218,11 @@ def create_app(
     
     # Include Analytics routes
     app.include_router(analytics_router, prefix="/api")
+    
+    # Include WebSocket real-time feed
+    if WEBSOCKET_AVAILABLE and websocket_router:
+        app.include_router(websocket_router)
+        logger.info("websocket_routes_registered")
     
     # Health check
     @app.get("/health")

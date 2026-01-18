@@ -1,0 +1,79 @@
+# Cloud Run Auto-scaling Configuration for Sentinel3
+# Optimizes costs while maintaining performance
+
+# GPU Service (sentinel3) - Scale to 0 when idle
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: sentinel3
+  annotations:
+    # Scale to 0 when no requests (saves GPU costs)
+    autoscaling.knative.dev/minScale: "0"
+    autoscaling.knative.dev/maxScale: "3"
+    
+    # Scale up quickly when needed
+    autoscaling.knative.dev/target: "80"  # Target 80% CPU utilization
+    autoscaling.knative.dev/targetUtilizationPercentage: "80"
+    
+    # Keep warm for 5 minutes after last request
+    autoscaling.knative.dev/scale-to-zero-grace-period: "5m"
+    
+    # Startup time allowance for GPU initialization
+    run.googleapis.com/startup-cpu-boost: "true"
+    
+spec:
+  template:
+    metadata:
+      annotations:
+        # Request timeout
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "false"  # Always-on CPU for GPU workloads
+        
+    spec:
+      containerConcurrency: 80  # Max concurrent requests per instance
+      timeoutSeconds: 300  # 5 minute timeout for ML inference
+      
+      containers:
+        - image: us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu:latest
+          resources:
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          
+          # Startup probe - allow time for model loading
+          startupProbe:
+            httpGet:
+              path: /api/ml/status
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30  # 150 seconds max startup
+          
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+            failureThreshold: 3
+
+---
+# Cost Monitoring Alert Policy
+# Creates alert when GPU costs exceed threshold
+
+# To apply via gcloud:
+# gcloud alpha monitoring policies create --policy-from-file=autoscaling-config.yaml
+
+# Alert when daily GPU spend exceeds $50
+# alertPolicy:
+#   displayName: "GPU Cost Alert - Sentinel3"
+#   conditions:
+#     - displayName: "Daily GPU spend > $50"
+#       conditionThreshold:
+#         filter: 'resource.type="cloud_run_revision" AND metric.type="run.googleapis.com/request_count"'
+#         comparison: COMPARISON_GT
+#         thresholdValue: 50
+#         duration: "86400s"  # 24 hours
+#   notificationChannels:
+#     - projects/web3-xdr/notificationChannels/YOUR_CHANNEL_ID

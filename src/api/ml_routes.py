@@ -485,3 +485,111 @@ async def batch_analyze(request: BatchAnalysisRequest):
         "threats_found": threats,
         "results": results
     }
+
+
+@router.post("/train")
+async def train_model(background_tasks: BackgroundTasks):
+    """
+    Trigger model training on GPU
+    Training runs in background and saves weights to disk
+    """
+    if not DEEP_ML_AVAILABLE or not deep_classifier:
+        raise HTTPException(
+            status_code=503,
+            detail="Deep ML not available. Cannot train."
+        )
+    
+    def run_training():
+        import torch
+        from datetime import datetime
+        
+        print("🚀 Starting model training...")
+        
+        # Generate training data
+        threat_patterns = {
+            "safe": ["608060405234801561001057600080fd5b5060405161001d906100a4565b"],
+            "flash_loan_exploit": ["608060405234801561001057600080fd5b5063c3924ed6f1f1f1"],
+            "reentrancy_exploit": ["608060405234801561001057600080fd5b5063ccfd60bf1555555"],
+            "rug_pull": ["608060405234801561001057600080fd5b506040516100f2fde38bff"],
+            "honeypot": ["608060405234801561001057600080fd5b506040516100a9f2fde38b"],
+            "bridge_exploit": ["608060405234801561001057600080fd5b5063409c10f19f4f4f4"],
+            "price_manipulation": ["608060405234801561001057600080fd5b506040516370a082"],
+            "access_control_exploit": ["608060405234801561001057600080fd5b50604051638da5cb5b"],
+        }
+        
+        train_data = []
+        extractor = deep_classifier.extractor
+        
+        for category, patterns in threat_patterns.items():
+            for pattern in patterns:
+                for i in range(15):
+                    variation = pattern + f"{i:02x}" * 15
+                    features = extractor.extract_features(variation)
+                    feature_vector = extractor.features_to_vector(features)
+                    train_data.append({
+                        "bytecode": variation,
+                        "features": feature_vector,
+                        "label": category
+                    })
+        
+        # Shuffle and split
+        import random
+        random.shuffle(train_data)
+        split = int(len(train_data) * 0.8)
+        
+        # Train
+        history = deep_classifier.train(
+            train_data=train_data[:split],
+            val_data=train_data[split:],
+            epochs=50,
+            batch_size=16,
+            learning_rate=0.001,
+            early_stopping_patience=10
+        )
+        
+        print("✅ Training complete!")
+        return history
+    
+    background_tasks.add_task(run_training)
+    
+    return {
+        "status": "training_started",
+        "message": "Model training started in background. Check logs for progress.",
+        "device": str(deep_classifier.device),
+        "model_type": deep_classifier.model_type
+    }
+
+
+@router.get("/model-info")
+async def get_model_info():
+    """Get detailed model information"""
+    info = {
+        "rule_based": {
+            "available": AI_AVAILABLE,
+            "loaded": classifier is not None,
+        },
+        "deep_learning": {
+            "available": DEEP_ML_AVAILABLE,
+            "loaded": deep_classifier is not None,
+        }
+    }
+    
+    if DEEP_ML_AVAILABLE and deep_classifier:
+        import torch
+        info["deep_learning"].update({
+            "model_type": deep_classifier.model_type,
+            "device": str(deep_classifier.device),
+            "model_path": deep_classifier.model_path,
+            "parameters": sum(p.numel() for p in deep_classifier.model.parameters()),
+            "categories": deep_classifier.THREAT_CATEGORIES,
+        })
+        
+        if torch.cuda.is_available():
+            info["gpu"] = {
+                "name": torch.cuda.get_device_name(0),
+                "memory_total_gb": torch.cuda.get_device_properties(0).total_memory / 1e9,
+                "memory_allocated_gb": torch.cuda.memory_allocated(0) / 1e9,
+                "memory_cached_gb": torch.cuda.memory_reserved(0) / 1e9,
+            }
+    
+    return info

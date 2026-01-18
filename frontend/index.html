@@ -711,8 +711,106 @@
                     // Load initial data
                     await this.loadAll();
                     
-                    // Poll for updates every 3 seconds
-                    setInterval(() => this.loadAll(), 3000);
+                    // Try WebSocket for real-time updates, fallback to polling
+                    this.connectWebSocket();
+                    
+                    // Fallback polling every 5 seconds (WebSocket will disable this if connected)
+                    this.pollInterval = setInterval(() => {
+                        if (!this.wsConnected) {
+                            this.loadAll();
+                        }
+                    }, 5000);
+                },
+                
+                wsConnected: false,
+                ws: null,
+                
+                connectWebSocket() {
+                    try {
+                        const wsBase = (window.SENTINEL3_API_BASE || '').replace('https://', 'wss://').replace('http://', 'ws://');
+                        const wsUrl = wsBase + '/ws';
+                        
+                        console.log('🔌 Connecting to WebSocket:', wsUrl);
+                        this.ws = new WebSocket(wsUrl);
+                        
+                        this.ws.onopen = () => {
+                            console.log('✅ WebSocket connected');
+                            this.wsConnected = true;
+                        };
+                        
+                        this.ws.onmessage = (event) => {
+                            try {
+                                const data = JSON.parse(event.data);
+                                this.handleWebSocketMessage(data);
+                            } catch (e) {
+                                console.error('WebSocket message parse error:', e);
+                            }
+                        };
+                        
+                        this.ws.onclose = () => {
+                            console.log('❌ WebSocket disconnected, falling back to polling');
+                            this.wsConnected = false;
+                            // Reconnect after 5 seconds
+                            setTimeout(() => this.connectWebSocket(), 5000);
+                        };
+                        
+                        this.ws.onerror = (error) => {
+                            console.error('WebSocket error:', error);
+                            this.wsConnected = false;
+                        };
+                    } catch (e) {
+                        console.log('WebSocket not available, using polling');
+                    }
+                },
+                
+                handleWebSocketMessage(data) {
+                    switch (data.type) {
+                        case 'event':
+                            // Add new event to the feed
+                            if (data.data) {
+                                this.recentEvents.unshift(data.data);
+                                if (this.recentEvents.length > 20) {
+                                    this.recentEvents.pop();
+                                }
+                            }
+                            break;
+                        
+                        case 'incident':
+                            // Update or add incident
+                            if (data.data) {
+                                const idx = this.incidents.findIndex(i => i.id === data.data.id);
+                                if (idx >= 0) {
+                                    this.incidents[idx] = data.data;
+                                } else {
+                                    this.incidents.unshift(data.data);
+                                }
+                            }
+                            break;
+                        
+                        case 'stats':
+                            // Update stats
+                            if (data.data) {
+                                this.stats = {
+                                    ...this.stats,
+                                    ...data.data
+                                };
+                            }
+                            break;
+                        
+                        case 'alert':
+                            // Show notification for new alert
+                            if (data.data) {
+                                this.showNotification(
+                                    `🚨 New Alert: ${data.data.title || 'Security Alert'}`,
+                                    data.data.severity === 'critical' ? 'error' : 'warning'
+                                );
+                            }
+                            break;
+                        
+                        case 'connected':
+                            console.log('📡 WebSocket channel:', data.channel);
+                            break;
+                    }
                 },
                 
                 async loadAll() {
