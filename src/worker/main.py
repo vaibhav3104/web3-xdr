@@ -230,6 +230,14 @@ class Sentinel3Worker:
         from src.database.connection import DatabaseManager
         await DatabaseManager.initialize()
         
+        # Run database migrations to ensure schema is up to date
+        from src.database.migrations import run_migrations
+        try:
+            await run_migrations()
+            logger.info("database_migrations_completed")
+        except Exception as e:
+            logger.error("database_migrations_failed", error=str(e))
+        
         # Initialize event bus
         if not REDIS_URL:
             logger.warning(
