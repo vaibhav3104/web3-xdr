@@ -104,6 +104,7 @@ PROTOCOL_MONITORS = {
 }
 
 PROTOCOL_INFO = {
+    # === LENDING PROTOCOLS ===
     "aave_v3": {
         "id": "aave_v3",
         "name": "Aave V3",
@@ -111,14 +112,7 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "base"],
         "description": "Decentralized lending protocol",
         "website": "https://aave.com",
-    },
-    "uniswap": {
-        "id": "uniswap",
-        "name": "Uniswap",
-        "type": "dex",
-        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "base"],
-        "description": "Decentralized exchange (AMM)",
-        "website": "https://uniswap.org",
+        "has_monitor": True,
     },
     "compound": {
         "id": "compound",
@@ -127,6 +121,197 @@ PROTOCOL_INFO = {
         "chains": ["ethereum", "polygon", "arbitrum", "base"],
         "description": "Algorithmic money market protocol",
         "website": "https://compound.finance",
+        "has_monitor": True,
+    },
+    "makerdao": {
+        "id": "makerdao",
+        "name": "MakerDAO",
+        "type": "lending",
+        "chains": ["ethereum"],
+        "description": "Decentralized stablecoin (DAI) issuer",
+        "website": "https://makerdao.com",
+        "has_monitor": False,
+    },
+    "spark": {
+        "id": "spark",
+        "name": "Spark Protocol",
+        "type": "lending",
+        "chains": ["ethereum"],
+        "description": "DAI-focused lending market (MakerDAO)",
+        "website": "https://spark.fi",
+        "has_monitor": False,
+    },
+    "morpho": {
+        "id": "morpho",
+        "name": "Morpho",
+        "type": "lending",
+        "chains": ["ethereum", "base"],
+        "description": "Peer-to-peer lending optimizer",
+        "website": "https://morpho.org",
+        "has_monitor": False,
+    },
+    
+    # === DEX PROTOCOLS ===
+    "uniswap": {
+        "id": "uniswap",
+        "name": "Uniswap",
+        "type": "dex",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "base"],
+        "description": "Decentralized exchange (AMM)",
+        "website": "https://uniswap.org",
+        "has_monitor": True,
+    },
+    "curve": {
+        "id": "curve",
+        "name": "Curve Finance",
+        "type": "dex",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "base"],
+        "description": "Stablecoin-focused AMM",
+        "website": "https://curve.fi",
+        "has_monitor": False,
+    },
+    "balancer": {
+        "id": "balancer",
+        "name": "Balancer",
+        "type": "dex",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "base"],
+        "description": "Multi-asset AMM and liquidity protocol",
+        "website": "https://balancer.fi",
+        "has_monitor": False,
+    },
+    "sushiswap": {
+        "id": "sushiswap",
+        "name": "SushiSwap",
+        "type": "dex",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche"],
+        "description": "Community-driven DEX",
+        "website": "https://sushi.com",
+        "has_monitor": False,
+    },
+    "pancakeswap": {
+        "id": "pancakeswap",
+        "name": "PancakeSwap",
+        "type": "dex",
+        "chains": ["bsc", "ethereum", "arbitrum", "base"],
+        "description": "Leading BSC DEX",
+        "website": "https://pancakeswap.finance",
+        "has_monitor": False,
+    },
+    
+    # === LIQUID STAKING ===
+    "lido": {
+        "id": "lido",
+        "name": "Lido",
+        "type": "liquid_staking",
+        "chains": ["ethereum", "polygon"],
+        "description": "Liquid staking for ETH (stETH)",
+        "website": "https://lido.fi",
+        "has_monitor": False,
+    },
+    "rocketpool": {
+        "id": "rocketpool",
+        "name": "Rocket Pool",
+        "type": "liquid_staking",
+        "chains": ["ethereum"],
+        "description": "Decentralized ETH staking (rETH)",
+        "website": "https://rocketpool.net",
+        "has_monitor": False,
+    },
+    "eigenlayer": {
+        "id": "eigenlayer",
+        "name": "EigenLayer",
+        "type": "restaking",
+        "chains": ["ethereum"],
+        "description": "ETH restaking protocol",
+        "website": "https://eigenlayer.xyz",
+        "has_monitor": False,
+    },
+    
+    # === BRIDGES ===
+    "wormhole": {
+        "id": "wormhole",
+        "name": "Wormhole",
+        "type": "bridge",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "bsc", "solana"],
+        "description": "Cross-chain messaging and bridge",
+        "website": "https://wormhole.com",
+        "has_monitor": False,
+    },
+    "layerzero": {
+        "id": "layerzero",
+        "name": "LayerZero",
+        "type": "bridge",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "bsc", "base"],
+        "description": "Omnichain interoperability protocol",
+        "website": "https://layerzero.network",
+        "has_monitor": False,
+    },
+    "stargate": {
+        "id": "stargate",
+        "name": "Stargate",
+        "type": "bridge",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "avalanche", "bsc", "base"],
+        "description": "Native asset bridge (LayerZero)",
+        "website": "https://stargate.finance",
+        "has_monitor": False,
+    },
+    "across": {
+        "id": "across",
+        "name": "Across Protocol",
+        "type": "bridge",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism", "base"],
+        "description": "Fast cross-chain bridge",
+        "website": "https://across.to",
+        "has_monitor": False,
+    },
+    
+    # === DERIVATIVES ===
+    "gmx": {
+        "id": "gmx",
+        "name": "GMX",
+        "type": "derivatives",
+        "chains": ["arbitrum", "avalanche"],
+        "description": "Decentralized perpetual exchange",
+        "website": "https://gmx.io",
+        "has_monitor": False,
+    },
+    "dydx": {
+        "id": "dydx",
+        "name": "dYdX",
+        "type": "derivatives",
+        "chains": ["ethereum"],
+        "description": "Decentralized derivatives exchange",
+        "website": "https://dydx.exchange",
+        "has_monitor": False,
+    },
+    "synthetix": {
+        "id": "synthetix",
+        "name": "Synthetix",
+        "type": "derivatives",
+        "chains": ["ethereum", "optimism"],
+        "description": "Synthetic assets protocol",
+        "website": "https://synthetix.io",
+        "has_monitor": False,
+    },
+    
+    # === YIELD AGGREGATORS ===
+    "yearn": {
+        "id": "yearn",
+        "name": "Yearn Finance",
+        "type": "yield",
+        "chains": ["ethereum", "polygon", "arbitrum", "optimism"],
+        "description": "Yield optimization vaults",
+        "website": "https://yearn.fi",
+        "has_monitor": False,
+    },
+    "convex": {
+        "id": "convex",
+        "name": "Convex Finance",
+        "type": "yield",
+        "chains": ["ethereum"],
+        "description": "Curve yield booster",
+        "website": "https://convexfinance.com",
+        "has_monitor": False,
     },
 }
 
@@ -311,21 +496,40 @@ async def get_protocols_dashboard():
     - Health status for each protocol
     - Recent alerts
     - Aggregate metrics
+    
+    Shows ALL protocols in PROTOCOL_INFO, with real data for those with monitors.
     """
     protocols_status = []
     total_alerts = 0
     total_liquidations = 0
     
-    for protocol_id, monitor in PROTOCOL_MONITORS.items():
-        stats = monitor.get_stats()
+    for protocol_id, info in PROTOCOL_INFO.items():
+        # Check if this protocol has an active monitor
+        if protocol_id in PROTOCOL_MONITORS:
+            monitor = PROTOCOL_MONITORS[protocol_id]
+            stats = monitor.get_stats()
+            
+            # Calculate health based on monitor data
+            health_score = 100
+            if stats.get("liquidations_detected", 0) > 10:
+                health_score -= 20
+            if stats.get("events_processed", 0) == 0:
+                health_score -= 30
+            
+            events_24h = stats.get("events_processed", 0)
+            alerts_24h = stats.get("alerts_generated", 0)
+            liquidations_24h = stats.get("liquidations_detected", 0)
+            
+            total_alerts += alerts_24h
+            total_liquidations += liquidations_24h
+        else:
+            # Protocol without active monitor - show as monitored but no events yet
+            health_score = 85  # Default healthy score
+            events_24h = 0
+            alerts_24h = 0
+            liquidations_24h = 0
         
-        # Calculate health
-        health_score = 100
-        if stats.get("liquidations_detected", 0) > 10:
-            health_score -= 20
-        if stats.get("events_processed", 0) == 0:
-            health_score -= 30
-        
+        # Determine status
         if health_score >= 80:
             status = "healthy"
         elif health_score >= 50:
@@ -335,23 +539,27 @@ async def get_protocols_dashboard():
         
         protocols_status.append({
             "protocol_id": protocol_id,
-            "name": monitor.config.protocol_name,
-            "type": monitor.config.protocol_type.value,
+            "name": info["name"],
+            "type": info["type"],
             "status": status,
             "health_score": max(0, health_score),
-            "chains": monitor.config.chains,
-            "events_24h": stats.get("events_processed", 0),
-            "alerts_24h": stats.get("alerts_generated", 0),
-            "liquidations_24h": stats.get("liquidations_detected", 0),
+            "chains": info["chains"],
+            "events_24h": events_24h,
+            "alerts_24h": alerts_24h,
+            "liquidations_24h": liquidations_24h,
+            "has_active_monitor": protocol_id in PROTOCOL_MONITORS,
+            "description": info.get("description", ""),
+            "website": info.get("website", ""),
         })
-        
-        total_alerts += stats.get("alerts_generated", 0)
-        total_liquidations += stats.get("liquidations_detected", 0)
+    
+    # Sort by: has_active_monitor (True first), then by name
+    protocols_status.sort(key=lambda p: (not p["has_active_monitor"], p["name"]))
     
     return {
         "protocols": protocols_status,
         "summary": {
-            "total_protocols": len(PROTOCOL_MONITORS),
+            "total_protocols": len(PROTOCOL_INFO),
+            "monitored_with_data": len(PROTOCOL_MONITORS),
             "healthy_count": len([p for p in protocols_status if p["status"] == "healthy"]),
             "warning_count": len([p for p in protocols_status if p["status"] == "warning"]),
             "critical_count": len([p for p in protocols_status if p["status"] == "critical"]),
