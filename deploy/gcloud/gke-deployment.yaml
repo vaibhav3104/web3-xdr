@@ -1,0 +1,235 @@
+# Kubernetes deployment for Google Kubernetes Engine (GKE) with GPU
+# Use this for more control over scaling and resources
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel3
+
+---
+# ConfigMap for environment variables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel3-config
+  namespace: sentinel3
+data:
+  ML_MODEL_TYPE: "transformer"
+  ML_DEVICE: "cuda"
+  CONTINUOUS_LEARNING_ENABLED: "true"
+  LOG_LEVEL: "INFO"
+  POSTGRES_HOST: "sentinel3-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "web3_xdr"
+  REDIS_URL: "redis://sentinel3-redis:6379"
+
+---
+# Secret for sensitive data (create separately with kubectl)
+# kubectl create secret generic sentinel3-secrets \
+#   --from-literal=POSTGRES_PASSWORD=your_password \
+#   --from-literal=INFURA_API_KEY=your_key \
+#   -n sentinel3
+
+---
+# API Deployment with GPU
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel3-api
+  namespace: sentinel3
+  labels:
+    app: sentinel3
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinel3
+      component: api
+  template:
+    metadata:
+      labels:
+        app: sentinel3
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: gcr.io/PROJECT_ID/sentinel3-gpu:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          envFrom:
+            - configMapRef:
+                name: sentinel3-config
+            - secretRef:
+                name: sentinel3-secrets
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: model-storage
+              mountPath: /app/data/models
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: sentinel3-models-pvc
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+
+---
+# Worker Deployment with GPU
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel3-worker
+  namespace: sentinel3
+  labels:
+    app: sentinel3
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinel3
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: sentinel3
+        component: worker
+    spec:
+      containers:
+        - name: worker
+          image: gcr.io/PROJECT_ID/sentinel3-gpu:latest
+          command: ["python", "-m", "src.worker.main"]
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          envFrom:
+            - configMapRef:
+                name: sentinel3-config
+            - secretRef:
+                name: sentinel3-secrets
+          volumeMounts:
+            - name: model-storage
+              mountPath: /app/data/models
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: sentinel3-models-pvc
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+
+---
+# Service for API
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel3-api
+  namespace: sentinel3
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: sentinel3
+    component: api
+
+---
+# Persistent Volume Claim for models
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sentinel3-models-pvc
+  namespace: sentinel3
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# Horizontal Pod Autoscaler for API
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sentinel3-api-hpa
+  namespace: sentinel3
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sentinel3-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# Ingress with Google Cloud Load Balancer
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentinel3-ingress
+  namespace: sentinel3
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "sentinel3-ip"
+spec:
+  rules:
+    - host: sentinel3.yourdomain.com
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: sentinel3-api
+                port:
+                  number: 80

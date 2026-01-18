@@ -1,0 +1,62 @@
+# Dockerfile for Google Cloud with NVIDIA GPU support
+# Use NVIDIA CUDA base image for GPU acceleration
+
+FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
+# Create app directory
+WORKDIR /app
+
+# Copy requirements first for caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# Install PyTorch with CUDA support
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Copy application code
+COPY . .
+
+# Create directories for models and data
+RUN mkdir -p /app/data/models /app/data/collected_contracts /app/logs
+
+# Copy pre-trained model if exists
+COPY data/models/deep_transformer.pt /app/data/models/ 2>/dev/null || true
+
+# Set environment for GPU
+ENV ML_MODEL_TYPE=transformer \
+    ML_DEVICE=cuda \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+# Expose port
+EXPOSE 8000
+
+# Run the application
+CMD ["python", "-m", "uvicorn", "src.api.server:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]

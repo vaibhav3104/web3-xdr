@@ -1,0 +1,123 @@
+# Google Cloud Build configuration for Sentinel3
+# Builds and deploys to Cloud Run with GPU support
+
+steps:
+  # Step 1: Build the Docker image with GPU support
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/sentinel3-gpu:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/sentinel3-gpu:latest'
+      - '-f'
+      - 'deploy/gcloud/Dockerfile.gpu'
+      - '.'
+    id: 'build-image'
+
+  # Step 2: Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/sentinel3-gpu:$COMMIT_SHA'
+    id: 'push-image'
+    waitFor: ['build-image']
+
+  # Step 3: Push latest tag
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/sentinel3-gpu:latest'
+    id: 'push-latest'
+    waitFor: ['build-image']
+
+  # Step 4: Deploy to Cloud Run with GPU
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'sentinel3-api'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/sentinel3-gpu:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--cpu'
+      - '4'
+      - '--memory'
+      - '16Gi'
+      - '--gpu'
+      - '1'
+      - '--gpu-type'
+      - 'nvidia-l4'
+      - '--max-instances'
+      - '10'
+      - '--min-instances'
+      - '1'
+      - '--port'
+      - '8000'
+      - '--set-env-vars'
+      - 'ML_MODEL_TYPE=transformer,ML_DEVICE=cuda,POSTGRES_HOST=${_DB_HOST},REDIS_URL=${_REDIS_URL}'
+      - '--set-secrets'
+      - 'POSTGRES_PASSWORD=sentinel3-db-password:latest,INFURA_API_KEY=infura-api-key:latest'
+    id: 'deploy-api'
+    waitFor: ['push-image']
+
+  # Step 5: Deploy Worker with GPU
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'sentinel3-worker'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/sentinel3-gpu:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+      - '--cpu'
+      - '4'
+      - '--memory'
+      - '16Gi'
+      - '--gpu'
+      - '1'
+      - '--gpu-type'
+      - 'nvidia-l4'
+      - '--max-instances'
+      - '5'
+      - '--min-instances'
+      - '1'
+      - '--command'
+      - 'python'
+      - '--args'
+      - '-m,src.worker.main'
+      - '--set-env-vars'
+      - 'ML_MODEL_TYPE=transformer,ML_DEVICE=cuda,CONTINUOUS_LEARNING_ENABLED=true'
+      - '--set-secrets'
+      - 'POSTGRES_PASSWORD=sentinel3-db-password:latest,INFURA_API_KEY=infura-api-key:latest'
+    id: 'deploy-worker'
+    waitFor: ['push-image']
+
+# Substitution variables (can be overridden)
+substitutions:
+  _REGION: 'us-central1'
+  _DB_HOST: 'sentinel3-db'
+  _REDIS_URL: 'redis://sentinel3-redis:6379'
+
+# Build options
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+# Timeout
+timeout: '1800s'
+
+# Images to store
+images:
+  - 'gcr.io/$PROJECT_ID/sentinel3-gpu:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/sentinel3-gpu:latest'
