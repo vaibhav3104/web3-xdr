@@ -610,6 +610,45 @@ async def get_attack_patterns(
         estimated_avg_potential_loss = 50000  # $50K average per critical event
         value_protected = events_count * estimated_avg_potential_loss
         
+        # Build timeline data (attacks per day)
+        timeline_labels = []
+        timeline_data = []
+        
+        async with DatabaseManager.get_session() as session:
+            try:
+                # Get incidents grouped by day
+                timeline_query = text("""
+                    SELECT 
+                        DATE(created_at) as attack_date,
+                        COUNT(*) as attack_count
+                    FROM incidents
+                    WHERE created_at >= :start_time
+                    GROUP BY DATE(created_at)
+                    ORDER BY attack_date ASC
+                """)
+                result = await session.execute(timeline_query, {"start_time": start_time})
+                
+                # Create a dict for quick lookup
+                attacks_by_date = {}
+                for row in result.fetchall():
+                    date_str = row[0].strftime('%b %d') if hasattr(row[0], 'strftime') else str(row[0])
+                    attacks_by_date[str(row[0])] = row[1]
+                
+                # Fill in all days (including zeros)
+                for i in range(days):
+                    d = start_time + timedelta(days=i)
+                    date_key = d.strftime('%Y-%m-%d')
+                    label = d.strftime('%b %d')
+                    timeline_labels.append(label)
+                    timeline_data.append(attacks_by_date.get(date_key, 0))
+            except Exception as timeline_error:
+                logger.warning("timeline_query_failed", error=str(timeline_error))
+                # Generate empty timeline
+                for i in range(days):
+                    d = start_time + timedelta(days=i)
+                    timeline_labels.append(d.strftime('%b %d'))
+                    timeline_data.append(0)
+        
         # If no data, return zeros (not fake data)
         if total_attacks == 0:
             return {
@@ -621,7 +660,11 @@ async def get_attack_patterns(
                     "period_days": days,
                     "note": "No attacks detected in the specified period"
                 },
-                "patterns": []
+                "patterns": [],
+                "timeline": {
+                    "labels": timeline_labels,
+                    "data": timeline_data
+                }
             }
         
         return {
@@ -632,7 +675,11 @@ async def get_attack_patterns(
                 "value_protected": value_protected,
                 "period_days": days
             },
-            "patterns": patterns
+            "patterns": patterns,
+            "timeline": {
+                "labels": timeline_labels,
+                "data": timeline_data
+            }
         }
         
     except Exception as e:

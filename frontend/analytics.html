@@ -502,6 +502,10 @@
                     value_protected: 0
                 },
                 attackPatterns: [],
+                attackTimeline: {
+                    labels: [],
+                    data: []
+                },
                 
                 // Protocol Data
                 protocolStats: {
@@ -733,6 +737,7 @@
                                 value_protected: 0
                             };
                             this.attackPatterns = data.patterns || [];
+                            this.attackTimeline = data.timeline || { labels: [], data: [] };
                             
                             // Log if we got real data
                             if (this.attackStats.total_attacks > 0) {
@@ -749,6 +754,7 @@
                             value_protected: 0
                         };
                         this.attackPatterns = [];
+                        this.attackTimeline = { labels: [], data: [] };
                     }
                 },
                 
@@ -779,15 +785,13 @@
                     const ctx = document.getElementById('attackTimelineChart');
                     if (!ctx || this.charts.attackTimeline) return;
                     
-                    // Generate sample timeline data
-                    const labels = [];
-                    const data = [];
-                    for (let i = 29; i >= 0; i--) {
-                        const d = new Date();
-                        d.setDate(d.getDate() - i);
-                        labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-                        data.push(Math.floor(Math.random() * 5) + 1);
-                    }
+                    // Use real timeline data from API (or empty if no data)
+                    const labels = this.attackTimeline.labels.length > 0 
+                        ? this.attackTimeline.labels 
+                        : this.generateEmptyTimelineLabels(30);
+                    const data = this.attackTimeline.data.length > 0 
+                        ? this.attackTimeline.data 
+                        : new Array(30).fill(0);
                     
                     this.charts.attackTimeline = new Chart(ctx, {
                         type: 'bar',
@@ -796,20 +800,51 @@
                             datasets: [{
                                 label: 'Attacks',
                                 data: data,
-                                backgroundColor: 'rgba(255, 59, 59, 0.6)',
-                                borderColor: '#ff3b3b',
+                                backgroundColor: data.some(v => v > 0) ? 'rgba(255, 59, 59, 0.6)' : 'rgba(59, 255, 126, 0.3)',
+                                borderColor: data.some(v => v > 0) ? '#ff3b3b' : '#3bff7e',
                                 borderWidth: 1
                             }]
                         },
                         options: {
                             responsive: true,
-                            plugins: { legend: { display: false } },
+                            plugins: { 
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const value = context.raw;
+                                            return value === 0 ? 'No attacks' : `${value} attack${value > 1 ? 's' : ''}`;
+                                        }
+                                    }
+                                }
+                            },
                             scales: {
                                 x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
-                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                y: { 
+                                    grid: { color: '#2a2a3a' }, 
+                                    ticks: { 
+                                        color: '#888',
+                                        stepSize: 1,
+                                        callback: function(value) {
+                                            if (Number.isInteger(value)) return value;
+                                        }
+                                    }, 
+                                    beginAtZero: true,
+                                    suggestedMax: Math.max(...data, 1)
+                                }
                             }
                         }
                     });
+                },
+                
+                generateEmptyTimelineLabels(days) {
+                    const labels = [];
+                    for (let i = days - 1; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                    }
+                    return labels;
                 },
                 
                 initProtocolCharts() {
