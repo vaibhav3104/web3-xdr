@@ -189,21 +189,82 @@ async def simulate_deployment(request: SimulateDeploymentRequest):
 
 @router.get("/alerts")
 async def get_ml_alerts(status: Optional[str] = None, limit: int = 50):
-    """Get ML-generated threat alerts"""
-    if not AI_AVAILABLE or not simulated_monitor:
-        raise HTTPException(status_code=503, detail="ML system not available")
+    """
+    Get ML-generated threat alerts.
     
-    alerts = simulated_monitor.alerts
+    Combines:
+    1. In-memory alerts from simulated_monitor (real-time)
+    2. Database alerts from ML contract scanner (persistent)
+    """
+    alerts_list = []
     
-    if status:
-        alerts = [a for a in alerts if a.status == status]
+    # 1. Get in-memory alerts from simulated monitor
+    if AI_AVAILABLE and simulated_monitor:
+        in_memory_alerts = simulated_monitor.alerts
+        if status:
+            in_memory_alerts = [a for a in in_memory_alerts if a.status == status]
+        for alert in in_memory_alerts:
+            alerts_list.append(alert.to_dict())
+    
+    # 2. Get database alerts from ML contract scanner
+    try:
+        from ..database.service import DatabaseService
+        
+        # Fetch ML-detected contract deployments (threats)
+        db_alerts = await DatabaseService.get_contract_deploy_alerts(limit=limit)
+        
+        for db_alert in db_alerts:
+            # Only include threats (CRITICAL, HIGH, or has threat_category)
+            severity = (db_alert.get('severity') or '').upper()
+            raw_data = db_alert.get('raw_data') or {}
+            
+            is_threat = severity in ('CRITICAL', 'HIGH') or raw_data.get('is_threat', False)
+            
+            if is_threat:
+                # Convert to alert format expected by frontend
+                threat_category = raw_data.get('threat_category', 'unknown_threat')
+                
+                alert_dict = {
+                    "id": db_alert.get('event_id', ''),
+                    "alert_time": db_alert.get('created_at') or db_alert.get('block_timestamp'),
+                    "status": "active",
+                    "deployment": {
+                        "contract_address": db_alert.get('contract_address', ''),
+                        "chain": db_alert.get('chain_id', 'unknown'),
+                        "deployer": db_alert.get('from_address', ''),
+                        "tx_hash": db_alert.get('tx_hash', ''),
+                        "block_number": db_alert.get('block_number', 0),
+                    },
+                    "classification": {
+                        "threat_category": threat_category,
+                        "confidence": raw_data.get('confidence', 0.5),
+                        "risk_score": raw_data.get('risk_score', 50),
+                        "risk_factors": raw_data.get('alerts', []),
+                    },
+                    "source": "ml_contract_scanner"
+                }
+                alerts_list.append(alert_dict)
+    except Exception as e:
+        # Log but don't fail - in-memory alerts still work
+        print(f"Failed to fetch DB alerts: {e}")
     
     # Sort by time, newest first
-    alerts = sorted(alerts, key=lambda a: a.alert_time, reverse=True)[:limit]
+    def get_alert_time(alert):
+        time_val = alert.get('alert_time')
+        if isinstance(time_val, str):
+            try:
+                return datetime.fromisoformat(time_val.replace('Z', '+00:00'))
+            except:
+                return datetime.min
+        elif isinstance(time_val, datetime):
+            return time_val
+        return datetime.min
+    
+    alerts_list = sorted(alerts_list, key=get_alert_time, reverse=True)[:limit]
     
     return {
-        "total": len(alerts),
-        "alerts": [a.to_dict() for a in alerts]
+        "total": len(alerts_list),
+        "alerts": alerts_list
     }
 
 @router.post("/alerts/{alert_id}/acknowledge")
