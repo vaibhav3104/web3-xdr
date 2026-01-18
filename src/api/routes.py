@@ -1074,6 +1074,9 @@ async def get_statistics():
     last_event_time = memory_stats.get("last_event_time")
     blocks_scanned = memory_stats.get("blocks_scanned", 0)
     
+    # If blocks_scanned is 0, estimate from database
+    # This provides a reasonable estimate when worker hasn't reported yet
+    
     # Query database for persistent stats
     try:
         async with DatabaseManager.get_session() as session:
@@ -1124,6 +1127,23 @@ async def get_statistics():
             if db_last_event:
                 if last_event_time is None or db_last_event > last_event_time:
                     last_event_time = db_last_event
+            
+            # Estimate blocks scanned from database if not tracked in memory
+            if blocks_scanned == 0:
+                try:
+                    # Get unique block count per chain and sum them
+                    blocks_result = await session.execute(text("""
+                        SELECT SUM(block_range) as total_blocks FROM (
+                            SELECT chain_id, MAX(block_number) - MIN(block_number) + 1 as block_range
+                            FROM events 
+                            GROUP BY chain_id
+                        ) as chain_blocks
+                    """))
+                    estimated_blocks = blocks_result.scalar()
+                    if estimated_blocks and estimated_blocks > 0:
+                        blocks_scanned = int(estimated_blocks)
+                except Exception as e:
+                    logger.debug("blocks_estimate_failed", error=str(e))
             
             # Use database total (more accurate than in-memory)
             total_events = db_total_events

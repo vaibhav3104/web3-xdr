@@ -109,6 +109,11 @@ def create_app(
             # Ensure indexes exist (safe to call multiple times)
             await DatabaseManager.ensure_indexes()
             logger.info("database_initialized_on_startup")
+            
+            # Set start time in shared state for uptime tracking
+            from ..shared_state import monitor_state
+            monitor_state.set_start_time()
+            logger.info("api_start_time_set")
         except Exception as e:
             logger.error("database_initialization_failed", error=str(e))
     

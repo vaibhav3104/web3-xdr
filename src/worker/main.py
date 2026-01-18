@@ -459,6 +459,11 @@ class Sentinel3Worker:
                                 # Update processed block
                                 self.processed_blocks[chain_id] = head_block
                                 
+                                # Update blocks scanned in shared state
+                                from src.shared_state import monitor_state
+                                blocks_processed = to_block - from_block + 1
+                                monitor_state.add_blocks_scanned(blocks_processed)
+                                
                             except Exception as e:
                                 logger.error("log_poll_failed", chain=chain_id, error=str(e))
                         
@@ -1040,6 +1045,11 @@ class Sentinel3Worker:
     async def start(self):
         """Start the worker."""
         self.running = True
+        
+        # Set start time in shared state for uptime tracking
+        from src.shared_state import monitor_state
+        monitor_state.set_start_time()
+        logger.info("worker_start_time_set")
         
         await self.initialize()
         
