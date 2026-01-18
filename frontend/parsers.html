@@ -747,7 +747,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        const API_BASE = '/api/parsers';
+        const API_BASE = (window.SENTINEL3_API_BASE || '') + '/api/parsers';
         let allEvmParsers = [];
         let editingSignature = null;
 

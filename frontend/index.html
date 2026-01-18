@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -724,7 +725,7 @@
                 
                 async loadStats() {
                     try {
-                        const res = await fetch('/api/stats');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
                         if (!res.ok) throw new Error('API error');
                         const data = await res.json();
                         this.stats = {
@@ -745,7 +746,7 @@
                 async loadIncidents() {
                     try {
                         // Load confirmed incidents
-                        const res = await fetch('/api/incidents');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents');
                         let confirmedIncidents = [];
                         if (res.ok) {
                             const data = await res.json();
@@ -759,7 +760,7 @@
                         // Load predicted incidents
                         let predictedIncidents = [];
                         try {
-                            const predRes = await fetch('/api/runtime/predicted-incidents?status=OPEN&limit=50');
+                            const predRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/runtime/predicted-incidents?status=OPEN&limit=50');
                             if (predRes.ok) {
                                 const predData = await predRes.json();
                                 predictedIncidents = predData.map(inc => ({
@@ -794,7 +795,7 @@
                 
                 async loadEvents() {
                     try {
-                        const res = await fetch('/api/events?limit=20');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/events?limit=20');
                         if (!res.ok) throw new Error('API error');
                         const data = await res.json();
                         // API returns { events: [...], returned: N } - extract the events array
@@ -825,7 +826,7 @@
                     this.mlAnalysisDetails = null;
                     
                     try {
-                        const res = await fetch(`/api/debug/incident/${encodeURIComponent(incidentId)}`);
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/debug/incident/${encodeURIComponent(incidentId)}`);
                         if (res.ok) {
                             const data = await res.json();
                             
@@ -901,7 +902,7 @@
                         const incidentId = incident.id || incident.incident_id;
                         
                         // Try the acknowledge endpoint
-                        let res = await fetch(`/api/incidents/${incidentId}/acknowledge`, {
+                        let res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/incidents/${incidentId}/acknowledge`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -911,7 +912,7 @@
                         
                         // If endpoint doesn't exist, try updating status directly
                         if (res.status === 404 || res.status === 405) {
-                            res = await fetch(`/api/incidents/${incidentId}/status`, {
+                            res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/incidents/${incidentId}/status`, {
                                 method: 'PUT',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -959,7 +960,7 @@
                     this.pauseInProgress = true;
                     try {
                         // Try to pause via Guardian API
-                        const res = await fetch('/api/guardian/emergency-pause', {
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/guardian/emergency-pause', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -994,7 +995,7 @@
                     
                     this.aiAnalyzing = true;
                     try {
-                        const res = await fetch(`/api/ai/analyze/${incident.id}`);
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/ai/analyze/${incident.id}`);
                         if (res.ok) {
                             this.aiAnalysis = await res.json();
                         } else {
@@ -1068,7 +1069,7 @@
                         return;
                     }
                     // Verify token is valid
-                    fetch('/api/auth/verify', {
+                    fetch((window.SENTINEL3_API_BASE || '') + '/api/auth/verify', {
                         headers: { 'Authorization': 'Bearer ' + token }
                     }).then(res => {
                         if (!res.ok) {

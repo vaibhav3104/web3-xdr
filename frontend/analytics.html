@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Analytics & Risk Scoring</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -544,7 +545,7 @@
                 
                 async loadHistoricalStats() {
                     try {
-                        const res = await fetch('/api/analytics/historical?days=30');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/historical?days=30');
                         if (res.ok) {
                             const data = await res.json();
                             this.historical = {
@@ -562,7 +563,7 @@
                 
                 async loadHighRiskWallets() {
                     try {
-                        const res = await fetch('/api/analytics/risk/high-risk-wallets?limit=10');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/risk/high-risk-wallets?limit=10');
                         if (res.ok) {
                             const data = await res.json();
                             this.highRiskWallets = data.wallets || [];
@@ -577,10 +578,10 @@
                 async initCharts() {
                     // Load chart data from API
                     const [incidentsData, chainsData, typesData, valueData] = await Promise.all([
-                        this.fetchChartData('/api/analytics/charts/incidents-over-time?days=30&granularity=day'),
-                        this.fetchChartData('/api/analytics/charts/by-chain?days=30'),
-                        this.fetchChartData('/api/analytics/charts/by-type?days=30'),
-                        this.fetchChartData('/api/analytics/charts/value-over-time?days=30')
+                        this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/incidents-over-time?days=30&granularity=day'),
+                        this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/by-chain?days=30'),
+                        this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/by-type?days=30'),
+                        this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/value-over-time?days=30')
                     ]);
                     
                     // Incidents Over Time
@@ -704,7 +705,7 @@
                     this.riskResult = null;
                     
                     try {
-                        const res = await fetch(`/api/analytics/risk/score/${encodeURIComponent(address)}`);
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/analytics/risk/score/${encodeURIComponent(address)}`);
                         if (res.ok) {
                             this.riskResult = await res.json();
                         } else {
@@ -727,7 +728,7 @@
                 async loadAttackPatterns() {
                     // Load attack patterns from API - use REAL data only
                     try {
-                        const res = await fetch('/api/analytics/attack-patterns?days=30');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/attack-patterns?days=30');
                         if (res.ok) {
                             const data = await res.json();
                             this.attackStats = data.stats || {
@@ -760,7 +761,7 @@
                 
                 async loadProtocols() {
                     try {
-                        const res = await fetch('/api/protocols/dashboard');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/protocols/dashboard');
                         if (res.ok) {
                             const data = await res.json();
                             this.protocols = data.protocols || [];

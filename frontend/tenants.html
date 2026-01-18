@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Multi-Tenancy Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -338,7 +339,7 @@
                 async loadTenants() {
                     try {
                         const token = localStorage.getItem('token');
-                        const response = await fetch('/api/tenants', {
+                        const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/tenants', {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
                         if (response.ok) {
@@ -420,7 +421,7 @@
                 async createTenant() {
                     try {
                         const token = localStorage.getItem('token');
-                        const response = await fetch('/api/tenants', {
+                        const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/tenants', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',

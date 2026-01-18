@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Admin Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -755,7 +756,7 @@
                     
                     // Verify token is valid
                     try {
-                        const res = await fetch('/api/auth/verify', {
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/auth/verify', {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
                         
@@ -806,7 +807,7 @@
                 
                 async loadRules() {
                     try {
-                        const res = await fetch('/api/admin/rules');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rules');
                         if (res.ok) {
                             this.rules = await res.json();
                             console.log(`Loaded ${this.rules.length} rules from API`);
@@ -861,7 +862,7 @@
                 
                 async loadChains() {
                     try {
-                        const res = await fetch('/api/admin/chains');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/chains');
                         if (res.ok) {
                             this.chains = await res.json();
                         }
@@ -876,7 +877,7 @@
                 
                 async loadStats() {
                     try {
-                        const res = await fetch('/api/stats');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
                         if (res.ok) {
                             const data = await res.json();
                             this.stats.eventsToday = data.total_events || 0;
@@ -887,7 +888,7 @@
                 
                 async loadAlertingConfig() {
                     try {
-                        const res = await fetch('/api/admin/alerting');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/alerting');
                         if (res.ok) {
                             this.alerting = await res.json();
                         }
@@ -905,7 +906,7 @@
                     
                     // Load recent rule triggers from API
                     try {
-                        const res = await fetch('/api/admin/rule-triggers?limit=10');
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rule-triggers?limit=10');
                         if (res.ok) {
                             const data = await res.json();
                             this.recentTriggers = data.triggers || [];
@@ -1159,7 +1160,7 @@ time_window: 1m`,
                 
                 async createRule() {
                     try {
-                        const res = await fetch('/api/admin/rules', {
+                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rules', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(this.newRule)
@@ -1189,7 +1190,7 @@ time_window: 1m`,
                 
                 async saveAlertingConfig() {
                     try {
-                        await fetch('/api/admin/alerting', {
+                        await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/alerting', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(this.alerting)
@@ -1202,7 +1203,7 @@ time_window: 1m`,
                 
                 async reloadRules() {
                     try {
-                        await fetch('/api/admin/rules/reload', { method: 'POST' });
+                        await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rules/reload', { method: 'POST' });
                         await this.loadRules();
                         this.showNotification('Rules reloaded', 'success');
                     } catch (e) {

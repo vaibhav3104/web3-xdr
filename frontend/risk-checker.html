@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wallet Risk Checker - Sentinel3</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -420,7 +421,7 @@
                 
                 async loadHighRiskWallets() {
                     try {
-                        const response = await fetch('/api/analytics/risk/high-risk-wallets?limit=10');
+                        const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/risk/high-risk-wallets?limit=10');
                         this.highRiskWallets = await response.json();
                     } catch (error) {
                         console.error('Failed to load high-risk wallets:', error);

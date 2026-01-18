@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Analytics Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -344,7 +345,7 @@
                 async loadData() {
                     try {
                         // Load stats
-                        const statsRes = await fetch('/api/stats');
+                        const statsRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
                         if (statsRes.ok) {
                             const data = await statsRes.json();
                             this.stats = {
@@ -372,13 +373,13 @@
                         }
                         
                         // Load incidents
-                        const incRes = await fetch('/api/incidents?limit=10');
+                        const incRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents?limit=10');
                         if (incRes.ok) {
                             this.incidents = await incRes.json();
                         }
                         
                         // Load events
-                        const evtRes = await fetch('/api/events?limit=20');
+                        const evtRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/events?limit=20');
                         if (evtRes.ok) {
                             this.events = await evtRes.json();
                         }

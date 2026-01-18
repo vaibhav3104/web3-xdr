@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cross-chain Monitoring - Sentinel3</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -357,15 +358,15 @@
                 async loadData() {
                     try {
                         // Load stats
-                        const statsRes = await fetch('/api/cross-chain/stats');
+                        const statsRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/cross-chain/stats');
                         this.stats = await statsRes.json();
                         
                         // Load violations
-                        const violationsRes = await fetch('/api/cross-chain/violations?limit=50');
+                        const violationsRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/cross-chain/violations?limit=50');
                         this.violations = await violationsRes.json();
                         
                         // Load bridge health
-                        const bridgesRes = await fetch('/api/cross-chain/bridges/health');
+                        const bridgesRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/cross-chain/bridges/health');
                         this.bridges = await bridgesRes.json();
                         
                         this.lastUpdated = new Date().toLocaleTimeString();
