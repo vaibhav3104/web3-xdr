@@ -728,6 +728,73 @@ async def debug_events():
     return debug_info
 
 
+@router.get("/debug/incidents")
+async def debug_incidents():
+    """
+    DEBUG ENDPOINT: Direct database check for incidents.
+    Shows raw incident data including affected_contracts and affected_addresses.
+    """
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    import traceback
+    
+    debug_info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "total_incidents": 0,
+        "sample_incidents": [],
+        "incidents_by_severity": {},
+        "errors": []
+    }
+    
+    try:
+        async with DatabaseManager.get_session() as session:
+            # Get total count
+            count_result = await session.execute(text("SELECT COUNT(*) FROM incidents"))
+            debug_info["total_incidents"] = count_result.scalar() or 0
+            
+            # Get sample incidents with all fields
+            sample_result = await session.execute(text("""
+                SELECT incident_id, title, severity, status, attack_type, confidence,
+                       affected_chains, affected_contracts, affected_addresses, 
+                       summary, recommended_actions, created_at
+                FROM incidents 
+                ORDER BY created_at DESC 
+                LIMIT 5
+            """))
+            for row in sample_result.fetchall():
+                debug_info["sample_incidents"].append({
+                    "incident_id": row[0],
+                    "title": row[1],
+                    "severity": row[2],
+                    "status": row[3],
+                    "attack_type": row[4],
+                    "confidence": float(row[5]) if row[5] else None,
+                    "affected_chains": row[6],
+                    "affected_contracts": row[7],
+                    "affected_addresses": row[8],
+                    "summary": row[9][:200] if row[9] else None,
+                    "recommended_actions": row[10],
+                    "created_at": str(row[11])
+                })
+            
+            # Get incidents by severity
+            severity_result = await session.execute(text("""
+                SELECT severity, COUNT(*) as cnt 
+                FROM incidents 
+                GROUP BY severity 
+                ORDER BY cnt DESC
+            """))
+            for row in severity_result.fetchall():
+                debug_info["incidents_by_severity"][row[0]] = row[1]
+                
+    except Exception as e:
+        debug_info["errors"].append(f"{type(e).__name__}: {str(e)}")
+        debug_info["errors"].append(traceback.format_exc()[-500:])
+        logger.error("DEBUG_INCIDENTS_ERROR", error=str(e))
+    
+    return debug_info
+
+
 @router.get("/debug/db-connection")
 async def debug_db_connection():
     """
