@@ -625,6 +625,108 @@ class DatabaseService:
                 return {"total_contracts": 0, "by_chain": {}}
     
     @staticmethod
+    async def get_contract_deployment_stats_with_threats() -> Dict[str, Any]:
+        """
+        Get comprehensive statistics about contract deployment events including threats.
+        Threats are identified by:
+        - severity = 'CRITICAL' or 'HIGH'
+        - raw_data containing is_threat = true
+        """
+        async with DatabaseManager.get_session() as session:
+            try:
+                # Count all contract_deploy events by chain
+                chain_sql = text("""
+                    SELECT 
+                        chain_id,
+                        COUNT(*) as count
+                    FROM events 
+                    WHERE event_type = 'contract_deploy'
+                    GROUP BY chain_id
+                """)
+                chain_result = await session.execute(chain_sql)
+                by_chain = {row.chain_id: row.count for row in chain_result}
+                total = sum(by_chain.values())
+                
+                # Count threats (CRITICAL or HIGH severity)
+                threat_sql = text("""
+                    SELECT COUNT(*) as count
+                    FROM events 
+                    WHERE event_type = 'contract_deploy'
+                    AND (severity = 'CRITICAL' OR severity = 'HIGH' OR severity = 'critical' OR severity = 'high')
+                """)
+                threat_result = await session.execute(threat_sql)
+                total_threats = threat_result.scalar() or 0
+                
+                # Count threats in last 24 hours
+                threat_24h_sql = text("""
+                    SELECT COUNT(*) as count
+                    FROM events 
+                    WHERE event_type = 'contract_deploy'
+                    AND (severity = 'CRITICAL' OR severity = 'HIGH' OR severity = 'critical' OR severity = 'high')
+                    AND created_at >= NOW() - INTERVAL '24 hours'
+                """)
+                threat_24h_result = await session.execute(threat_24h_sql)
+                threats_24h = threat_24h_result.scalar() or 0
+                
+                # Count by severity
+                severity_sql = text("""
+                    SELECT 
+                        LOWER(severity) as severity,
+                        COUNT(*) as count
+                    FROM events 
+                    WHERE event_type = 'contract_deploy'
+                    GROUP BY LOWER(severity)
+                """)
+                severity_result = await session.execute(severity_sql)
+                by_severity = {row.severity: row.count for row in severity_result}
+                
+                # Try to get threat categories from raw_data (may not always be available)
+                by_category = {}
+                try:
+                    category_sql = text("""
+                        SELECT 
+                            raw_data->>'threat_category' as category,
+                            COUNT(*) as count
+                        FROM events 
+                        WHERE event_type = 'contract_deploy'
+                        AND raw_data IS NOT NULL
+                        AND raw_data->>'threat_category' IS NOT NULL
+                        AND raw_data->>'threat_category' != 'safe'
+                        GROUP BY raw_data->>'threat_category'
+                    """)
+                    category_result = await session.execute(category_sql)
+                    by_category = {row.category: row.count for row in category_result if row.category}
+                except Exception as cat_err:
+                    logger.debug("category_stats_query_failed", error=str(cat_err))
+                
+                logger.info(
+                    "contract_deployment_stats_with_threats",
+                    total=total,
+                    threats=total_threats,
+                    threats_24h=threats_24h,
+                    by_severity=by_severity
+                )
+                
+                return {
+                    "total_contracts": total,
+                    "by_chain": by_chain,
+                    "total_threats": total_threats,
+                    "threats_24h": threats_24h,
+                    "by_severity": by_severity,
+                    "by_category": by_category
+                }
+            except Exception as e:
+                logger.error("get_contract_deployment_stats_with_threats_error", error=str(e))
+                return {
+                    "total_contracts": 0, 
+                    "by_chain": {},
+                    "total_threats": 0,
+                    "threats_24h": 0,
+                    "by_severity": {},
+                    "by_category": {}
+                }
+    
+    @staticmethod
     async def get_contract_deploy_alerts(
         chain_id: Optional[str] = None,
         limit: int = 100

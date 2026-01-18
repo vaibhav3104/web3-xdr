@@ -282,23 +282,45 @@ async def get_contract_stats():
     Get statistics about contract threat detection.
     
     Combines in-memory alert stats with database event counts.
+    Threats are identified by severity (CRITICAL, HIGH) or raw_data.is_threat=true.
     """
     # Get in-memory stats (alerts detected in this API instance)
     stats = contract_alert_store.get_stats()
     
     # Query database for actual contract deployment events
     try:
-        # Count all contract_deploy events
-        db_stats = await DatabaseService.get_contract_deployment_stats()
+        # Count all contract_deploy events and threats
+        db_stats = await DatabaseService.get_contract_deployment_stats_with_threats()
         
         # Merge database stats with in-memory stats
         stats["total_contracts_analyzed"] = db_stats.get("total_contracts", 0)
         stats["contracts_by_chain"] = db_stats.get("by_chain", {})
         
+        # Update threat counts from database
+        db_threats = db_stats.get("total_threats", 0)
+        stats["total_threats_detected"] = max(stats.get("total_threats_detected", 0), db_threats)
+        stats["active_alerts"] = max(stats.get("active_alerts", 0), db_threats)
+        stats["alerts_last_24h"] = max(stats.get("alerts_last_24h", 0), db_stats.get("threats_24h", 0))
+        
+        # Update alerts by threat level from database
+        db_by_level = db_stats.get("by_severity", {})
+        for level, count in db_by_level.items():
+            level_key = level.lower()
+            if level_key in stats["alerts_by_threat_level"]:
+                stats["alerts_by_threat_level"][level_key] = max(
+                    stats["alerts_by_threat_level"][level_key], count
+                )
+        
+        # Update alerts by category from database
+        db_by_category = db_stats.get("by_category", {})
+        for category, count in db_by_category.items():
+            stats["alerts_by_category"][category] = stats["alerts_by_category"].get(category, 0) + count
+        
         logger.debug(
             "contract_stats_fetched",
             in_memory_alerts=stats.get("total_threats_detected", 0),
-            db_contracts=db_stats.get("total_contracts", 0)
+            db_contracts=db_stats.get("total_contracts", 0),
+            db_threats=db_threats
         )
     except Exception as e:
         logger.warning("contract_stats_db_query_failed", error=str(e))
