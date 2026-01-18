@@ -107,14 +107,78 @@ class AutoContractCollector:
     
     @property
     def classifier(self):
-        """Lazy load classifier"""
+        """
+        Lazy load classifier - uses Transformer model for highest accuracy by default.
+        
+        Model selection via ML_MODEL_TYPE env var:
+        - "transformer" (default): Highest accuracy, uses attention mechanism
+        - "ensemble": Combines MLP + CNN for robust predictions
+        - "cnn": Fast pattern detection in opcode sequences
+        - "mlp": Fastest, feature-based classification
+        - "random_forest": Sklearn RandomForest (no GPU required)
+        """
         if self._classifier is None:
+            # Get model type from environment (default: transformer for highest accuracy)
+            model_type = os.getenv("ML_MODEL_TYPE", "transformer").lower()
+            
             try:
-                from ..models.contract_classifier import ContractThreatClassifier
-                self._classifier = ContractThreatClassifier()
+                if model_type == "random_forest":
+                    # Use sklearn RandomForest (no PyTorch required)
+                    from ..models.contract_classifier import ContractThreatClassifier
+                    self._classifier = ContractThreatClassifier()
+                    logger.info("random_forest_classifier_loaded")
+                else:
+                    # Use PyTorch-based deep learning model
+                    from ..models.deep_classifier import DeepContractClassifier, PYTORCH_AVAILABLE
+                    
+                    if PYTORCH_AVAILABLE:
+                        # Model paths
+                        model_paths = {
+                            "transformer": "./data/models/deep_transformer.pt",
+                            "ensemble": "./data/models/deep_ensemble.pt",
+                            "cnn": "./data/models/deep_cnn.pt",
+                            "mlp": "./data/models/deep_mlp.pt",
+                        }
+                        
+                        model_path = model_paths.get(model_type, model_paths["transformer"])
+                        
+                        logger.info(
+                            "loading_deep_classifier",
+                            model_type=model_type,
+                            model_path=model_path
+                        )
+                        
+                        self._classifier = DeepContractClassifier(
+                            model_type=model_type,
+                            model_path=model_path
+                        )
+                        
+                        logger.info(
+                            "deep_classifier_loaded",
+                            model_type=model_type,
+                            device=str(self._classifier.device),
+                            gpu_available=str(self._classifier.device) != "cpu"
+                        )
+                    else:
+                        # Fallback to RandomForest if PyTorch not available
+                        logger.warning(
+                            "pytorch_not_available",
+                            requested_model=model_type,
+                            fallback="random_forest"
+                        )
+                        from ..models.contract_classifier import ContractThreatClassifier
+                        self._classifier = ContractThreatClassifier()
+                        
             except Exception as e:
-                logger.warning("classifier_load_failed", error=str(e))
-                self._classifier = None
+                logger.warning("deep_classifier_load_failed", error=str(e), model_type=model_type)
+                # Final fallback to basic classifier
+                try:
+                    from ..models.contract_classifier import ContractThreatClassifier
+                    self._classifier = ContractThreatClassifier()
+                    logger.info("fallback_to_random_forest_classifier")
+                except Exception as e2:
+                    logger.error("all_classifiers_failed", error=str(e2))
+                    self._classifier = None
         return self._classifier
     
     async def start(self):
