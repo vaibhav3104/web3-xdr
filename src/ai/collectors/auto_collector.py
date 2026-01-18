@@ -156,8 +156,42 @@ class AutoContractCollector:
         
         logger.info("monitoring_chain", chain=chain)
         
-        # Get initial block number
-        self.last_blocks[chain] = await self._get_block_number(chain)
+        # Get current block number - ONLY monitor from current block onwards
+        # This prevents scanning historical blocks which would flag old contracts as "new"
+        current_block = await self._get_block_number(chain)
+        
+        # Safety check: ensure we're starting from a recent block (not genesis)
+        # Arbitrum mainnet has ~300M+ blocks, Ethereum ~20M+, etc.
+        MIN_SAFE_BLOCKS = {
+            "ethereum": 19_000_000,   # ~Jan 2024
+            "arbitrum": 200_000_000,  # Recent
+            "polygon": 50_000_000,    # Recent  
+            "optimism": 100_000_000,  # Recent
+            "base": 10_000_000,       # Recent
+            "bsc": 35_000_000,        # Recent
+            "avalanche": 40_000_000,  # Recent
+        }
+        min_block = MIN_SAFE_BLOCKS.get(chain, 1_000_000)
+        
+        if current_block < min_block:
+            logger.warning(
+                "suspicious_low_block_number",
+                chain=chain,
+                current_block=current_block,
+                min_expected=min_block,
+                action="skipping_historical_scan"
+            )
+            # Use the minimum safe block to avoid scanning genesis
+            self.last_blocks[chain] = min_block
+        else:
+            self.last_blocks[chain] = current_block
+            
+        logger.info(
+            "monitoring_chain_from_block",
+            chain=chain,
+            starting_block=self.last_blocks[chain],
+            current_block=current_block
+        )
         
         while self.running:
             try:
@@ -229,6 +263,23 @@ class AutoContractCollector:
                     return
                 
                 block_timestamp = datetime.fromtimestamp(int(block.get("timestamp", "0x0"), 16))
+                
+                # SAFETY CHECK: Skip blocks older than 7 days
+                # This prevents false positives from historical contract deployments
+                from datetime import timezone
+                now = datetime.now(timezone.utc)
+                block_age_days = (now - block_timestamp.replace(tzinfo=timezone.utc)).days
+                
+                if block_age_days > 7:
+                    logger.warning(
+                        "skipping_old_block",
+                        chain=chain,
+                        block=block_number,
+                        block_timestamp=block_timestamp.isoformat(),
+                        age_days=block_age_days,
+                        reason="block_too_old"
+                    )
+                    return
                 
                 # Find contract deployments (transactions with to=null)
                 for tx in block.get("transactions", []):
