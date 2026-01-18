@@ -271,11 +271,116 @@ async def get_events_by_chain(
 
 
 @router.get("/charts/by-type")
-async def get_events_by_type(
+async def get_attack_types_distribution(
     days: int = Query(30, description="Number of days", ge=1, le=365)
 ):
     """
-    Get event distribution by event type (attack type).
+    Get distribution of ATTACK TYPES (not event types).
+    
+    Attack types come from:
+    1. Incidents table - attack_type field
+    2. Events with threat_category in raw_data (from ML scanner)
+    """
+    from ..database.service import DatabaseService
+    from ..database.connection import DatabaseManager
+    from sqlalchemy import text
+    
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    
+    attack_counts = {}
+    
+    try:
+        # 1. Get attack types from INCIDENTS table (primary source)
+        async with DatabaseManager.get_session() as session:
+            incident_query = text("""
+                SELECT attack_type, COUNT(*) as cnt
+                FROM incidents
+                WHERE created_at >= :start_time
+                GROUP BY attack_type
+                ORDER BY cnt DESC
+            """)
+            result = await session.execute(incident_query, {"start_time": start_time})
+            for row in result.fetchall():
+                attack_type = row[0] or 'Unknown'
+                # Normalize attack type names
+                attack_type = attack_type.replace('_', ' ').title()
+                attack_counts[attack_type] = attack_counts.get(attack_type, 0) + row[1]
+        
+        # 2. Also check events with threat_category in raw_data (ML-detected threats)
+        events, _ = await DatabaseService.get_events(
+            start_time=start_time,
+            end_time=end_time,
+            severity="CRITICAL",  # Focus on high-severity events
+            limit=5000
+        )
+        
+        for event in events:
+            raw_data = event.get('raw_data') or {}
+            if isinstance(raw_data, dict):
+                threat_category = raw_data.get('threat_category')
+                if threat_category:
+                    # Map threat categories to attack types
+                    attack_type_map = {
+                        'reentrancy_exploit': 'Reentrancy Attack',
+                        'flash_loan_exploit': 'Flash Loan Attack',
+                        'rug_pull': 'Rug Pull',
+                        'honeypot': 'Honeypot',
+                        'phishing': 'Phishing',
+                        'price_manipulation': 'Price Manipulation',
+                        'access_control': 'Access Control Exploit',
+                        'integer_overflow': 'Integer Overflow',
+                        'oracle_manipulation': 'Oracle Manipulation',
+                        'unknown_threat': 'Suspicious Contract',
+                    }
+                    attack_type = attack_type_map.get(threat_category, threat_category.replace('_', ' ').title())
+                    attack_counts[attack_type] = attack_counts.get(attack_type, 0) + 1
+        
+        # If no attack data, show a message
+        if not attack_counts:
+            attack_counts = {'No Attacks Detected': 1}
+        
+        # Sort by count descending, take top 10
+        sorted_types = sorted(attack_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        
+        # Attack type colors (security-focused color scheme)
+        attack_colors = {
+            'Reentrancy Attack': '#ff3b3b',      # Red
+            'Flash Loan Attack': '#ff8a3b',      # Orange
+            'Rug Pull': '#8b5cf6',               # Purple
+            'Honeypot': '#ffd93b',               # Yellow
+            'Phishing': '#ef4444',               # Red
+            'Price Manipulation': '#f97316',     # Orange
+            'Oracle Manipulation': '#eab308',    # Yellow
+            'Access Control Exploit': '#dc2626', # Dark red
+            'Integer Overflow': '#b91c1c',       # Dark red
+            'Suspicious Contract': '#6366f1',    # Indigo
+            'Malicious Contract': '#7c3aed',     # Violet
+            'Bridge Exploit': '#0ea5e9',         # Sky blue
+            'Governance Attack': '#14b8a6',      # Teal
+            'No Attacks Detected': '#22c55e',    # Green (good!)
+        }
+        
+        return {
+            "labels": [item[0] for item in sorted_types],
+            "data": [item[1] for item in sorted_types],
+            "colors": [attack_colors.get(item[0], '#8b5cf6') for item in sorted_types],
+            "total": sum(attack_counts.values())
+        }
+        
+    except Exception as e:
+        logger.error("attack_type_chart_error", error=str(e))
+        return {"labels": ["Error Loading Data"], "data": [0], "colors": ["#6b7280"], "total": 0}
+
+
+@router.get("/charts/by-event-type")
+async def get_events_by_event_type(
+    days: int = Query(30, description="Number of days", ge=1, le=365)
+):
+    """
+    Get distribution of EVENT TYPES (transaction types like transfer, swap, etc.).
+    
+    This is different from attack types - these are the underlying blockchain event types.
     """
     from ..database.service import DatabaseService
     
@@ -299,26 +404,29 @@ async def get_events_by_type(
         # Sort by count descending, take top 10
         sorted_types = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]
         
-        # Type colors
-        type_colors = {
+        # Event type colors
+        event_colors = {
             'Transfer': '#3b8aff',
             'Contract Deploy': '#8b5cf6',
             'Mint': '#22c55e',
             'Burn': '#ef4444',
             'Swap': '#f59e0b',
             'Approval': '#06b6d4',
+            'Bridge': '#0ea5e9',
+            'Stake': '#14b8a6',
+            'Unstake': '#f97316',
             'Unknown': '#6b7280',
         }
         
         return {
             "labels": [item[0] for item in sorted_types],
             "data": [item[1] for item in sorted_types],
-            "colors": [type_colors.get(item[0], '#8b5cf6') for item in sorted_types],
+            "colors": [event_colors.get(item[0], '#8b5cf6') for item in sorted_types],
             "total": sum(type_counts.values())
         }
         
     except Exception as e:
-        logger.error("type_chart_error", error=str(e))
+        logger.error("event_type_chart_error", error=str(e))
         return {"labels": [], "data": [], "colors": [], "total": 0}
 
 
