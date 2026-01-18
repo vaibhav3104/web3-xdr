@@ -15,8 +15,7 @@
     // SET THE ACTIVE API HERE
     // ============================================
     // Options: GPU_API, PRODUCTION_API, LOCAL_API
-    // Using PRODUCTION_API until GPU worker is deployed with data
-    window.SENTINEL3_API_BASE = PRODUCTION_API;
+    window.SENTINEL3_API_BASE = GPU_API;
     
     // Helper function for API calls
     window.sentinel3Fetch = async function(endpoint, options = {}) {

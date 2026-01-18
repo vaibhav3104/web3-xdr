@@ -25,6 +25,17 @@ except ImportError as e:
     print(f"AI modules not fully loaded: {e}")
     AI_AVAILABLE = False
 
+# Import Deep Learning classifier (PyTorch/GPU)
+try:
+    from ..ai.models.deep_classifier import DeepContractClassifier, PYTORCH_AVAILABLE
+    DEEP_ML_AVAILABLE = PYTORCH_AVAILABLE
+except ImportError as e:
+    print(f"Deep ML modules not available: {e}")
+    DEEP_ML_AVAILABLE = False
+    PYTORCH_AVAILABLE = False
+
+import os
+
 router = APIRouter(prefix="/api/ml", tags=["Machine Learning"])
 
 # Initialize components
@@ -36,6 +47,18 @@ else:
     classifier = None
     extractor = None
     simulated_monitor = None
+
+# Initialize Deep Learning classifier (Transformer with GPU)
+deep_classifier = None
+if DEEP_ML_AVAILABLE:
+    try:
+        model_type = os.environ.get("ML_MODEL_TYPE", "transformer")
+        device = os.environ.get("ML_DEVICE", "auto")
+        deep_classifier = DeepContractClassifier(model_type=model_type, device=device)
+        print(f"✅ Deep ML Classifier initialized: model={model_type}, device={deep_classifier.device}")
+    except Exception as e:
+        print(f"❌ Failed to initialize deep classifier: {e}")
+        deep_classifier = None
 
 # Request/Response Models
 class ContractAnalysisRequest(BaseModel):
@@ -83,13 +106,80 @@ class AttackDatabaseStats(BaseModel):
 @router.get("/status")
 async def get_ml_status():
     """Get ML system status"""
+    # Check GPU availability
+    gpu_info = {}
+    if DEEP_ML_AVAILABLE:
+        import torch
+        gpu_info = {
+            "pytorch_version": torch.__version__,
+            "cuda_available": torch.cuda.is_available(),
+            "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
+            "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+            "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() and torch.cuda.device_count() > 0 else None,
+            "mps_available": hasattr(torch.backends, 'mps') and torch.backends.mps.is_available(),
+        }
+    
     return {
         "ml_available": AI_AVAILABLE,
         "classifier_loaded": classifier is not None,
         "model_type": "rule_based" if classifier and not classifier.model else "ml_model",
         "known_exploits": len(classifier.known_exploits) if classifier else 0,
         "alerts_count": len(simulated_monitor.alerts) if simulated_monitor else 0,
+        "deep_ml_available": DEEP_ML_AVAILABLE,
+        "deep_classifier_loaded": deep_classifier is not None,
+        "deep_model_type": deep_classifier.model_type if deep_classifier else None,
+        "deep_model_device": str(deep_classifier.device) if deep_classifier else None,
+        "gpu_info": gpu_info,
     }
+
+@router.post("/analyze/deep", response_model=ContractAnalysisResponse)
+async def analyze_contract_deep(request: ContractAnalysisRequest):
+    """
+    Analyze contract using Deep Learning (Transformer) model with GPU acceleration
+    
+    This endpoint uses the PyTorch Transformer model for:
+    1. Sequence-based bytecode analysis
+    2. Attention-based pattern detection
+    3. GPU-accelerated inference
+    """
+    if not DEEP_ML_AVAILABLE or not deep_classifier:
+        raise HTTPException(
+            status_code=503, 
+            detail="Deep ML system not available. Check GPU/PyTorch installation."
+        )
+    
+    import time
+    start = time.time()
+    
+    try:
+        result = deep_classifier.classify(request.bytecode)
+        analysis_time = (time.time() - start) * 1000
+        
+        # Map to response format
+        recommendation = {
+            "safe": "Contract appears safe. Standard monitoring recommended.",
+            "rug_pull": "HIGH RISK: Rug pull indicators detected. Do not interact.",
+            "honeypot": "HIGH RISK: Honeypot pattern detected. Trading may be blocked.",
+            "reentrancy_exploit": "CRITICAL: Reentrancy vulnerability detected.",
+            "flash_loan_attack": "HIGH RISK: Flash loan attack pattern detected.",
+            "price_manipulation": "HIGH RISK: Price manipulation vectors present.",
+            "access_control_exploit": "MEDIUM: Access control issues detected.",
+            "unknown_threat": "MEDIUM: Unknown threat pattern. Manual review recommended.",
+        }.get(result.category, "Review recommended.")
+        
+        return ContractAnalysisResponse(
+            contract_address=request.contract_address or "unknown",
+            threat_category=result.category,
+            confidence=result.confidence,
+            risk_score=result.risk_score * 100,  # Convert to 0-100 scale
+            risk_factors=[f"Model: {result.model_used}", f"Features: {result.features_used}"],
+            similar_exploits=[],
+            recommendation=recommendation,
+            analysis_time_ms=analysis_time
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deep analysis failed: {str(e)}")
+
 
 @router.post("/analyze/contract", response_model=ContractAnalysisResponse)
 async def analyze_contract(request: ContractAnalysisRequest):
