@@ -233,6 +233,8 @@
                                     <span>•</span>
                                     <span x-text="incident.affected_chains.join(', ')"></span>
                                 </div>
+                                <!-- Incident ID in list view -->
+                                <div class="mt-1 text-xs font-mono text-gray-600 truncate" x-text="'ID: ' + (incident.id || incident.incident_id || 'N/A')"></div>
                             </div>
                         </template>
                         
@@ -269,6 +271,12 @@
                         <h3 class="text-xl font-bold mb-2" x-text="selectedIncident?.title"></h3>
                         
                         <div class="space-y-3 text-sm">
+                            <!-- Incident ID - prominently displayed -->
+                            <div class="bg-gray-800/60 rounded-lg p-2 mb-2">
+                                <span class="text-gray-500 text-xs uppercase tracking-wide">Incident ID</span>
+                                <p class="font-mono text-xs text-cyan-400 mt-1 break-all" x-text="selectedIncident?.id || selectedIncident?.incident_id || 'N/A'"></p>
+                            </div>
+                            
                             <div class="flex justify-between">
                                 <span class="text-gray-400">Attack Type</span>
                                 <span class="font-mono" x-text="selectedIncident?.attack_type"></span>
