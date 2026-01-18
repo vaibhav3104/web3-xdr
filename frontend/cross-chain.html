@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cross-chain Monitoring - Sentinel3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent-red: #ff3b3b;
+            --accent-orange: #ff8a3b;
+            --accent-yellow: #ffd93b;
+            --accent-green: #3bff7e;
+            --accent-blue: #3b8aff;
+            --accent-purple: #8a3bff;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border-color: #2a2a3a;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        
+        .violation-card {
+            transition: all 0.3s ease;
+        }
+        
+        .violation-card:hover {
+            transform: translateX(4px);
+            border-left-width: 4px;
+        }
+        
+        .severity-critical { border-left-color: var(--accent-red); }
+        .severity-high { border-left-color: var(--accent-orange); }
+        .severity-medium { border-left-color: var(--accent-yellow); }
+        .severity-low { border-left-color: var(--accent-green); }
+        
+        .bridge-flow {
+            background: linear-gradient(90deg, transparent, rgba(138, 59, 255, 0.1), transparent);
+        }
+        
+        .pulse-ring {
+            animation: pulse-ring 2s infinite;
+        }
+        
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 59, 59, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen" x-data="crossChainDashboard()" x-init="init()">
+    <!-- Navigation -->
+    <nav class="border-b border-gray-800 bg-opacity-50 backdrop-blur-lg sticky top-0 z-50" style="background: rgba(10, 10, 15, 0.9);">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-8">
+                    <a href="index.html" class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                            <span class="text-xl font-bold">S3</span>
+                        </div>
+                        <span class="text-xl font-bold">Sentinel3</span>
+                    </a>
+                    <div class="hidden md:flex items-center space-x-6 text-sm">
+                        <a href="index.html" class="text-gray-400 hover:text-white transition">Dashboard</a>
+                        <a href="protocols.html" class="text-gray-400 hover:text-white transition">Protocols</a>
+                        <a href="cross-chain.html" class="text-white font-medium">Cross-chain</a>
+                        <a href="risk-checker.html" class="text-gray-400 hover:text-white transition">Risk Checker</a>
+                        <a href="logs.html" class="text-gray-400 hover:text-white transition">Logs</a>
+                        <a href="analytics.html" class="text-gray-400 hover:text-white transition">Analytics</a>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-400" x-text="lastUpdated"></span>
+                    <button @click="refresh()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition">
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold mb-2">Cross-chain Monitoring</h1>
+            <p class="text-gray-400">Real-time bridge correlation and attack detection (Wormhole, LayerZero, Stargate, etc.)</p>
+        </div>
+
+        <!-- Alert Banner for Critical Violations -->
+        <div x-show="stats.critical_violations > 0" 
+             class="bg-red-500/10 border border-red-500/50 rounded-xl p-4 mb-8 flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center pulse-ring">
+                    <span class="text-2xl">🚨</span>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-red-400">Critical Violations Detected!</h3>
+                    <p class="text-sm text-gray-400" x-text="stats.critical_violations + ' potential attack(s) require immediate attention'"></p>
+                </div>
+            </div>
+            <button @click="showViolations('critical')" class="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-medium transition">
+                View Details
+            </button>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+            <div class="card p-4 text-center">
+                <div class="text-2xl font-bold text-blue-400" x-text="formatNumber(stats.events_processed)"></div>
+                <div class="text-xs text-gray-400 mt-1">Events Processed</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-2xl font-bold text-green-400" x-text="stats.locks_received"></div>
+                <div class="text-xs text-gray-400 mt-1">Locks Received</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-2xl font-bold text-purple-400" x-text="stats.mints_received"></div>
+                <div class="text-xs text-gray-400 mt-1">Mints Received</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-2xl font-bold text-cyan-400" x-text="stats.correlations_matched"></div>
+                <div class="text-xs text-gray-400 mt-1">Correlations</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-2xl font-bold text-yellow-400" x-text="stats.orphan_mints"></div>
+                <div class="text-xs text-gray-400 mt-1">Orphan Mints ⚠️</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-2xl font-bold text-red-400" x-text="stats.violations_detected"></div>
+                <div class="text-xs text-gray-400 mt-1">Violations</div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Violations List -->
+            <div class="lg:col-span-2">
+                <div class="card">
+                    <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold">Detected Violations</h2>
+                        <div class="flex space-x-2">
+                            <button @click="severityFilter = null" 
+                                    :class="severityFilter === null ? 'bg-purple-600' : 'bg-gray-700'"
+                                    class="px-3 py-1 rounded text-xs font-medium transition">All</button>
+                            <button @click="severityFilter = 'critical'" 
+                                    :class="severityFilter === 'critical' ? 'bg-red-600' : 'bg-gray-700'"
+                                    class="px-3 py-1 rounded text-xs font-medium transition">Critical</button>
+                            <button @click="severityFilter = 'high'" 
+                                    :class="severityFilter === 'high' ? 'bg-orange-600' : 'bg-gray-700'"
+                                    class="px-3 py-1 rounded text-xs font-medium transition">High</button>
+                        </div>
+                    </div>
+                    
+                    <div class="divide-y divide-gray-700">
+                        <template x-if="filteredViolations.length === 0">
+                            <div class="p-8 text-center">
+                                <div class="text-4xl mb-4">✅</div>
+                                <h3 class="text-lg font-semibold text-green-400 mb-2">No Violations Detected</h3>
+                                <p class="text-gray-400 text-sm">All cross-chain transfers are correlating correctly</p>
+                            </div>
+                        </template>
+                        
+                        <template x-for="violation in filteredViolations" :key="violation.id">
+                            <div class="p-4 violation-card border-l-2"
+                                 :class="'severity-' + violation.severity"
+                                 @click="showViolationDetails(violation)">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                                             :class="{
+                                                 'bg-red-500/20': violation.severity === 'critical',
+                                                 'bg-orange-500/20': violation.severity === 'high',
+                                                 'bg-yellow-500/20': violation.severity === 'medium'
+                                             }">
+                                            <span x-text="getViolationIcon(violation.violation_type)"></span>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-medium" x-text="getViolationTitle(violation.violation_type)"></h4>
+                                            <p class="text-sm text-gray-400 mt-1" x-text="violation.description"></p>
+                                            <div class="flex items-center space-x-4 mt-2 text-xs">
+                                                <span class="text-gray-500">
+                                                    <span class="text-blue-400" x-text="violation.source_chain"></span>
+                                                    →
+                                                    <span class="text-purple-400" x-text="violation.dest_chain"></span>
+                                                </span>
+                                                <span class="text-gray-500" x-text="violation.bridge_id"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-sm font-mono"
+                                             :class="{
+                                                 'text-red-400': violation.severity === 'critical',
+                                                 'text-orange-400': violation.severity === 'high',
+                                                 'text-yellow-400': violation.severity === 'medium'
+                                             }"
+                                             x-text="'$' + formatNumber(violation.estimated_loss_usd)"></div>
+                                        <div class="text-xs text-gray-500 mt-1" x-text="formatTime(violation.timestamp)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="space-y-6">
+                <!-- Bridge Health -->
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">Bridge Health</h3>
+                    <div class="space-y-3">
+                        <template x-for="bridge in bridges" :key="bridge.bridge_id">
+                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                                         :class="{
+                                             'bg-green-500/20 text-green-400': bridge.status === 'healthy',
+                                             'bg-yellow-500/20 text-yellow-400': bridge.status === 'warning',
+                                             'bg-red-500/20 text-red-400': bridge.status === 'critical'
+                                         }">
+                                        <span x-text="getBridgeIcon(bridge.bridge_id)"></span>
+                                    </div>
+                                    <span class="font-medium capitalize" x-text="bridge.bridge_id"></span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-mono" x-text="bridge.health_score + '%'"></span>
+                                    <span class="w-2 h-2 rounded-full"
+                                          :class="{
+                                              'bg-green-400': bridge.status === 'healthy',
+                                              'bg-yellow-400': bridge.status === 'warning',
+                                              'bg-red-400': bridge.status === 'critical'
+                                          }"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Pending Correlations -->
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">Pending Correlations</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Pending Locks</span>
+                            <span class="text-xl font-bold text-blue-400" x-text="stats.pending_locks"></span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Pending Mints</span>
+                            <span class="text-xl font-bold text-purple-400" x-text="stats.pending_mints"></span>
+                        </div>
+                        <div class="pt-4 border-t border-gray-700">
+                            <p class="text-xs text-gray-500">
+                                ⚠️ High pending mints without locks may indicate an attack in progress
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attack Types Legend -->
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">Violation Types</h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl">💀</span>
+                            <div>
+                                <div class="font-medium text-red-400">Mint without Lock</div>
+                                <div class="text-xs text-gray-500">Wormhole-style attack</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl">🔄</span>
+                            <div>
+                                <div class="font-medium text-red-400">Replay Attack</div>
+                                <div class="text-xs text-gray-500">Message processed twice</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl">⏰</span>
+                            <div>
+                                <div class="font-medium text-red-400">Time Anomaly</div>
+                                <div class="text-xs text-gray-500">Mint before lock</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl">📊</span>
+                            <div>
+                                <div class="font-medium text-orange-400">Amount Mismatch</div>
+                                <div class="text-xs text-gray-500">Different lock/mint amounts</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-xl">🔒</span>
+                            <div>
+                                <div class="font-medium text-yellow-400">Lock without Mint</div>
+                                <div class="text-xs text-gray-500">Funds stuck in bridge</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function crossChainDashboard() {
+            return {
+                stats: {
+                    events_processed: 0,
+                    locks_received: 0,
+                    mints_received: 0,
+                    correlations_matched: 0,
+                    violations_detected: 0,
+                    orphan_mints: 0,
+                    orphan_locks: 0,
+                    pending_locks: 0,
+                    pending_mints: 0,
+                    critical_violations: 0
+                },
+                violations: [],
+                bridges: [],
+                severityFilter: null,
+                lastUpdated: '',
+                
+                get filteredViolations() {
+                    if (!this.severityFilter) return this.violations;
+                    return this.violations.filter(v => v.severity === this.severityFilter);
+                },
+                
+                async init() {
+                    await this.loadData();
+                    setInterval(() => this.loadData(), 15000);
+                },
+                
+                async loadData() {
+                    try {
+                        // Load stats
+                        const statsRes = await fetch('/api/cross-chain/stats');
+                        this.stats = await statsRes.json();
+                        
+                        // Load violations
+                        const violationsRes = await fetch('/api/cross-chain/violations?limit=50');
+                        this.violations = await violationsRes.json();
+                        
+                        // Load bridge health
+                        const bridgesRes = await fetch('/api/cross-chain/bridges/health');
+                        this.bridges = await bridgesRes.json();
+                        
+                        this.lastUpdated = new Date().toLocaleTimeString();
+                    } catch (error) {
+                        console.error('Failed to load data:', error);
+                    }
+                },
+                
+                async refresh() {
+                    await this.loadData();
+                },
+                
+                showViolations(severity) {
+                    this.severityFilter = severity;
+                },
+                
+                showViolationDetails(violation) {
+                    // Could open a modal with more details
+                    console.log('Violation details:', violation);
+                },
+                
+                getViolationIcon(type) {
+                    const icons = {
+                        'mint_without_lock': '💀',
+                        'replay_attack': '🔄',
+                        'time_anomaly': '⏰',
+                        'amount_mismatch': '📊',
+                        'lock_without_mint': '🔒',
+                        'sequence_violation': '🔢'
+                    };
+                    return icons[type] || '⚠️';
+                },
+                
+                getViolationTitle(type) {
+                    const titles = {
+                        'mint_without_lock': 'Mint without Lock (CRITICAL)',
+                        'replay_attack': 'Replay Attack Detected',
+                        'time_anomaly': 'Time Anomaly',
+                        'amount_mismatch': 'Amount Mismatch',
+                        'lock_without_mint': 'Lock without Mint',
+                        'sequence_violation': 'Sequence Violation'
+                    };
+                    return titles[type] || type;
+                },
+                
+                getBridgeIcon(bridgeId) {
+                    const icons = {
+                        'wormhole': '🌀',
+                        'layerzero': '0️⃣',
+                        'stargate': '⭐',
+                        'across': '🌉',
+                        'hop': '🐰',
+                        'synapse': '🧬',
+                        'celer': '🔗'
+                    };
+                    return icons[bridgeId] || '🔗';
+                },
+                
+                formatNumber(num) {
+                    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                    return num?.toString() || '0';
+                },
+                
+                formatTime(timestamp) {
+                    if (!timestamp) return '';
+                    const date = new Date(timestamp);
+                    return date.toLocaleString();
+                }
+            };
+        }
+    </script>
+</body>
+</html>

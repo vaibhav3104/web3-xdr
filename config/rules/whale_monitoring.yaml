@@ -1,0 +1,440 @@
+# ============================================================================
+# WHALE & LARGE HOLDER MONITORING RULES
+# Track significant wallet movements and accumulation patterns
+# ============================================================================
+
+rules:
+  # ==========================================================================
+  # LARGE TRANSFER MONITORING
+  # ==========================================================================
+  
+  - id: whale-transfer-001
+    name: Whale Transfer Detected
+    description: |
+      Detects large token transfers that could impact market prices
+      or indicate significant holder activity.
+    severity: medium
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      chain: any
+      conditions:
+        - field: amount_usd
+          operator: gt
+          value: 5000000  # $5M+
+    
+    thresholds:
+      min_amount_usd: 5000000
+    
+    rate_limit:
+      max_alerts: 20
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+      - type: enrich
+        add_fields:
+          - sender_label
+          - receiver_label
+          - historical_movements
+
+  - id: whale-accumulation-002
+    name: Whale Accumulation Pattern
+    description: |
+      Detects systematic accumulation by whale addresses which
+      could precede significant market movements.
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: accumulation
+      conditions:
+        - field: buy_count_24h
+          operator: gt
+          value: 10
+        - field: total_accumulated_usd
+          operator: gt
+          value: 1000000
+        - field: sell_count_24h
+          operator: lt
+          value: 2
+    
+    time_window: 24h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: whale-distribution-003
+    name: Whale Distribution Pattern
+    description: |
+      Detects systematic selling/distribution by whale addresses
+      which could indicate upcoming price decline.
+    severity: high
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: distribution
+      conditions:
+        - field: sell_count_24h
+          operator: gt
+          value: 10
+        - field: total_distributed_usd
+          operator: gt
+          value: 2000000
+        - field: buy_count_24h
+          operator: lt
+          value: 2
+    
+    time_window: 24h
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # EXCHANGE FLOW MONITORING
+  # ==========================================================================
+  
+  - id: exchange-inflow-001
+    name: Large Exchange Inflow
+    description: |
+      Detects large deposits to centralized exchanges which often
+      precede selling pressure.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      conditions:
+        - field: to_is_exchange
+          operator: eq
+          value: true
+        - field: amount_usd
+          operator: gt
+          value: 10000000  # $10M+
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - exchange_name
+          - sender_history
+
+  - id: exchange-outflow-002
+    name: Large Exchange Outflow
+    description: |
+      Detects large withdrawals from centralized exchanges which
+      could indicate accumulation or cold storage movement.
+    severity: medium
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      conditions:
+        - field: from_is_exchange
+          operator: eq
+          value: true
+        - field: amount_usd
+          operator: gt
+          value: 10000000  # $10M+
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: exchange-netflow-003
+    name: Exchange Net Flow Anomaly
+    description: |
+      Detects significant net inflow/outflow from exchanges which
+      could indicate market sentiment shift.
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: metric
+      metric: exchange_net_flow_usd
+      conditions:
+        - field: net_flow_abs
+          operator: gt
+          value: 50000000  # $50M net flow
+    
+    time_window: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # KNOWN ENTITY MONITORING
+  # ==========================================================================
+  
+  - id: known-hacker-movement-001
+    name: Known Hacker Wallet Movement
+    description: |
+      Detects any movement from wallets associated with previous
+      hacks or exploits.
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      conditions:
+        - field: from_is_known_hacker
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: enrich
+        add_fields:
+          - associated_hack
+          - total_stolen_amount
+          - previous_movements
+
+  - id: sanctioned-address-001
+    name: OFAC Sanctioned Address Activity
+    description: |
+      Detects activity from addresses on OFAC sanctions list
+      (Tornado Cash, etc.)
+    severity: critical
+    confidence: 0.99
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: any
+      conditions:
+        - field: address_is_sanctioned
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: log
+        level: critical
+        compliance: true
+
+  - id: mixer-interaction-002
+    name: Mixer/Tumbler Interaction
+    description: |
+      Detects interactions with known mixing services which could
+      indicate money laundering.
+    severity: high
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      conditions:
+        - field: to_is_mixer
+          operator: eq
+          value: true
+        - field: amount_usd
+          operator: gt
+          value: 10000
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - mixer_name
+          - sender_history
+
+  # ==========================================================================
+  # STABLECOIN MONITORING
+  # ==========================================================================
+  
+  - id: stablecoin-large-mint-001
+    name: Large Stablecoin Mint
+    description: |
+      Detects large minting of stablecoins (USDT, USDC) which
+      often precedes market buying.
+    severity: medium
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Mint
+      contracts:
+        - "0xdAC17F958D2ee523a2206206994597C13D831ec7"  # USDT
+        - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
+      conditions:
+        - field: amount_usd
+          operator: gt
+          value: 100000000  # $100M+
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: stablecoin-large-burn-002
+    name: Large Stablecoin Burn
+    description: |
+      Detects large redemptions/burns of stablecoins which could
+      indicate capital outflow.
+    severity: medium
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Burn
+      contracts:
+        - "0xdAC17F958D2ee523a2206206994597C13D831ec7"  # USDT
+        - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
+      conditions:
+        - field: amount_usd
+          operator: gt
+          value: 100000000  # $100M+
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # TOKEN UNLOCK MONITORING
+  # ==========================================================================
+  
+  - id: vesting-unlock-001
+    name: Large Vesting Unlock
+    description: |
+      Detects large token unlocks from vesting contracts which
+      could create selling pressure.
+    severity: medium
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: 
+        - VestingReleased
+        - TokensClaimed
+      conditions:
+        - field: amount_usd
+          operator: gt
+          value: 5000000  # $5M+
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+      - type: enrich
+        add_fields:
+          - project_name
+          - vesting_schedule
+          - remaining_locked
+
+  - id: team-wallet-movement-002
+    name: Project Team Wallet Movement
+    description: |
+      Detects movements from known project team wallets which
+      could indicate insider selling.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Transfer
+      conditions:
+        - field: from_is_team_wallet
+          operator: eq
+          value: true
+        - field: amount_usd
+          operator: gt
+          value: 1000000  # $1M+
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # SMART MONEY TRACKING
+  # ==========================================================================
+  
+  - id: smart-money-buy-001
+    name: Smart Money Accumulation
+    description: |
+      Detects buying activity from addresses with historically
+      profitable trading patterns.
+    severity: low
+    confidence: 0.60
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Swap
+      conditions:
+        - field: buyer_is_smart_money
+          operator: eq
+          value: true
+        - field: amount_usd
+          operator: gt
+          value: 100000
+    
+    actions:
+      - type: log
+        level: info
+      - type: alert
+        channels: [slack]
+        priority: P4
+
+  - id: smart-money-sell-002
+    name: Smart Money Distribution
+    description: |
+      Detects selling activity from smart money addresses which
+      could signal upcoming price decline.
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Swap
+      conditions:
+        - field: seller_is_smart_money
+          operator: eq
+          value: true
+        - field: amount_usd
+          operator: gt
+          value: 500000
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+

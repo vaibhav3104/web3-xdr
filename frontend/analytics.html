@@ -12,7 +12,13 @@
         :root {
             --bg-primary: #0a0a0f;
             --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
             --accent-purple: #8b5cf6;
+            --accent-red: #ff3b3b;
+            --accent-green: #3bff7e;
+            --accent-yellow: #ffd93b;
+            --accent-orange: #ff8a3b;
+            --accent-blue: #3b8aff;
         }
         body {
             font-family: 'Space Grotesk', sans-serif;
@@ -33,38 +39,60 @@
         .risk-high { color: #ff8a3b; }
         .risk-medium { color: #ffd93b; }
         .risk-low { color: #3bff7e; }
+        .attack-pattern-card {
+            transition: all 0.3s ease;
+        }
+        .attack-pattern-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.2);
+        }
+        .trend-up { color: var(--accent-red); }
+        .trend-down { color: var(--accent-green); }
+        .protocol-bar {
+            transition: width 0.5s ease;
+        }
     </style>
 </head>
 <body class="min-h-screen" x-data="analytics()" x-init="init()">
-    <!-- Header -->
-    <header class="border-b border-gray-800 px-6 py-4">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <a href="/frontend/index.html" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                        </svg>
+    <!-- Navigation -->
+    <nav class="border-b border-gray-800 bg-opacity-50 backdrop-blur-lg sticky top-0 z-50" style="background: rgba(10, 10, 15, 0.9);">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-8">
+                    <a href="index.html" class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                            <span class="text-xl font-bold">S3</span>
+                        </div>
+                        <span class="text-xl font-bold">Sentinel3</span>
+                    </a>
+                    <div class="hidden md:flex items-center space-x-6 text-sm">
+                        <a href="index.html" class="text-gray-400 hover:text-white transition">Dashboard</a>
+                        <a href="protocols.html" class="text-gray-400 hover:text-white transition">Protocols</a>
+                        <a href="cross-chain.html" class="text-gray-400 hover:text-white transition">Cross-chain</a>
+                        <a href="risk-checker.html" class="text-gray-400 hover:text-white transition">Risk Checker</a>
+                        <a href="logs.html" class="text-gray-400 hover:text-white transition">Logs</a>
+                        <a href="analytics.html" class="text-white font-medium">Analytics</a>
                     </div>
-                    <span class="text-xl font-bold bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
-                        Sentinel3
-                    </span>
-                </a>
-                <span class="text-gray-500">|</span>
-                <span class="text-blue-400 font-semibold">📊 Analytics & Risk</span>
-            </div>
-            <div class="flex space-x-2">
-                <button @click="tab = 'historical'" :class="tab === 'historical' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
-                    📈 Historical
-                </button>
-                <button @click="tab = 'risk'" :class="tab === 'risk' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
-                    🎯 Risk Scoring
-                </button>
+                </div>
+                <div class="flex space-x-2">
+                    <button @click="tab = 'historical'" :class="tab === 'historical' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                        📈 Historical
+                    </button>
+                    <button @click="tab = 'attacks'" :class="tab === 'attacks' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                        ⚔️ Attack Patterns
+                    </button>
+                    <button @click="tab = 'protocols'" :class="tab === 'protocols' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                        🏛️ Protocols
+                    </button>
+                    <button @click="tab = 'risk'" :class="tab === 'risk' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                        🎯 Risk Scoring
+                    </button>
+                </div>
             </div>
         </div>
-    </header>
+    </nav>
     
-    <main class="p-6">
+    <main class="max-w-7xl mx-auto px-4 py-8">
         <!-- Loading State -->
         <div x-show="loading" class="text-center py-12">
             <div class="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -112,6 +140,190 @@
                 <div class="card p-4">
                     <h3 class="text-lg font-semibold mb-4">💰 Value at Risk Over Time</h3>
                     <canvas id="valueChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Attack Patterns Tab -->
+        <div x-show="tab === 'attacks' && !loading">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold mb-2">Attack Pattern Analysis</h2>
+                <p class="text-gray-400">Visualize and understand common attack patterns detected by Sentinel3</p>
+            </div>
+            
+            <!-- Attack Summary -->
+            <div class="grid grid-cols-4 gap-4 mb-8">
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-red-400" x-text="attackStats.total_attacks">0</div>
+                    <div class="text-sm text-gray-400 mt-1">Total Attacks</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-orange-400" x-text="attackStats.unique_patterns">0</div>
+                    <div class="text-sm text-gray-400 mt-1">Unique Patterns</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-yellow-400" x-text="formatUSD(attackStats.total_value_lost)">$0</div>
+                    <div class="text-sm text-gray-400 mt-1">Total Value Lost</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-green-400" x-text="formatUSD(attackStats.value_protected)">$0</div>
+                    <div class="text-sm text-gray-400 mt-1">Value Protected</div>
+                </div>
+            </div>
+            
+            <!-- Attack Patterns Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <template x-for="pattern in attackPatterns" :key="pattern.id">
+                    <div class="card attack-pattern-card p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-3xl" x-text="pattern.icon"></span>
+                                <div>
+                                    <h3 class="font-semibold" x-text="pattern.name"></h3>
+                                    <span class="text-xs text-gray-500" x-text="pattern.category"></span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-lg font-bold" :class="pattern.trend > 0 ? 'trend-up' : 'trend-down'"
+                                     x-text="(pattern.trend > 0 ? '+' : '') + pattern.trend + '%'"></div>
+                                <span class="text-xs text-gray-500">vs last week</span>
+                            </div>
+                        </div>
+                        
+                        <p class="text-sm text-gray-400 mb-4" x-text="pattern.description"></p>
+                        
+                        <div class="grid grid-cols-2 gap-4 text-center">
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <div class="text-xl font-bold" x-text="pattern.count"></div>
+                                <div class="text-xs text-gray-500">Detected</div>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <div class="text-xl font-bold text-red-400" x-text="formatUSD(pattern.value_lost)"></div>
+                                <div class="text-xs text-gray-500">Value Lost</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <div class="flex flex-wrap gap-1">
+                                <template x-for="chain in pattern.affected_chains" :key="chain">
+                                    <span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-300" x-text="chain"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            
+            <!-- Attack Timeline -->
+            <div class="card p-6">
+                <h3 class="text-lg font-semibold mb-4">📊 Attack Timeline (30 days)</h3>
+                <canvas id="attackTimelineChart" height="150"></canvas>
+            </div>
+        </div>
+        
+        <!-- Protocol Comparison Tab -->
+        <div x-show="tab === 'protocols' && !loading">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold mb-2">Protocol Comparison</h2>
+                <p class="text-gray-400">Compare security metrics across monitored DeFi protocols</p>
+            </div>
+            
+            <!-- Protocol Stats -->
+            <div class="grid grid-cols-4 gap-4 mb-8">
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-purple-400" x-text="protocolStats.total_protocols">0</div>
+                    <div class="text-sm text-gray-400 mt-1">Protocols Monitored</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-green-400" x-text="protocolStats.healthy_count">0</div>
+                    <div class="text-sm text-gray-400 mt-1">Healthy</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-yellow-400" x-text="protocolStats.warning_count">0</div>
+                    <div class="text-sm text-gray-400 mt-1">Warning</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl font-bold text-red-400" x-text="protocolStats.critical_count">0</div>
+                    <div class="text-sm text-gray-400 mt-1">Critical</div>
+                </div>
+            </div>
+            
+            <!-- Protocol Comparison Table -->
+            <div class="card overflow-hidden mb-8">
+                <div class="p-4 border-b border-gray-700">
+                    <h3 class="text-lg font-semibold">Protocol Security Metrics</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-800">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Protocol</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Type</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Health Score</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Events (24h)</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Alerts (24h)</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Chains</th>
+                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+                            <template x-for="protocol in protocols" :key="protocol.protocol_id">
+                                <tr class="hover:bg-gray-800/50">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="text-xl" x-text="getProtocolIcon(protocol.protocol_id)"></span>
+                                            <span class="font-medium" x-text="protocol.name"></span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-400 capitalize" x-text="protocol.type"></td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-24 bg-gray-700 rounded-full h-2">
+                                                <div class="h-2 rounded-full protocol-bar"
+                                                     :class="{
+                                                         'bg-green-400': protocol.health_score >= 80,
+                                                         'bg-yellow-400': protocol.health_score >= 50 && protocol.health_score < 80,
+                                                         'bg-red-400': protocol.health_score < 50
+                                                     }"
+                                                     :style="'width: ' + protocol.health_score + '%'"></div>
+                                            </div>
+                                            <span class="text-sm font-mono" x-text="protocol.health_score + '%'"></span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 font-mono text-sm" x-text="protocol.events_24h"></td>
+                                    <td class="px-4 py-3">
+                                        <span class="px-2 py-1 rounded text-xs font-medium"
+                                              :class="protocol.alerts_24h > 0 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-700 text-gray-400'"
+                                              x-text="protocol.alerts_24h"></span>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-400" x-text="protocol.chains.length + ' chains'"></td>
+                                    <td class="px-4 py-3">
+                                        <span class="flex items-center space-x-2">
+                                            <span class="w-2 h-2 rounded-full"
+                                                  :class="{
+                                                      'bg-green-400': protocol.status === 'healthy',
+                                                      'bg-yellow-400': protocol.status === 'warning',
+                                                      'bg-red-400': protocol.status === 'critical'
+                                                  }"></span>
+                                            <span class="text-sm capitalize" x-text="protocol.status"></span>
+                                        </span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Protocol Charts -->
+            <div class="grid grid-cols-2 gap-6">
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">🏆 Protocol Health Comparison</h3>
+                    <canvas id="protocolHealthChart" height="200"></canvas>
+                </div>
+                <div class="card p-4">
+                    <h3 class="text-lg font-semibold mb-4">📈 Events by Protocol (24h)</h3>
+                    <canvas id="protocolEventsChart" height="200"></canvas>
                 </div>
             </div>
         </div>
@@ -272,13 +484,33 @@
                 highRiskWallets: [],
                 charts: {},
                 
+                // Attack Patterns Data
+                attackStats: {
+                    total_attacks: 0,
+                    unique_patterns: 0,
+                    total_value_lost: 0,
+                    value_protected: 0
+                },
+                attackPatterns: [],
+                
+                // Protocol Data
+                protocolStats: {
+                    total_protocols: 0,
+                    healthy_count: 0,
+                    warning_count: 0,
+                    critical_count: 0
+                },
+                protocols: [],
+                
                 async init() {
                     this.loading = true;
                     
                     // Load all data in parallel
                     await Promise.all([
                         this.loadHistoricalStats(),
-                        this.loadHighRiskWallets()
+                        this.loadHighRiskWallets(),
+                        this.loadAttackPatterns(),
+                        this.loadProtocols()
                     ]);
                     
                     this.$nextTick(() => {
@@ -286,6 +518,14 @@
                     });
                     
                     this.loading = false;
+                    
+                    // Watch for tab changes to init charts
+                    this.$watch('tab', (newTab) => {
+                        this.$nextTick(() => {
+                            if (newTab === 'attacks') this.initAttackCharts();
+                            if (newTab === 'protocols') this.initProtocolCharts();
+                        });
+                    });
                 },
                 
                 async loadHistoricalStats() {
@@ -468,6 +708,221 @@
                 analyzeWallet(address) {
                     this.riskInput = address;
                     this.calculateRisk();
+                },
+                
+                async loadAttackPatterns() {
+                    // Load attack patterns from API or use defaults
+                    try {
+                        const res = await fetch('/api/analytics/attack-patterns');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.attackStats = data.stats || this.attackStats;
+                            this.attackPatterns = data.patterns || [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to load attack patterns:', e);
+                    }
+                    
+                    // Use default patterns if none loaded
+                    if (this.attackPatterns.length === 0) {
+                        this.attackPatterns = [
+                            {
+                                id: 'reentrancy',
+                                name: 'Reentrancy Attack',
+                                icon: '🔄',
+                                category: 'Smart Contract',
+                                description: 'Recursive calls exploiting state update timing',
+                                count: 12,
+                                value_lost: 2500000,
+                                trend: -15,
+                                affected_chains: ['ethereum', 'polygon', 'arbitrum']
+                            },
+                            {
+                                id: 'flash_loan',
+                                name: 'Flash Loan Attack',
+                                icon: '⚡',
+                                category: 'DeFi',
+                                description: 'Uncollateralized loans used for price manipulation',
+                                count: 8,
+                                value_lost: 5000000,
+                                trend: 25,
+                                affected_chains: ['ethereum', 'bsc', 'avalanche']
+                            },
+                            {
+                                id: 'rug_pull',
+                                name: 'Rug Pull',
+                                icon: '🎭',
+                                category: 'Fraud',
+                                description: 'Developers abandoning project after draining funds',
+                                count: 23,
+                                value_lost: 8000000,
+                                trend: -5,
+                                affected_chains: ['bsc', 'ethereum', 'polygon']
+                            },
+                            {
+                                id: 'oracle_manipulation',
+                                name: 'Oracle Manipulation',
+                                icon: '🔮',
+                                category: 'DeFi',
+                                description: 'Price feed manipulation for profit',
+                                count: 5,
+                                value_lost: 3000000,
+                                trend: 10,
+                                affected_chains: ['ethereum', 'arbitrum']
+                            },
+                            {
+                                id: 'bridge_exploit',
+                                name: 'Bridge Exploit',
+                                icon: '🌉',
+                                category: 'Cross-chain',
+                                description: 'Vulnerabilities in cross-chain bridges',
+                                count: 3,
+                                value_lost: 15000000,
+                                trend: -30,
+                                affected_chains: ['ethereum', 'polygon', 'optimism']
+                            },
+                            {
+                                id: 'signature_replay',
+                                name: 'Signature Replay',
+                                icon: '✍️',
+                                category: 'Cryptographic',
+                                description: 'Reusing valid signatures on different chains',
+                                count: 7,
+                                value_lost: 1500000,
+                                trend: 5,
+                                affected_chains: ['ethereum', 'arbitrum', 'base']
+                            }
+                        ];
+                        
+                        this.attackStats = {
+                            total_attacks: 58,
+                            unique_patterns: 6,
+                            total_value_lost: 35000000,
+                            value_protected: 120000000
+                        };
+                    }
+                },
+                
+                async loadProtocols() {
+                    try {
+                        const res = await fetch('/api/protocols/dashboard');
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.protocols = data.protocols || [];
+                            this.protocolStats = data.summary || this.protocolStats;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load protocols:', e);
+                    }
+                    
+                    // Use defaults if none loaded
+                    if (this.protocols.length === 0) {
+                        this.protocols = [
+                            { protocol_id: 'aave_v3', name: 'Aave V3', type: 'lending', health_score: 95, events_24h: 1250, alerts_24h: 2, chains: ['ethereum', 'polygon', 'arbitrum'], status: 'healthy' },
+                            { protocol_id: 'uniswap', name: 'Uniswap', type: 'dex', health_score: 88, events_24h: 3500, alerts_24h: 5, chains: ['ethereum', 'polygon', 'arbitrum', 'optimism'], status: 'healthy' },
+                            { protocol_id: 'compound', name: 'Compound', type: 'lending', health_score: 72, events_24h: 800, alerts_24h: 8, chains: ['ethereum', 'polygon'], status: 'warning' }
+                        ];
+                        this.protocolStats = { total_protocols: 3, healthy_count: 2, warning_count: 1, critical_count: 0 };
+                    }
+                },
+                
+                initAttackCharts() {
+                    const ctx = document.getElementById('attackTimelineChart');
+                    if (!ctx || this.charts.attackTimeline) return;
+                    
+                    // Generate sample timeline data
+                    const labels = [];
+                    const data = [];
+                    for (let i = 29; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                        data.push(Math.floor(Math.random() * 5) + 1);
+                    }
+                    
+                    this.charts.attackTimeline = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Attacks',
+                                data: data,
+                                backgroundColor: 'rgba(255, 59, 59, 0.6)',
+                                borderColor: '#ff3b3b',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
+                                y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                            }
+                        }
+                    });
+                },
+                
+                initProtocolCharts() {
+                    // Health Chart
+                    const healthCtx = document.getElementById('protocolHealthChart');
+                    if (healthCtx && !this.charts.protocolHealth) {
+                        this.charts.protocolHealth = new Chart(healthCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: this.protocols.map(p => p.name),
+                                datasets: [{
+                                    label: 'Health Score',
+                                    data: this.protocols.map(p => p.health_score),
+                                    backgroundColor: this.protocols.map(p => 
+                                        p.health_score >= 80 ? 'rgba(59, 255, 126, 0.6)' :
+                                        p.health_score >= 50 ? 'rgba(255, 217, 59, 0.6)' : 'rgba(255, 59, 59, 0.6)'
+                                    ),
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, max: 100 },
+                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Events Chart
+                    const eventsCtx = document.getElementById('protocolEventsChart');
+                    if (eventsCtx && !this.charts.protocolEvents) {
+                        this.charts.protocolEvents = new Chart(eventsCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: this.protocols.map(p => p.name),
+                                datasets: [{
+                                    data: this.protocols.map(p => p.events_24h),
+                                    backgroundColor: ['#8b5cf6', '#3b8aff', '#3bff7e', '#ffd93b', '#ff8a3b', '#ff3b3b']
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { position: 'right', labels: { color: '#888' } } }
+                            }
+                        });
+                    }
+                },
+                
+                getProtocolIcon(protocolId) {
+                    const icons = {
+                        'aave_v3': '👻',
+                        'uniswap': '🦄',
+                        'compound': '🏦',
+                        'curve': '🌀',
+                        'lido': '🌊',
+                        'makerdao': '🏛️'
+                    };
+                    return icons[protocolId] || '📊';
                 },
                 
                 formatUSD(amount) {

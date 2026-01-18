@@ -1,0 +1,455 @@
+# ============================================================================
+# CHAIN-SPECIFIC ALERT RULES
+# Rules tailored for specific blockchain networks
+# ============================================================================
+
+rules:
+  # ==========================================================================
+  # ETHEREUM MAINNET RULES
+  # ==========================================================================
+  
+  - id: eth-gas-spike-001
+    name: Ethereum Gas Price Spike
+    description: |
+      Detects sudden spikes in Ethereum gas prices which could indicate
+      network congestion, MEV activity, or attack in progress.
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: metric
+      chain: ethereum
+      metric: gas_price_gwei
+      conditions:
+        - field: current_gas
+          operator: gt
+          value: 200  # >200 gwei
+        - field: gas_increase_percent
+          operator: gt
+          value: 100  # 2x increase
+    
+    time_window: 5m
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: eth-mempool-spam-002
+    name: Ethereum Mempool Spam Detected
+    description: |
+      Detects unusual mempool activity that could indicate spam attack
+      or network manipulation.
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: velocity
+      chain: ethereum
+      metric: pending_transactions
+      threshold: 50000  # >50K pending txs
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: eth-block-reorg-003
+    name: Ethereum Block Reorganization
+    description: |
+      Detects block reorganizations which could indicate 51% attack
+      or network instability.
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: event
+      chain: ethereum
+      event_type: BlockReorg
+      conditions:
+        - field: reorg_depth
+          operator: gt
+          value: 2
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # POLYGON RULES
+  # ==========================================================================
+  
+  - id: polygon-checkpoint-delay-001
+    name: Polygon Checkpoint Delay
+    description: |
+      Detects delays in Polygon checkpoint submissions to Ethereum,
+      which could affect bridge security.
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: metric
+      chain: polygon
+      metric: checkpoint_delay_minutes
+      conditions:
+        - field: delay_minutes
+          operator: gt
+          value: 60  # >1 hour delay
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: polygon-plasma-exit-002
+    name: Polygon Large Plasma Exit
+    description: |
+      Detects large exits through Polygon Plasma bridge which could
+      indicate whale movement or attack preparation.
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: event
+      chain: polygon
+      event_type: ExitStarted
+      conditions:
+        - field: amount_usd
+          operator: gt
+          value: 1000000
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # ARBITRUM RULES
+  # ==========================================================================
+  
+  - id: arbitrum-sequencer-down-001
+    name: Arbitrum Sequencer Downtime
+    description: |
+      Detects when Arbitrum sequencer is not producing blocks,
+      which affects L2 operations.
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: metric
+      chain: arbitrum
+      metric: blocks_per_minute
+      conditions:
+        - field: blocks_per_minute
+          operator: lt
+          value: 1
+        - field: duration_minutes
+          operator: gt
+          value: 5
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: arbitrum-delayed-inbox-002
+    name: Arbitrum Delayed Inbox Anomaly
+    description: |
+      Detects unusual activity in Arbitrum delayed inbox which
+      handles L1 to L2 messages.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: velocity
+      chain: arbitrum
+      metric: delayed_inbox_messages
+      threshold: 100
+      time_window: 10m
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # OPTIMISM RULES
+  # ==========================================================================
+  
+  - id: optimism-proposer-fault-001
+    name: Optimism Proposer Fault
+    description: |
+      Detects faults in Optimism state proposer which could affect
+      withdrawals and L1 finality.
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: event
+      chain: optimism
+      event_type: ProposerFault
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: optimism-withdrawal-challenge-002
+    name: Optimism Withdrawal Challenge
+    description: |
+      Detects challenges to Optimism withdrawals which could indicate
+      fraud proof or attack.
+    severity: high
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: event
+      chain: optimism
+      event_type: WithdrawalChallenged
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # BASE RULES
+  # ==========================================================================
+  
+  - id: base-sequencer-feed-001
+    name: Base Sequencer Feed Anomaly
+    description: |
+      Detects anomalies in Base sequencer feed which could affect
+      transaction ordering.
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: metric
+      chain: base
+      metric: sequencer_feed_delay_ms
+      conditions:
+        - field: delay_ms
+          operator: gt
+          value: 5000  # >5 second delay
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # BSC (BINANCE SMART CHAIN) RULES
+  # ==========================================================================
+  
+  - id: bsc-validator-slash-001
+    name: BSC Validator Slashing
+    description: |
+      Detects validator slashing events on BSC which could indicate
+      malicious behavior or network attack.
+    severity: high
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: event
+      chain: bsc
+      event_type: ValidatorSlashed
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: bsc-pancake-manipulation-002
+    name: PancakeSwap Price Manipulation
+    description: |
+      Detects potential price manipulation on PancakeSwap, the
+      largest DEX on BSC.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: pattern
+      chain: bsc
+      pattern: price_manipulation
+      contracts:
+        - "0x10ED43C718714eb63d5aA57B78B54704E256024E"  # PancakeSwap Router
+      conditions:
+        - field: price_impact_percent
+          operator: gt
+          value: 10
+        - field: same_block_trades
+          operator: gt
+          value: 3
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # AVALANCHE RULES
+  # ==========================================================================
+  
+  - id: avax-subnet-anomaly-001
+    name: Avalanche Subnet Anomaly
+    description: |
+      Detects anomalies in Avalanche subnet operations which could
+      affect cross-subnet communication.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: metric
+      chain: avalanche
+      metric: subnet_latency_ms
+      conditions:
+        - field: latency_ms
+          operator: gt
+          value: 10000  # >10 second latency
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: avax-trader-joe-exploit-002
+    name: Trader Joe Exploit Pattern
+    description: |
+      Detects potential exploits on Trader Joe, the largest DEX
+      on Avalanche.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: pattern
+      chain: avalanche
+      pattern: dex_exploit
+      contracts:
+        - "0x60aE616a2155Ee3d9A68541Ba4544862310933d4"  # Trader Joe Router
+      conditions:
+        - field: unusual_call_sequence
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # SOLANA RULES (Non-EVM)
+  # ==========================================================================
+  
+  - id: solana-validator-delinquent-001
+    name: Solana Validator Delinquency
+    description: |
+      Detects when significant portion of Solana validators become
+      delinquent, affecting network stability.
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: metric
+      chain: solana
+      metric: delinquent_stake_percent
+      conditions:
+        - field: delinquent_percent
+          operator: gt
+          value: 10  # >10% stake delinquent
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: solana-program-exploit-002
+    name: Solana Program Exploit
+    description: |
+      Detects potential exploits in Solana programs based on
+      unusual instruction patterns.
+    severity: critical
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: pattern
+      chain: solana
+      pattern: program_exploit
+      conditions:
+        - field: cpi_depth
+          operator: gt
+          value: 10
+        - field: compute_units
+          operator: gt
+          value: 1000000
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # COSMOS RULES (Non-EVM)
+  # ==========================================================================
+  
+  - id: cosmos-ibc-timeout-001
+    name: Cosmos IBC Packet Timeout
+    description: |
+      Detects timeouts in IBC packet transfers which could indicate
+      chain issues or attack.
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: event
+      chain: cosmos
+      event_type: IBCTimeout
+      conditions:
+        - field: timeout_count_per_hour
+          operator: gt
+          value: 10
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: cosmos-governance-spam-002
+    name: Cosmos Governance Spam
+    description: |
+      Detects spam proposals in Cosmos governance which could
+      be used to drain community pool or distract validators.
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: velocity
+      chain: cosmos
+      event_type: ProposalSubmitted
+      threshold: 5
+      time_window: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+

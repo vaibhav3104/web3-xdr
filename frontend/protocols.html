@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocol Monitoring - Sentinel3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent-red: #ff3b3b;
+            --accent-orange: #ff8a3b;
+            --accent-yellow: #ffd93b;
+            --accent-green: #3bff7e;
+            --accent-blue: #3b8aff;
+            --accent-purple: #8a3bff;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border-color: #2a2a3a;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        
+        .status-healthy { color: var(--accent-green); }
+        .status-warning { color: var(--accent-yellow); }
+        .status-critical { color: var(--accent-red); }
+        
+        .bg-healthy { background: rgba(59, 255, 126, 0.1); border-color: var(--accent-green); }
+        .bg-warning { background: rgba(255, 217, 59, 0.1); border-color: var(--accent-yellow); }
+        .bg-critical { background: rgba(255, 59, 59, 0.1); border-color: var(--accent-red); }
+        
+        .protocol-card {
+            transition: all 0.3s ease;
+        }
+        
+        .protocol-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 32px rgba(138, 59, 255, 0.2);
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="min-h-screen" x-data="protocolDashboard()" x-init="init()">
+    <!-- Navigation -->
+    <nav class="border-b border-gray-800 bg-opacity-50 backdrop-blur-lg sticky top-0 z-50" style="background: rgba(10, 10, 15, 0.9);">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-8">
+                    <a href="index.html" class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                            <span class="text-xl font-bold">S3</span>
+                        </div>
+                        <span class="text-xl font-bold">Sentinel3</span>
+                    </a>
+                    <div class="hidden md:flex items-center space-x-6 text-sm">
+                        <a href="index.html" class="text-gray-400 hover:text-white transition">Dashboard</a>
+                        <a href="protocols.html" class="text-white font-medium">Protocols</a>
+                        <a href="cross-chain.html" class="text-gray-400 hover:text-white transition">Cross-chain</a>
+                        <a href="risk-checker.html" class="text-gray-400 hover:text-white transition">Risk Checker</a>
+                        <a href="logs.html" class="text-gray-400 hover:text-white transition">Logs</a>
+                        <a href="analytics.html" class="text-gray-400 hover:text-white transition">Analytics</a>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-400" x-text="lastUpdated"></span>
+                    <button @click="refresh()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition">
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold mb-2">Protocol Monitoring</h1>
+            <p class="text-gray-400">Real-time monitoring of DeFi protocols across multiple chains</p>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Total Protocols</span>
+                    <span class="text-2xl">📊</span>
+                </div>
+                <div class="text-3xl font-bold" x-text="summary.total_protocols"></div>
+            </div>
+            
+            <div class="card p-6 bg-healthy border">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Healthy</span>
+                    <span class="w-3 h-3 rounded-full bg-green-400 pulse-dot"></span>
+                </div>
+                <div class="text-3xl font-bold status-healthy" x-text="summary.healthy_count"></div>
+            </div>
+            
+            <div class="card p-6 bg-warning border">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Warning</span>
+                    <span class="w-3 h-3 rounded-full bg-yellow-400 pulse-dot"></span>
+                </div>
+                <div class="text-3xl font-bold status-warning" x-text="summary.warning_count"></div>
+            </div>
+            
+            <div class="card p-6 bg-critical border">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Critical</span>
+                    <span class="w-3 h-3 rounded-full bg-red-400 pulse-dot"></span>
+                </div>
+                <div class="text-3xl font-bold status-critical" x-text="summary.critical_count"></div>
+            </div>
+        </div>
+
+        <!-- Activity Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="card p-6">
+                <h3 class="text-lg font-semibold mb-4">24h Activity</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-gray-400 text-sm mb-1">Total Alerts</div>
+                        <div class="text-2xl font-bold text-yellow-400" x-text="summary.total_alerts_24h"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-sm mb-1">Liquidations</div>
+                        <div class="text-2xl font-bold text-red-400" x-text="summary.total_liquidations_24h"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card p-6">
+                <h3 class="text-lg font-semibold mb-4">Chains Monitored</h3>
+                <div class="flex flex-wrap gap-2">
+                    <template x-for="chain in chains" :key="chain">
+                        <span class="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30" x-text="chain"></span>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Protocol Cards -->
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold mb-4">Monitored Protocols</h2>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <template x-for="protocol in protocols" :key="protocol.protocol_id">
+                <div class="card protocol-card p-6 cursor-pointer" @click="showProtocolDetails(protocol)">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                                 :class="getProtocolIcon(protocol.protocol_id).bg">
+                                <span x-text="getProtocolIcon(protocol.protocol_id).icon"></span>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold" x-text="protocol.name"></h3>
+                                <span class="text-xs text-gray-400 capitalize" x-text="protocol.type"></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2 h-2 rounded-full"
+                                  :class="{
+                                      'bg-green-400': protocol.status === 'healthy',
+                                      'bg-yellow-400': protocol.status === 'warning',
+                                      'bg-red-400': protocol.status === 'critical'
+                                  }"></span>
+                            <span class="text-sm capitalize"
+                                  :class="{
+                                      'status-healthy': protocol.status === 'healthy',
+                                      'status-warning': protocol.status === 'warning',
+                                      'status-critical': protocol.status === 'critical'
+                                  }"
+                                  x-text="protocol.status"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Health Score -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-gray-400">Health Score</span>
+                            <span class="font-mono" x-text="protocol.health_score + '%'"></span>
+                        </div>
+                        <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-500"
+                                 :class="{
+                                     'bg-green-400': protocol.health_score >= 80,
+                                     'bg-yellow-400': protocol.health_score >= 50 && protocol.health_score < 80,
+                                     'bg-red-400': protocol.health_score < 50
+                                 }"
+                                 :style="'width: ' + protocol.health_score + '%'"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats -->
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <div class="text-lg font-bold" x-text="protocol.events_24h"></div>
+                            <div class="text-xs text-gray-400">Events</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-yellow-400" x-text="protocol.alerts_24h"></div>
+                            <div class="text-xs text-gray-400">Alerts</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-red-400" x-text="protocol.liquidations_24h"></div>
+                            <div class="text-xs text-gray-400">Liquidations</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chains -->
+                    <div class="mt-4 pt-4 border-t border-gray-700">
+                        <div class="flex flex-wrap gap-1">
+                            <template x-for="chain in protocol.chains.slice(0, 4)" :key="chain">
+                                <span class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300" x-text="chain"></span>
+                            </template>
+                            <span x-show="protocol.chains.length > 4" class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300"
+                                  x-text="'+' + (protocol.chains.length - 4)"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Protocol Details Modal -->
+        <div x-show="selectedProtocol" x-cloak
+             class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+             @click.self="selectedProtocol = null">
+            <div class="card max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6" @click.stop>
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-16 h-16 rounded-xl flex items-center justify-center text-3xl"
+                             :class="selectedProtocol ? getProtocolIcon(selectedProtocol.protocol_id).bg : ''">
+                            <span x-text="selectedProtocol ? getProtocolIcon(selectedProtocol.protocol_id).icon : ''"></span>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold" x-text="selectedProtocol?.name"></h2>
+                            <span class="text-gray-400 capitalize" x-text="selectedProtocol?.type + ' Protocol'"></span>
+                        </div>
+                    </div>
+                    <button @click="selectedProtocol = null" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                
+                <template x-if="selectedProtocol">
+                    <div>
+                        <!-- Status Banner -->
+                        <div class="rounded-lg p-4 mb-6"
+                             :class="{
+                                 'bg-green-500/10 border border-green-500/30': selectedProtocol.status === 'healthy',
+                                 'bg-yellow-500/10 border border-yellow-500/30': selectedProtocol.status === 'warning',
+                                 'bg-red-500/10 border border-red-500/30': selectedProtocol.status === 'critical'
+                             }">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span class="w-3 h-3 rounded-full"
+                                          :class="{
+                                              'bg-green-400': selectedProtocol.status === 'healthy',
+                                              'bg-yellow-400': selectedProtocol.status === 'warning',
+                                              'bg-red-400': selectedProtocol.status === 'critical'
+                                          }"></span>
+                                    <span class="font-medium capitalize" x-text="selectedProtocol.status"></span>
+                                </div>
+                                <span class="text-2xl font-bold" x-text="selectedProtocol.health_score + '%'"></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Metrics Grid -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-gray-800 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold" x-text="selectedProtocol.events_24h"></div>
+                                <div class="text-sm text-gray-400">Events (24h)</div>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-yellow-400" x-text="selectedProtocol.alerts_24h"></div>
+                                <div class="text-sm text-gray-400">Alerts (24h)</div>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-red-400" x-text="selectedProtocol.liquidations_24h"></div>
+                                <div class="text-sm text-gray-400">Liquidations</div>
+                            </div>
+                            <div class="bg-gray-800 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-purple-400" x-text="selectedProtocol.chains.length"></div>
+                                <div class="text-sm text-gray-400">Chains</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Supported Chains -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-3">Supported Chains</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="chain in selectedProtocol.chains" :key="chain">
+                                    <span class="px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                          x-text="chain"></span>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="flex space-x-4">
+                            <a :href="'https://' + (selectedProtocol.protocol_id === 'aave_v3' ? 'aave.com' : selectedProtocol.protocol_id === 'uniswap' ? 'uniswap.org' : 'compound.finance')"
+                               target="_blank"
+                               class="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-center font-medium transition">
+                                Visit Protocol
+                            </a>
+                            <button class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-center font-medium transition">
+                                View Alerts
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function protocolDashboard() {
+            return {
+                protocols: [],
+                summary: {
+                    total_protocols: 0,
+                    healthy_count: 0,
+                    warning_count: 0,
+                    critical_count: 0,
+                    total_alerts_24h: 0,
+                    total_liquidations_24h: 0
+                },
+                chains: [],
+                selectedProtocol: null,
+                lastUpdated: '',
+                
+                async init() {
+                    await this.loadDashboard();
+                    // Auto-refresh every 30 seconds
+                    setInterval(() => this.loadDashboard(), 30000);
+                },
+                
+                async loadDashboard() {
+                    try {
+                        const response = await fetch('/api/protocols/dashboard');
+                        const data = await response.json();
+                        
+                        this.protocols = data.protocols || [];
+                        this.summary = data.summary || this.summary;
+                        
+                        // Extract unique chains
+                        const chainSet = new Set();
+                        this.protocols.forEach(p => p.chains.forEach(c => chainSet.add(c)));
+                        this.chains = Array.from(chainSet).sort();
+                        
+                        this.lastUpdated = new Date().toLocaleTimeString();
+                    } catch (error) {
+                        console.error('Failed to load dashboard:', error);
+                    }
+                },
+                
+                async refresh() {
+                    await this.loadDashboard();
+                },
+                
+                showProtocolDetails(protocol) {
+                    this.selectedProtocol = protocol;
+                },
+                
+                getProtocolIcon(protocolId) {
+                    const icons = {
+                        'aave_v3': { icon: '👻', bg: 'bg-gradient-to-br from-purple-500 to-pink-500' },
+                        'uniswap': { icon: '🦄', bg: 'bg-gradient-to-br from-pink-500 to-purple-500' },
+                        'compound': { icon: '🏦', bg: 'bg-gradient-to-br from-green-500 to-teal-500' },
+                        'curve': { icon: '🌀', bg: 'bg-gradient-to-br from-blue-500 to-cyan-500' },
+                        'lido': { icon: '🌊', bg: 'bg-gradient-to-br from-cyan-500 to-blue-500' },
+                        'makerdao': { icon: '🏛️', bg: 'bg-gradient-to-br from-yellow-500 to-orange-500' },
+                    };
+                    return icons[protocolId] || { icon: '📊', bg: 'bg-gradient-to-br from-gray-500 to-gray-600' };
+                }
+            };
+        }
+    </script>
+</body>
+</html>

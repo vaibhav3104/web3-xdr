@@ -1,0 +1,544 @@
+# ============================================================================
+# ADVANCED ATTACK DETECTION RULES
+# Sophisticated attack patterns and emerging threat vectors
+# ============================================================================
+
+rules:
+  # ==========================================================================
+  # MEV & FRONT-RUNNING ATTACKS
+  # ==========================================================================
+  
+  - id: mev-frontrun-001
+    name: Front-Running Attack Detected
+    description: |
+      Detects front-running patterns where an attacker inserts their 
+      transaction before a victim's pending transaction.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: frontrun
+      conditions:
+        - field: gas_price_ratio
+          operator: gt
+          value: 1.5  # Attacker pays 50%+ more gas
+        - field: same_block
+          operator: eq
+          value: true
+        - field: tx_position_diff
+          operator: lte
+          value: 3  # Within 3 positions
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - attacker_profit_estimate
+          - victim_loss_estimate
+
+  - id: mev-backrun-002
+    name: Back-Running Attack Detected
+    description: |
+      Detects back-running where attacker exploits state changes 
+      from a victim's transaction.
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: backrun
+      conditions:
+        - field: same_block
+          operator: eq
+          value: true
+        - field: uses_flashbots
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: mev-jit-liquidity-003
+    name: JIT Liquidity Attack
+    description: |
+      Detects Just-In-Time liquidity provision attacks where attacker 
+      adds/removes liquidity around a large swap.
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: jit_liquidity
+      conditions:
+        - field: add_remove_same_block
+          operator: eq
+          value: true
+        - field: profit_usd
+          operator: gt
+          value: 500
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # ORACLE MANIPULATION ATTACKS
+  # ==========================================================================
+  
+  - id: oracle-twap-manipulation-001
+    name: TWAP Oracle Manipulation
+    description: |
+      Detects attempts to manipulate Time-Weighted Average Price oracles
+      through sustained price pressure.
+    severity: critical
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: invariant
+      invariant: ORACLE_PRICE_VALIDITY
+      conditions:
+        - field: twap_deviation_percent
+          operator: gt
+          value: 15
+        - field: sustained_blocks
+          operator: gt
+          value: 5
+    
+    thresholds:
+      min_deviation_percent: 15
+      min_sustained_blocks: 5
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: runbook
+        steps:
+          - "1. Compare TWAP with spot price and CEX prices"
+          - "2. Check for large trades in observation window"
+          - "3. Alert affected protocols using this oracle"
+
+  - id: oracle-spot-manipulation-002
+    name: Spot Price Oracle Manipulation
+    description: |
+      Detects sudden large deviations in spot price oracles that could
+      indicate flash loan attacks or market manipulation.
+    severity: critical
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: PriceUpdated
+      conditions:
+        - field: price_change_percent
+          operator: gt
+          value: 20
+        - field: time_since_last_update
+          operator: lt
+          value: 60  # Within 60 seconds
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # GOVERNANCE ATTACKS
+  # ==========================================================================
+  
+  - id: governance-flashloan-vote-001
+    name: Flash Loan Governance Attack
+    description: |
+      Detects patterns where governance tokens are borrowed via flash loan
+      to manipulate voting outcomes.
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: flash_governance
+      conditions:
+        - field: flash_loan_amount_usd
+          operator: gt
+          value: 1000000
+        - field: vote_cast_same_block
+          operator: eq
+          value: true
+        - field: tokens_returned_same_block
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: auto_pause
+        target: governance
+        require_confirmation: true
+
+  - id: governance-hostile-proposal-002
+    name: Hostile Governance Proposal
+    description: |
+      Detects proposals that could drain treasury or modify critical
+      protocol parameters maliciously.
+    severity: high
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: ProposalCreated
+      conditions:
+        - field: target_is_treasury
+          operator: eq
+          value: true
+        - field: proposer_token_balance_percent
+          operator: lt
+          value: 1  # Proposer owns <1% of tokens
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: governance-timelock-queue-003
+    name: Suspicious Timelock Queue
+    description: |
+      Detects potentially malicious transactions queued in timelock.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: QueueTransaction
+      conditions:
+        - field: target_is_critical_contract
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - transaction_simulation
+          - impact_analysis
+
+  # ==========================================================================
+  # NFT & TOKEN ATTACKS
+  # ==========================================================================
+  
+  - id: nft-wash-trading-001
+    name: NFT Wash Trading Detected
+    description: |
+      Detects wash trading patterns in NFT marketplaces where same entity
+      buys and sells to inflate prices.
+    severity: medium
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: wash_trade
+      conditions:
+        - field: buyer_seller_connected
+          operator: eq
+          value: true
+        - field: trade_count
+          operator: gt
+          value: 3
+        - field: time_window
+          operator: lt
+          value: 24h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  - id: token-honeypot-002
+    name: Honeypot Token Detected
+    description: |
+      Detects tokens with honeypot characteristics - can buy but cannot sell.
+    severity: high
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: honeypot
+      conditions:
+        - field: buy_count
+          operator: gt
+          value: 10
+        - field: sell_success_rate
+          operator: lt
+          value: 0.1  # <10% of sells succeed
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - contract_analysis
+          - similar_scams
+
+  - id: token-rugpull-pattern-003
+    name: Rug Pull Pattern Detected
+    description: |
+      Detects common rug pull patterns - liquidity removal, 
+      ownership renounced after mint, etc.
+    severity: critical
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: rug_pull
+      conditions:
+        - field: liquidity_removed_percent
+          operator: gt
+          value: 80
+        - field: token_age_hours
+          operator: lt
+          value: 72
+        - field: holder_count
+          operator: gt
+          value: 100
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # CROSS-CHAIN ATTACKS
+  # ==========================================================================
+  
+  - id: bridge-replay-attack-001
+    name: Cross-Chain Replay Attack
+    description: |
+      Detects replay attacks where valid messages are reused on 
+      different chains or multiple times.
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: invariant
+      invariant: MESSAGE_UNIQUENESS
+      conditions:
+        - field: message_hash_seen_before
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: auto_pause
+        target: bridge
+        require_confirmation: true
+
+  - id: bridge-validator-collusion-002
+    name: Bridge Validator Collusion
+    description: |
+      Detects patterns suggesting validator collusion - same validators
+      signing suspicious messages.
+    severity: critical
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: validator_collusion
+      conditions:
+        - field: validator_overlap_percent
+          operator: gt
+          value: 80
+        - field: suspicious_message_count
+          operator: gt
+          value: 3
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: bridge-destination-spoof-003
+    name: Bridge Destination Spoofing
+    description: |
+      Detects attempts to redirect bridge funds to attacker-controlled
+      addresses by manipulating destination parameters.
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: TransferInitiated
+      conditions:
+        - field: destination_is_contract
+          operator: eq
+          value: true
+        - field: destination_verified
+          operator: eq
+          value: false
+        - field: amount_usd
+          operator: gt
+          value: 100000
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # SMART CONTRACT EXPLOITS
+  # ==========================================================================
+  
+  - id: contract-selfdestruct-001
+    name: Contract Self-Destruct Detected
+    description: |
+      Detects when monitored contracts call selfdestruct, which could
+      indicate exploit or malicious upgrade.
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: SelfDestruct
+      conditions:
+        - field: contract_is_monitored
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: contract-delegatecall-exploit-002
+    name: Suspicious Delegatecall Pattern
+    description: |
+      Detects potentially malicious delegatecall patterns that could
+      lead to storage corruption or unauthorized access.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: delegatecall_exploit
+      conditions:
+        - field: delegatecall_to_user_input
+          operator: eq
+          value: true
+        - field: target_not_whitelisted
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: contract-storage-collision-003
+    name: Proxy Storage Collision
+    description: |
+      Detects potential storage collision in proxy contracts which
+      could lead to unauthorized state modifications.
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: storage_collision
+      conditions:
+        - field: proxy_implementation_changed
+          operator: eq
+          value: true
+        - field: storage_layout_mismatch
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # PHISHING & SOCIAL ENGINEERING
+  # ==========================================================================
+  
+  - id: phishing-approval-drain-001
+    name: Approval Phishing Attack
+    description: |
+      Detects patterns where users approve tokens to known phishing
+      contracts or suspicious new contracts.
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Approval
+      conditions:
+        - field: spender_is_known_phisher
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - phishing_campaign_id
+          - victim_count
+
+  - id: phishing-permit-signature-002
+    name: Permit Signature Phishing
+    description: |
+      Detects abuse of EIP-2612 permit signatures for gasless approvals
+      commonly used in phishing attacks.
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_type: Permit
+      conditions:
+        - field: spender_age_hours
+          operator: lt
+          value: 24
+        - field: spender_is_contract
+          operator: eq
+          value: true
+        - field: amount
+          operator: eq
+          value: unlimited
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
