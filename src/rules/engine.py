@@ -26,6 +26,26 @@ except ImportError:
     def normalize_event_type(event_type: str) -> str:
         return event_type
 
+# Import invariant and pattern engines
+try:
+    from src.rules.invariants import InvariantEngine, get_invariant_engine
+    from src.rules.patterns import PatternMatcher, get_pattern_matcher
+    ADVANCED_ENGINES_AVAILABLE = True
+except ImportError:
+    ADVANCED_ENGINES_AVAILABLE = False
+    InvariantEngine = None
+    PatternMatcher = None
+    get_invariant_engine = None
+    get_pattern_matcher = None
+
+# Import enrichment layer
+try:
+    from src.enrichment import get_enricher
+    ENRICHMENT_AVAILABLE = True
+except ImportError:
+    ENRICHMENT_AVAILABLE = False
+    get_enricher = None
+
 
 @dataclass
 class AlertRule:
@@ -75,6 +95,12 @@ class RuleEngine:
     """
     Loads and evaluates YAML-based alert rules.
     
+    Supports:
+    - Event-based rules (simple field matching)
+    - Invariant-based rules (protocol state checks)
+    - Pattern-based rules (multi-event sequences)
+    - Aggregation rules (time-windowed counts)
+    
     Usage:
         engine = RuleEngine()
         engine.load_rules_from_directory("config/rules/")
@@ -88,6 +114,11 @@ class RuleEngine:
         self.rules: List[AlertRule] = []
         self._rule_index: Dict[str, AlertRule] = {}
         self._alert_history: Dict[str, List[datetime]] = {}  # For rate limiting
+        
+        # Initialize advanced engines if available
+        self._invariant_engine = get_invariant_engine() if ADVANCED_ENGINES_AVAILABLE and get_invariant_engine else None
+        self._pattern_matcher = get_pattern_matcher() if ADVANCED_ENGINES_AVAILABLE and get_pattern_matcher else None
+        self._enricher = get_enricher() if ENRICHMENT_AVAILABLE and get_enricher else None
     
     def load_rules_from_directory(self, directory: str) -> int:
         """Load all YAML rules from a directory."""
@@ -150,6 +181,41 @@ class RuleEngine:
         """
         matches = []
         
+        # Enrich event if enricher available
+        if self._enricher:
+            try:
+                event = self._enricher.enrich_sync(event)
+            except Exception as e:
+                pass  # Continue with unenriched event
+        
+        # Check invariants if engine available
+        if self._invariant_engine:
+            try:
+                violations = self._invariant_engine.check_event(event)
+                for violation in violations:
+                    # Create synthetic match for invariant violation
+                    matches.append(AlertMatch(
+                        rule=AlertRule(
+                            id=f"invariant-{violation.invariant_type.value}",
+                            name=f"Invariant Violation: {violation.invariant_type.value}",
+                            description=str(violation.details),
+                            severity=violation.severity.lower(),
+                            confidence=0.9,
+                            enabled=True,
+                            detection={"type": "invariant", "invariant": violation.invariant_type.value},
+                        ),
+                        event=event,
+                        matched_at=violation.timestamp,
+                        match_details={
+                            "invariant_type": violation.invariant_type.value,
+                            "expected": violation.expected_value,
+                            "actual": violation.actual_value,
+                            "deviation": violation.deviation,
+                        }
+                    ))
+            except Exception as e:
+                pass
+        
         for rule in self.rules:
             if not rule.enabled:
                 continue
@@ -179,9 +245,36 @@ class RuleEngine:
         """
         Evaluate a single rule against an event.
         Returns match details if matched, None otherwise.
+        
+        Supports detection types:
+        - event: Simple field matching
+        - invariant: Protocol state checks
+        - pattern: Multi-event sequences
+        - aggregation: Time-windowed counts
         """
         detection = rule.detection
+        detection_type = detection.get('type', 'event')
         
+        # Handle invariant-based rules
+        if detection_type == 'invariant':
+            if not self._invariant_engine:
+                return None
+            # Invariants are checked in evaluate() method
+            return None
+        
+        # Handle pattern-based rules
+        if detection_type == 'pattern':
+            if not self._pattern_matcher:
+                return None
+            pattern_name = detection.get('pattern', '')
+            if pattern_name and self._pattern_matcher.check_pattern(pattern_name, event):
+                return {
+                    "pattern": pattern_name,
+                    "matched_at": datetime.utcnow().isoformat(),
+                }
+            return None
+        
+        # Standard event-based rule evaluation
         # Check event type with normalization
         if 'event_type' in detection:
             expected_types = detection['event_type']
@@ -197,7 +290,7 @@ class RuleEngine:
         if 'chain' in detection:
             expected_chain = detection['chain']
             if expected_chain != 'any':
-                event_chain = event.get('chain', '')
+                event_chain = event.get('chain', '') or event.get('chain_id', '')
                 if event_chain != expected_chain:
                     return None
         
