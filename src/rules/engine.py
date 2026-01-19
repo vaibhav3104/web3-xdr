@@ -13,6 +13,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import re
 
+# Import event normalizer for type matching
+try:
+    from src.telemetry.event_normalizer import event_type_matches, normalize_event_type
+except ImportError:
+    # Fallback if normalizer not available
+    def event_type_matches(ingested_type: str, rule_types: list) -> bool:
+        if not rule_types or "any" in rule_types:
+            return True
+        return ingested_type in rule_types or ingested_type.lower() in [t.lower() for t in rule_types]
+    
+    def normalize_event_type(event_type: str) -> str:
+        return event_type
+
 
 @dataclass
 class AlertRule:
@@ -169,14 +182,15 @@ class RuleEngine:
         """
         detection = rule.detection
         
-        # Check event type
+        # Check event type with normalization
         if 'event_type' in detection:
             expected_types = detection['event_type']
             if isinstance(expected_types, str):
                 expected_types = [expected_types]
             
             event_type = event.get('event_type', '')
-            if event_type not in expected_types and 'any' not in expected_types:
+            # Use event type normalizer for flexible matching
+            if not event_type_matches(event_type, expected_types):
                 return None
         
         # Check chain
