@@ -1,0 +1,135 @@
+{
+  "displayName": "Sentinel3 Web3-XDR Dashboard",
+  "gridLayout": {
+    "columns": "2",
+    "widgets": [
+      {
+        "title": "Cloud Run - Request Count",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"sentinel3\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_RATE"
+                }
+              }
+            },
+            "plotType": "LINE"
+          }],
+          "timeshiftDuration": "0s",
+          "yAxis": {
+            "label": "Requests/sec",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "Cloud Run - Latency (p99)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"sentinel3\" AND metric.type=\"run.googleapis.com/request_latencies\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_PERCENTILE_99"
+                }
+              }
+            },
+            "plotType": "LINE"
+          }],
+          "yAxis": {
+            "label": "Latency (ms)",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "Cloud Run - Memory Usage",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"sentinel3\" AND metric.type=\"run.googleapis.com/container/memory/utilizations\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_MEAN"
+                }
+              }
+            },
+            "plotType": "LINE"
+          }],
+          "yAxis": {
+            "label": "Memory %",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "Cloud Run - CPU Usage",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"sentinel3\" AND metric.type=\"run.googleapis.com/container/cpu/utilizations\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_MEAN"
+                }
+              }
+            },
+            "plotType": "LINE"
+          }],
+          "yAxis": {
+            "label": "CPU %",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "Cloud Run - Instance Count",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"sentinel3\" AND metric.type=\"run.googleapis.com/container/instance_count\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_MEAN"
+                }
+              }
+            },
+            "plotType": "LINE"
+          }],
+          "yAxis": {
+            "label": "Instances",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "Cloud SQL - Connections",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_MEAN"
+                }
+              }
+            },
+            "plotType": "LINE"
+          }],
+          "yAxis": {
+            "label": "Connections",
+            "scale": "LINEAR"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,8 +1,7 @@
-# Grafana Dashboard Provisioning
 apiVersion: 1
 
 providers:
-  - name: 'Sentinel3 Dashboards'
+  - name: 'Sentinel3'
     orgId: 1
     folder: 'Sentinel3'
     folderUid: 'sentinel3'
@@ -12,4 +11,3 @@ providers:
     allowUiUpdates: true
     options:
       path: /var/lib/grafana/dashboards
-

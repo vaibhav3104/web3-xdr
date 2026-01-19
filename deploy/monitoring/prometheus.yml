@@ -1,0 +1,50 @@
+# Prometheus Configuration for Sentinel3
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Sentinel3 GPU API
+  - job_name: 'sentinel3-gpu-api'
+    metrics_path: '/metrics'
+    scheme: https
+    static_configs:
+      - targets: ['sentinel3-1003459948096.us-central1.run.app']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'sentinel3-gpu'
+
+  # Sentinel3 Production API
+  - job_name: 'sentinel3-production-api'
+    metrics_path: '/metrics'
+    scheme: https
+    static_configs:
+      - targets: ['web3-xdr-production-api-1003459948096.us-central1.run.app']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'sentinel3-production'
+
+  # Custom metrics endpoint
+  - job_name: 'sentinel3-stats'
+    metrics_path: '/api/stats'
+    scheme: https
+    static_configs:
+      - targets: ['sentinel3-1003459948096.us-central1.run.app']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'sentinel3-stats'
