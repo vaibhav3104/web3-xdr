@@ -1,0 +1,31 @@
+steps:
+  # Build the image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu:latest', '-f', 'Dockerfile', '.']
+  
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu:latest']
+  
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'sentinel3'
+      - '--image=us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu:latest'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=16Gi'
+      - '--cpu=4'
+      - '--gpu=1'
+      - '--gpu-type=nvidia-l4'
+      - '--timeout=300'
+      - '--set-env-vars=ML_MODEL_TYPE=transformer,ML_DEVICE=cuda,ENVIRONMENT=production'
+
+images:
+  - 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu:latest'
+
+timeout: '1800s'
