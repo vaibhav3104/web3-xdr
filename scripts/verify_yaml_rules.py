@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.rules.engine import RuleEngine
 from src.telemetry.event_normalizer import normalize_event_type, event_type_matches
 
-API_BASE = "https://sentinel3-1003459948096.us-central1.run.app"
+API_BASE = "https://web3-xdr-production-api-1003459948096.us-central1.run.app"
 
 
 def fetch_events(limit=100):

@@ -216,6 +216,9 @@ class Sentinel3Worker:
         self.runtime_engines: Dict[str, "RuntimeEngine"] = {}
         self.runtime_enabled = os.getenv("RUNTIME_ENABLED", "false").lower() == "true"
         
+        # YAML Rule Engine (initialized in initialize())
+        self.rule_engine = None
+        
         logger.info("worker_initialized", runtime_enabled=self.runtime_enabled)
     
     def _load_config(self) -> dict:
@@ -248,6 +251,13 @@ class Sentinel3Worker:
         
         self.bus = create_event_bus()
         logger.info("event_bus_initialized", bus_type=type(self.bus).__name__)
+        
+        # Initialize YAML Rule Engine for ingestion-time rule evaluation
+        from src.rules.engine import RuleEngine
+        self.rule_engine = RuleEngine()
+        rules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "rules")
+        rules_loaded = self.rule_engine.load_rules_from_directory(rules_dir)
+        logger.info("yaml_rules_loaded_for_ingestion", count=rules_loaded, stats=self.rule_engine.stats())
         
         # Initialize RPC providers and listeners for EVM chains
         for chain_config in self.config.get("chains", []):
@@ -456,6 +466,45 @@ class Sentinel3Worker:
                                                 status=event.status.value
                                             ).inc()
                                             logger.info("event_saved_directly", chain=chain_id, tx_hash=event.tx_hash)
+                                            
+                                            # ========================================
+                                            # YAML RULE EVALUATION (in ingestion loop)
+                                            # ========================================
+                                            # Evaluate rules directly here instead of relying on event bus
+                                            if self.rule_engine:
+                                                try:
+                                                    rule_matches = self.rule_engine.evaluate(db_event)
+                                                    if rule_matches:
+                                                        for match in rule_matches:
+                                                            logger.warning(
+                                                                "yaml_rule_triggered",
+                                                                rule_id=match.rule.id,
+                                                                rule_name=match.rule.name,
+                                                                severity=match.rule.severity,
+                                                                chain=chain_id,
+                                                                event_type=db_event.get("event_type"),
+                                                                tx_hash=event.tx_hash[:20] if event.tx_hash else ""
+                                                            )
+                                                            
+                                                            # Create incident for HIGH and CRITICAL severity rules
+                                                            if match.rule.severity.upper() in ["HIGH", "CRITICAL"]:
+                                                                await self._create_incident_from_rule(
+                                                                    rule=match.rule,
+                                                                    event_data=db_event,
+                                                                    db_event=db_event,
+                                                                    match_details=match.match_details
+                                                                )
+                                                            # Also create incidents for MEDIUM rules (optional, but useful)
+                                                            elif match.rule.severity.upper() == "MEDIUM":
+                                                                await self._create_incident_from_rule(
+                                                                    rule=match.rule,
+                                                                    event_data=db_event,
+                                                                    db_event=db_event,
+                                                                    match_details=match.match_details
+                                                                )
+                                                except Exception as rule_err:
+                                                    logger.debug("ingestion_rule_evaluation_error", error=str(rule_err))
+                                            
                                         except Exception as db_error:
                                             logger.error("direct_db_save_failed", chain=chain_id, tx_hash=event.tx_hash, error=str(db_error), exc_info=True)
                                         

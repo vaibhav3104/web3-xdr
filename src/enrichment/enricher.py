@@ -252,14 +252,14 @@ class EventEnricher:
         # Create transaction for MEV analysis
         try:
             tx = Transaction(
-                tx_hash=event.get("tx_hash", ""),
+                tx_hash=event.get("tx_hash") or "",
                 block_number=block_number,
-                tx_index=event.get("log_index", 0),
-                from_address=event.get("from_address", ""),
-                to_address=event.get("to_address", ""),
-                event_type=event.get("event_type", ""),
-                amount_usd=float(event.get("amount_usd", 0)),
-                gas_price=event.get("gas_price", 0),
+                tx_index=event.get("log_index") or 0,
+                from_address=event.get("from_address") or "",
+                to_address=event.get("to_address") or "",
+                event_type=event.get("event_type") or "",
+                amount_usd=float(event.get("amount_usd") or 0),
+                gas_price=event.get("gas_price") or 0,
                 timestamp=datetime.utcnow(),
                 contract_address=event.get("contract_address"),
             )

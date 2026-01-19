@@ -168,11 +168,11 @@ class PatternMatcher:
         # Store event
         self._events.append(event)
         
-        # Index by various keys
-        from_addr = event.get("from_address", "").lower()
-        to_addr = event.get("to_address", "").lower()
-        block = event.get("block_number", 0)
-        contract = event.get("contract_address", "").lower()
+        # Index by various keys (handle None values)
+        from_addr = (event.get("from_address") or "").lower()
+        to_addr = (event.get("to_address") or "").lower()
+        block = event.get("block_number") or 0
+        contract = (event.get("contract_address") or "").lower()
         
         if from_addr:
             self._events_by_address[from_addr].append(event)
@@ -213,10 +213,10 @@ class PatternMatcher:
         self._events_by_contract = defaultdict(list)
         
         for event in self._events:
-            from_addr = event.get("from_address", "").lower()
-            to_addr = event.get("to_address", "").lower()
-            block = event.get("block_number", 0)
-            contract = event.get("contract_address", "").lower()
+            from_addr = (event.get("from_address") or "").lower()
+            to_addr = (event.get("to_address") or "").lower()
+            block = event.get("block_number") or 0
+            contract = (event.get("contract_address") or "").lower()
             
             if from_addr:
                 self._events_by_address[from_addr].append(event)
@@ -255,14 +255,22 @@ class PatternMatcher:
         # Look for swap sequences
         swaps = [
             e for e in block_events
-            if e.get("event_type", "").lower() in ("swap", "swapv3", "transfer")
+            if (e.get("event_type") or "").lower() in ("swap", "swapv3", "transfer")
         ]
         
         if len(swaps) < 3:
             return matches
         
-        # Sort by log index
-        swaps.sort(key=lambda e: e.get("log_index", 0))
+        # Sort by log index (handle string/int/None)
+        def get_log_index(e):
+            idx = e.get("log_index")
+            if idx is None:
+                return 0
+            try:
+                return int(idx)
+            except (ValueError, TypeError):
+                return 0
+        swaps.sort(key=get_log_index)
         
         # Check for sandwich pattern
         for i in range(len(swaps) - 2):
@@ -270,15 +278,15 @@ class PatternMatcher:
             victim = swaps[i + 1]
             back = swaps[i + 2]
             
-            front_addr = front.get("from_address", "").lower()
-            victim_addr = victim.get("from_address", "").lower()
-            back_addr = back.get("from_address", "").lower()
+            front_addr = (front.get("from_address") or "").lower()
+            victim_addr = (victim.get("from_address") or "").lower()
+            back_addr = (back.get("from_address") or "").lower()
             
             # Same attacker, different victim
             if front_addr == back_addr and front_addr != victim_addr:
                 # Same contract (same pool)
                 if front.get("contract_address") == victim.get("contract_address") == back.get("contract_address"):
-                    profit = float(back.get("amount_usd", 0)) - float(front.get("amount_usd", 0))
+                    profit = float(back.get("amount_usd") or 0) - float(front.get("amount_usd") or 0)
                     
                     if profit > 0:
                         matches.append(PatternMatch(
@@ -316,7 +324,7 @@ class PatternMatcher:
         
         # Count operations in same block
         operation_count = len(block_events)
-        total_volume = sum(float(e.get("amount_usd", 0)) for e in block_events)
+        total_volume = sum(float(e.get("amount_usd") or 0) for e in block_events)
         
         # Flash loan attack indicators
         if operation_count > 20 and total_volume > 1_000_000:
@@ -333,7 +341,7 @@ class PatternMatcher:
                     "same_block": True,
                     "block_operation_count": operation_count,
                     "block_volume_usd": total_volume,
-                    "flash_loan_amount_usd": float(event.get("amount_usd", 0)),
+                    "flash_loan_amount_usd": float(event.get("amount_usd") or 0),
                 }
             ))
         
@@ -348,7 +356,7 @@ class PatternMatcher:
         if event.get("event_type") not in ("LiquidityRemove", "liquidity_remove", "Burn"):
             return matches
         
-        contract = event.get("contract_address", "").lower()
+        contract = (event.get("contract_address") or "").lower()
         if not contract:
             return matches
         
@@ -359,8 +367,8 @@ class PatternMatcher:
         adds = [e for e in contract_events if e.get("event_type") in ("LiquidityAdd", "liquidity_add", "Mint")]
         removes = [e for e in contract_events if e.get("event_type") in ("LiquidityRemove", "liquidity_remove", "Burn")]
         
-        total_added = sum(float(e.get("amount_usd", 0)) for e in adds)
-        total_removed = sum(float(e.get("amount_usd", 0)) for e in removes)
+        total_added = sum(float(e.get("amount_usd") or 0) for e in adds)
+        total_removed = sum(float(e.get("amount_usd") or 0) for e in removes)
         
         if total_added > 0:
             removed_percent = (total_removed / total_added) * 100
@@ -391,8 +399,8 @@ class PatternMatcher:
         matches = []
         config = self.PATTERN_CONFIGS[PatternType.WASH_TRADE]
         
-        from_addr = event.get("from_address", "").lower()
-        to_addr = event.get("to_address", "").lower()
+        from_addr = (event.get("from_address") or "").lower()
+        to_addr = (event.get("to_address") or "").lower()
         
         if not from_addr or not to_addr:
             return matches
@@ -404,11 +412,11 @@ class PatternMatcher:
         # Count trades between these addresses
         trades_a_to_b = [
             e for e in from_events
-            if e.get("to_address", "").lower() == to_addr
+            if (e.get("to_address") or "").lower() == to_addr
         ]
         trades_b_to_a = [
             e for e in to_events
-            if e.get("to_address", "").lower() == from_addr
+            if (e.get("to_address") or "").lower() == from_addr
         ]
         
         total_trades = len(trades_a_to_b) + len(trades_b_to_a)
@@ -440,7 +448,7 @@ class PatternMatcher:
         if event.get("event_type") not in ("Lock", "SendToChain", "LogMessagePublished"):
             return matches
         
-        from_addr = event.get("from_address", "").lower()
+        from_addr = (event.get("from_address") or "").lower()
         if not from_addr:
             return matches
         
@@ -452,7 +460,7 @@ class PatternMatcher:
         ]
         
         if len(bridge_events) >= config.min_events:
-            total_bridged = sum(float(e.get("amount_usd", 0)) for e in bridge_events)
+            total_bridged = sum(float(e.get("amount_usd") or 0) for e in bridge_events)
             
             matches.append(PatternMatch(
                 pattern_type=PatternType.RAPID_BRIDGING,
