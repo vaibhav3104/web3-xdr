@@ -200,9 +200,31 @@ class RuleEngine:
         thresholds = rule.thresholds
         if thresholds:
             if 'min_amount_usd' in thresholds:
-                amount_usd = event.get('amount_usd', 0)
+                # Handle amount_usd as string, Decimal, or number
+                amount_usd_raw = event.get('amount_usd', 0)
+                try:
+                    amount_usd = float(amount_usd_raw) if amount_usd_raw else 0
+                except (ValueError, TypeError):
+                    amount_usd = 0
+                
                 if amount_usd < thresholds['min_amount_usd']:
                     return None
+                
+                # Add matched threshold to details
+                match_details["amount_usd"] = amount_usd
+            
+            if 'min_amount' in thresholds:
+                # Also support raw token amount thresholds
+                amount_raw = event.get('amount', 0)
+                try:
+                    amount = float(amount_raw) if amount_raw else 0
+                except (ValueError, TypeError):
+                    amount = 0
+                
+                if amount < thresholds['min_amount']:
+                    return None
+                
+                match_details["amount"] = amount
         
         return match_details
     

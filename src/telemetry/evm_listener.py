@@ -28,6 +28,7 @@ from .contract_alerts import (
     ThreatLevel, AlertStatus, contract_alert_store
 )
 from .event_signatures import get_event_info, identify_event_type, get_protocol_name, get_event_severity
+from .price_feed import get_price_feed, PriceFeed
 from ..models.events import SecurityEvent, EventType, Severity
 
 # Try to import ML classifier (may not be available in all environments)
@@ -117,6 +118,9 @@ class EVMListener(ChainListener):
         
         # Token decimals cache
         self._token_decimals: Dict[str, int] = {}
+        
+        # Price feed for USD conversion
+        self._price_feed: PriceFeed = get_price_feed()
         
         # Contract deployment detection
         self.analyze_deployments = True  # Enable by default
@@ -625,7 +629,7 @@ class EVMListener(ChainListener):
         block_timestamp: datetime
     ) -> Optional[SecurityEvent]:
         """
-        Parse an ERC20 Transfer event.
+        Parse an ERC20 Transfer event with USD conversion.
         """
         try:
             # Transfer(address indexed from, address indexed to, uint256 value)
@@ -641,11 +645,23 @@ class EVMListener(ChainListener):
             
             amount = Decimal(value) / Decimal(10 ** decimals)
             
+            # Get USD price and calculate USD value
+            amount_usd = Decimal("0")
+            try:
+                price = await self._price_feed.get_price(self.chain_id, token_address)
+                if price > 0:
+                    amount_usd = self._price_feed.calculate_usd_value(amount, price)
+            except Exception as price_err:
+                logger.debug("price_fetch_error", token=token_address[:10], error=str(price_err))
+            
             # Determine event type based on addresses
             event_type = self._classify_transfer(from_address, to_address)
             
-            # Determine severity based on amount
-            severity = self._calculate_severity(amount, token_address)
+            # Determine severity based on USD amount
+            severity = self._calculate_severity(amount, token_address, amount_usd)
+            
+            # Get token symbol for metadata
+            token_symbol = self._price_feed.get_token_symbol(self.chain_id, token_address) or "UNKNOWN"
             
             return SecurityEvent(
                 chain_id=self.chain_id,
@@ -658,11 +674,18 @@ class EVMListener(ChainListener):
                 source_address=from_address,
                 dest_address=to_address,
                 contract_address=token_address,
-                asset_type="ERC20",
+                asset_type=token_symbol,
                 asset_address=token_address,
                 amount=amount,
+                amount_usd=amount_usd,
                 bridge_id=self._get_bridge_id(from_address, to_address),
-                raw_event=dict(log)
+                raw_event={
+                    **dict(log),
+                    "token_symbol": token_symbol,
+                    "amount_human": str(amount),
+                    "amount_usd": str(amount_usd),
+                    "token_price_usd": price if 'price' in dir() else 0,
+                }
             )
             
         except Exception as e:
@@ -754,13 +777,26 @@ class EVMListener(ChainListener):
         
         return EventType.TRANSFER
     
-    def _calculate_severity(self, amount: Decimal, token_address: str) -> Severity:
+    def _calculate_severity(self, amount: Decimal, token_address: str, amount_usd: Optional[Decimal] = None) -> Severity:
         """
-        Calculate severity based on transfer amount.
+        Calculate severity based on transfer amount in USD.
         
-        TODO: Use price feeds for accurate USD conversion.
+        Uses price feed for accurate USD conversion.
         """
-        # Rough thresholds (should use actual USD values)
+        # Use USD value if available
+        if amount_usd is not None and amount_usd > 0:
+            usd_value = float(amount_usd)
+            if usd_value >= 10_000_000:  # $10M+
+                return Severity.CRITICAL
+            elif usd_value >= 1_000_000:  # $1M+
+                return Severity.HIGH
+            elif usd_value >= 100_000:  # $100K+
+                return Severity.MEDIUM
+            elif usd_value >= 10_000:  # $10K+
+                return Severity.LOW
+            return Severity.INFO
+        
+        # Fallback to token amount thresholds (less accurate)
         if amount > 1000000:
             return Severity.CRITICAL
         elif amount > 100000:

@@ -425,6 +425,16 @@ class Sentinel3Worker:
                                             else:
                                                 block_ts_str = str(block_ts)
                                             
+                                            # Extract amount and amount_usd from event
+                                            amount = getattr(event, 'amount', None)
+                                            amount_usd = getattr(event, 'amount_usd', None)
+                                            
+                                            # Convert Decimal to float for JSON serialization
+                                            if amount is not None:
+                                                amount = float(amount) if hasattr(amount, '__float__') else amount
+                                            if amount_usd is not None:
+                                                amount_usd = float(amount_usd) if hasattr(amount_usd, '__float__') else amount_usd
+                                            
                                             db_event = {
                                                 "event_id": event_id,
                                                 "chain_id": chain_id,
@@ -435,6 +445,8 @@ class Sentinel3Worker:
                                                 "contract_address": event.contract_address,
                                                 "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
                                                 "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
+                                                "amount": amount,
+                                                "amount_usd": amount_usd,
                                                 "severity": severity_str,
                                                 "raw_data": raw_data,
                                             }
