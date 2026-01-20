@@ -195,6 +195,97 @@ init_error: Optional[str] = None
 start_time = datetime.now(timezone.utc)
 
 
+class RateLimitHandler:
+    """
+    Handles RPC rate limiting with exponential backoff.
+    
+    Tracks rate limit errors per chain and applies exponential backoff
+    to avoid overwhelming rate-limited endpoints.
+    """
+    
+    def __init__(self):
+        self._backoff_until: Dict[str, float] = {}  # chain_id -> timestamp
+        self._consecutive_errors: Dict[str, int] = {}  # chain_id -> error count
+        self._base_backoff = 5.0  # Base backoff in seconds
+        self._max_backoff = 300.0  # Max backoff (5 minutes)
+        self._rate_limit_codes = {-32005, -32000, 429}  # Common rate limit error codes
+    
+    def is_rate_limited(self, chain_id: str) -> bool:
+        """Check if chain is currently in backoff period."""
+        import time
+        backoff_until = self._backoff_until.get(chain_id, 0)
+        return time.time() < backoff_until
+    
+    def get_remaining_backoff(self, chain_id: str) -> float:
+        """Get remaining backoff time in seconds."""
+        import time
+        backoff_until = self._backoff_until.get(chain_id, 0)
+        remaining = backoff_until - time.time()
+        return max(0, remaining)
+    
+    def record_success(self, chain_id: str):
+        """Record successful request - reset error count."""
+        self._consecutive_errors[chain_id] = 0
+    
+    def record_rate_limit(self, chain_id: str, error: Exception) -> float:
+        """
+        Record rate limit error and calculate backoff.
+        
+        Returns: backoff duration in seconds
+        """
+        import time
+        import random
+        
+        # Increment error count
+        errors = self._consecutive_errors.get(chain_id, 0) + 1
+        self._consecutive_errors[chain_id] = errors
+        
+        # Calculate exponential backoff with jitter
+        backoff = min(
+            self._base_backoff * (2 ** (errors - 1)),
+            self._max_backoff
+        )
+        # Add 10-30% jitter
+        jitter = backoff * (0.1 + random.random() * 0.2)
+        backoff_with_jitter = backoff + jitter
+        
+        # Set backoff deadline
+        self._backoff_until[chain_id] = time.time() + backoff_with_jitter
+        
+        logger.warning(
+            "rate_limit_backoff",
+            chain=chain_id,
+            consecutive_errors=errors,
+            backoff_seconds=round(backoff_with_jitter, 1),
+            error=str(error)[:100]
+        )
+        
+        return backoff_with_jitter
+    
+    def is_rate_limit_error(self, error: Exception) -> bool:
+        """Check if error is a rate limit error."""
+        error_str = str(error).lower()
+        
+        # Check for common rate limit indicators
+        if any(indicator in error_str for indicator in [
+            "rate limit", "limit exceeded", "too many requests",
+            "429", "-32005", "throttl", "quota"
+        ]):
+            return True
+        
+        # Check for error codes in exception
+        if hasattr(error, 'code') and error.code in self._rate_limit_codes:
+            return True
+        
+        # Check for nested error codes
+        if hasattr(error, 'args') and error.args:
+            for arg in error.args:
+                if isinstance(arg, dict) and arg.get('code') in self._rate_limit_codes:
+                    return True
+        
+        return False
+
+
 class Sentinel3Worker:
     """
     Sentinel3 Worker - Handles chain ingestion and event processing.
@@ -211,6 +302,9 @@ class Sentinel3Worker:
         
         # Track processed blocks per chain
         self.processed_blocks: Dict[str, int] = {}
+        
+        # Rate limit handler for RPC endpoints
+        self.rate_limiter = RateLimitHandler()
         
         # Runtime Security Plane components
         self.runtime_engines: Dict[str, "RuntimeEngine"] = {}
@@ -344,6 +438,12 @@ class Sentinel3Worker:
             try:
                 for chain_id, listener in self.listeners.items():
                     try:
+                        # Check if chain is rate limited
+                        if self.rate_limiter.is_rate_limited(chain_id):
+                            remaining = self.rate_limiter.get_remaining_backoff(chain_id)
+                            logger.debug("chain_rate_limited_skipping", chain=chain_id, remaining_seconds=round(remaining, 1))
+                            continue
+                        
                         # Get latest block (with metrics)
                         rpc_provider = self.rpc_providers[chain_id]
                         import time
@@ -352,6 +452,9 @@ class Sentinel3Worker:
                         latency = time.time() - start_time
                         rpc_latency_seconds.labels(chain=chain_id, endpoint="primary", method="eth_blockNumber").observe(latency)
                         rpc_requests_total.labels(chain=chain_id, endpoint="primary", method="eth_blockNumber", status="success").inc()
+                        
+                        # Record success - reset rate limit counter
+                        self.rate_limiter.record_success(chain_id)
                         
                         # Update finality tracker
                         block_info = await rpc_provider.get_block(head_block, require_quorum=False)
@@ -380,10 +483,10 @@ class Sentinel3Worker:
                         lag = head_block - processed
                         head_lag_blocks.labels(chain=chain_id).set(lag)
                         
-                        # Poll for new logs (limit to 10 blocks to avoid RPC timeouts)
+                        # Poll for new logs (limit to 3 blocks to avoid RPC rate limits)
                         if processed < head_block:
-                            # Get logs from last processed to head (max 10 blocks)
-                            from_block = max(processed + 1, head_block - 10)
+                            # Get logs from last processed to head (max 3 blocks to avoid rate limits)
+                            from_block = max(processed + 1, head_block - 3)
                             to_block = head_block
                             
                             # Process blocks via listener for contract deployment detection
@@ -392,9 +495,19 @@ class Sentinel3Worker:
                                 try:
                                     logger.debug("listener_processing_blocks", chain=chain_id, from_block=from_block, to_block=to_block)
                                     for block_num in range(from_block, to_block + 1):
+                                        # Check rate limit before each block
+                                        if self.rate_limiter.is_rate_limited(chain_id):
+                                            logger.debug("block_processing_rate_limited", chain=chain_id, block=block_num)
+                                            break
                                         await listener.process_block(block_num)
+                                        # Small delay between blocks to avoid rate limits
+                                        await asyncio.sleep(0.1)
                                 except Exception as listener_err:
-                                    logger.warning("listener_process_block_error", chain=chain_id, from_block=from_block, to_block=to_block, error=str(listener_err), exc_info=True)
+                                    if self.rate_limiter.is_rate_limit_error(listener_err):
+                                        self.rate_limiter.record_rate_limit(chain_id, listener_err)
+                                        logger.warning("listener_rate_limited", chain=chain_id, error=str(listener_err)[:100])
+                                    else:
+                                        logger.warning("listener_process_block_error", chain=chain_id, from_block=from_block, to_block=to_block, error=str(listener_err), exc_info=True)
                             else:
                                 logger.debug("listener_not_available", chain=chain_id, listener_exists=listener is not None, w3_exists=listener.w3 is not None if listener else False)
                             
@@ -526,10 +639,20 @@ class Sentinel3Worker:
                                 monitor_state.add_blocks_scanned(blocks_processed)
                                 
                             except Exception as e:
-                                logger.error("log_poll_failed", chain=chain_id, error=str(e))
+                                # Check if this is a rate limit error
+                                if self.rate_limiter.is_rate_limit_error(e):
+                                    backoff = self.rate_limiter.record_rate_limit(chain_id, e)
+                                    logger.warning("log_poll_rate_limited", chain=chain_id, backoff_seconds=round(backoff, 1))
+                                else:
+                                    logger.error("log_poll_failed", chain=chain_id, error=str(e))
                         
                     except Exception as e:
-                        logger.error("chain_ingestion_error", chain=chain_id, error=str(e))
+                        # Check if this is a rate limit error
+                        if self.rate_limiter.is_rate_limit_error(e):
+                            backoff = self.rate_limiter.record_rate_limit(chain_id, e)
+                            logger.warning("chain_ingestion_rate_limited", chain=chain_id, backoff_seconds=round(backoff, 1))
+                        else:
+                            logger.error("chain_ingestion_error", chain=chain_id, error=str(e))
                 
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
                 
