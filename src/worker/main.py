@@ -436,12 +436,22 @@ class Sentinel3Worker:
         
         # Track chains that successfully process
         successful_chains = set()
+        iteration_count = 0
         
         while self.running:
             try:
-                # Log periodic status
-                if not successful_chains:
-                    logger.info("ingestion_loop_iteration", listener_count=len(self.listeners))
+                iteration_count += 1
+                
+                # Log periodic status every 10 iterations
+                if iteration_count % 10 == 1:
+                    connected_chains = [cid for cid, l in self.listeners.items() if l and l.w3]
+                    logger.info(
+                        "ingestion_loop_iteration",
+                        iteration=iteration_count,
+                        listener_count=len(self.listeners),
+                        connected_chains=len(connected_chains),
+                        successful_chains=len(successful_chains)
+                    )
                 
                 for chain_id, listener in self.listeners.items():
                     try:
@@ -1175,6 +1185,8 @@ class Sentinel3Worker:
                 )
                 
                 if not messages:
+                    # Sleep briefly to avoid tight loop when queue is empty
+                    await asyncio.sleep(0.5)
                     continue
                 
                 # Update queue depth metric
