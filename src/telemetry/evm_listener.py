@@ -183,6 +183,8 @@ class EVMListener(ChainListener):
                 error=str(e),
                 rpc_urls=[url[:40] + "..." for url in self._rpc_urls]
             )
+            # Clear w3 on connection failure so it's None
+            self.w3 = None
             return False
     
     def get_provider_stats(self) -> Dict:
