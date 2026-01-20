@@ -631,13 +631,13 @@ ADMIN_SIGNATURES = {
     # OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
     "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0": {
         "name": "OwnershipTransferred",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "severity": "critical"
     },
     # AdminChanged(address previousAdmin, address newAdmin)
     "0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f": {
         "name": "AdminChanged",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "severity": "critical"
     },
     # Upgraded(address indexed implementation)
@@ -662,26 +662,26 @@ ADMIN_SIGNATURES = {
     # RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)
     "0x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d": {
         "name": "RoleGranted",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "severity": "high"
     },
     # RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)
     "0xf6391f5c32d9c69d2a47ea670b442974b53935d1edc7fd64eb21e047a839171b": {
         "name": "RoleRevoked",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "severity": "high"
     },
     # NewAdmin(address indexed newAdmin) - Curve
     "0x71614071b88dee5e0b2ae578a9dd7b2ebbe9ae832ba419dc0242cd065a290b6c": {
         "name": "NewAdmin",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "protocol": "curve",
         "severity": "critical"
     },
     # AuthorizerChanged(address indexed newAuthorizer) - Balancer
     "0x94b979b6831a51293e2641426f97747feed46f17779fed9cd18d1ecefcfe92ef": {
         "name": "AuthorizerChanged",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "protocol": "balancer",
         "severity": "critical"
     },
@@ -695,7 +695,7 @@ ADMIN_SIGNATURES = {
     # GuardianSetAdded(uint32 indexed index, address[] guardians) - Wormhole
     "0x6b6abc6d6e6f6b6abc6d6e6f6b6abc6d6e6f6b6abc6d6e6f6b6abc6d6e6f6b6a": {
         "name": "GuardianSetAdded",
-        "type": EventType.ADMIN_CHANGE,
+        "type": EventType.ADMIN_CHANGED,
         "protocol": "wormhole",
         "severity": "critical"
     },
