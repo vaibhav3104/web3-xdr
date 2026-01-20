@@ -434,21 +434,43 @@ class Sentinel3Worker:
         """Loop A: Ingest events from chains."""
         logger.info("ingestion_loop_started")
         
+        # Track chains that successfully process
+        successful_chains = set()
+        
         while self.running:
             try:
+                # Log periodic status
+                if not successful_chains:
+                    logger.info("ingestion_loop_iteration", listener_count=len(self.listeners))
+                
                 for chain_id, listener in self.listeners.items():
                     try:
+                        # Skip chains where listener didn't connect (w3 is None)
+                        if listener is None or listener.w3 is None:
+                            continue
+                        
                         # Check if chain is rate limited
                         if self.rate_limiter.is_rate_limited(chain_id):
                             remaining = self.rate_limiter.get_remaining_backoff(chain_id)
                             logger.debug("chain_rate_limited_skipping", chain=chain_id, remaining_seconds=round(remaining, 1))
                             continue
                         
-                        # Get latest block (with metrics)
+                        # Get latest block (with metrics and timeout)
                         rpc_provider = self.rpc_providers[chain_id]
                         import time
                         start_time = time.time()
-                        head_block = await rpc_provider.get_block_number()
+                        
+                        # Add timeout to prevent blocking
+                        try:
+                            head_block = await asyncio.wait_for(
+                                rpc_provider.get_block_number(),
+                                timeout=30.0  # 30 second timeout
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning("rpc_timeout", chain=chain_id, method="get_block_number")
+                            self.rate_limiter.record_rate_limit(chain_id, Exception("RPC timeout"))
+                            continue
+                        
                         latency = time.time() - start_time
                         rpc_latency_seconds.labels(chain=chain_id, endpoint="primary", method="eth_blockNumber").observe(latency)
                         rpc_requests_total.labels(chain=chain_id, endpoint="primary", method="eth_blockNumber", status="success").inc()
@@ -456,8 +478,21 @@ class Sentinel3Worker:
                         # Record success - reset rate limit counter
                         self.rate_limiter.record_success(chain_id)
                         
-                        # Update finality tracker
-                        block_info = await rpc_provider.get_block(head_block, require_quorum=False)
+                        # Track successful chain
+                        if chain_id not in successful_chains:
+                            successful_chains.add(chain_id)
+                            logger.info("chain_processing_started", chain=chain_id, head_block=head_block)
+                        
+                        # Update finality tracker (with timeout)
+                        try:
+                            block_info = await asyncio.wait_for(
+                                rpc_provider.get_block(head_block, require_quorum=False),
+                                timeout=30.0
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning("rpc_timeout", chain=chain_id, method="get_block")
+                            block_info = None
+                        
                         if block_info:
                             block_hash = block_info.get("hash", "")
                             parent_hash = block_info.get("parentHash", "")
@@ -512,7 +547,16 @@ class Sentinel3Worker:
                                 logger.debug("listener_not_available", chain=chain_id, listener_exists=listener is not None, w3_exists=listener.w3 is not None if listener else False)
                             
                             try:
-                                logs = await rpc_provider.get_logs(from_block, to_block)
+                                # Get logs with timeout
+                                try:
+                                    logs = await asyncio.wait_for(
+                                        rpc_provider.get_logs(from_block, to_block),
+                                        timeout=60.0  # 60 second timeout for logs
+                                    )
+                                except asyncio.TimeoutError:
+                                    logger.warning("rpc_timeout", chain=chain_id, method="get_logs", from_block=from_block, to_block=to_block)
+                                    self.rate_limiter.record_rate_limit(chain_id, Exception("get_logs timeout"))
+                                    continue
                                 
                                 # Process logs into SecurityEvents
                                 for log in logs:
