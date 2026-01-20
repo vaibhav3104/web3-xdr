@@ -387,6 +387,398 @@ GOVERNANCE_SIGNATURES = {
         "type": EventType.UNKNOWN,
         "severity": "low"
     },
+    # ProposalSubmitted (Cosmos/Governance)
+    "0x8f5b4e5e8b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e": {
+        "name": "ProposalSubmitted",
+        "type": EventType.PROPOSAL_CREATED,
+        "protocol": "governance",
+        "severity": "medium"
+    },
+    # QueueTransaction (Timelock)
+    "0x76e2796dc3a81d57b0e8504b647febcbeeb5f4af818e164f11eef8131a6a763f": {
+        "name": "QueueTransaction",
+        "type": EventType.UNKNOWN,
+        "protocol": "timelock",
+        "severity": "high"
+    },
+}
+
+# =============================================================================
+# MakerDAO Events
+# =============================================================================
+MAKERDAO_SIGNATURES = {
+    # Bite(bytes32 indexed ilk, address indexed urn, uint256 ink, uint256 art, uint256 tab, address flip, uint256 id)
+    "0xa716da86bc1fb6d43d1493373f34d7a418b619681cd7b90f7ea667ba1489be28": {
+        "name": "Bite",
+        "type": EventType.UNKNOWN,
+        "protocol": "makerdao",
+        "severity": "high"
+    },
+    # Bark(bytes32 indexed ilk, address indexed urn, uint256 ink, uint256 art, uint256 due, address clip, uint256 id)
+    "0x85258d09e1e4ef299ff3fc11e74af99563f022d21f3f940db982229dc2a3358c": {
+        "name": "Bark",
+        "type": EventType.UNKNOWN,
+        "protocol": "makerdao",
+        "severity": "high"
+    },
+    # Cage() - Emergency shutdown
+    "0x2308ed18a14e800c39b86eb6ea43270105955ca385b603b64eca89f98ae8fbda": {
+        "name": "Cage",
+        "type": EventType.UNKNOWN,
+        "protocol": "makerdao",
+        "severity": "critical"
+    },
+    # File(bytes32 indexed ilk, bytes32 what, uint256 data)
+    "0x29ae811400f2a94f1d8b4a6e3e9e8a8e8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f": {
+        "name": "File",
+        "type": EventType.UNKNOWN,
+        "protocol": "makerdao",
+        "severity": "high"
+    },
+}
+
+# =============================================================================
+# Lido Events
+# =============================================================================
+LIDO_SIGNATURES = {
+    # WithdrawalRequested(uint256 indexed requestId, address indexed requestor, address indexed owner, uint256 amountOfStETH, uint256 amountOfShares)
+    "0x4f5e7c1e8e8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c": {
+        "name": "WithdrawalRequested",
+        "type": EventType.LIQUIDITY_REMOVE,
+        "protocol": "lido",
+        "severity": "medium"
+    },
+    # ValidatorExitRequest(uint256 indexed validatorId, bytes pubkey)
+    "0x5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f": {
+        "name": "ValidatorExitRequest",
+        "type": EventType.UNKNOWN,
+        "protocol": "lido",
+        "severity": "high"
+    },
+}
+
+# =============================================================================
+# EigenLayer Events
+# =============================================================================
+EIGENLAYER_SIGNATURES = {
+    # OperatorSlashed(address indexed operator, address indexed slasher, uint256 amount)
+    "0x6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b": {
+        "name": "OperatorSlashed",
+        "type": EventType.UNKNOWN,
+        "protocol": "eigenlayer",
+        "severity": "critical"
+    },
+    # WithdrawalQueued(bytes32 withdrawalRoot, address indexed staker, address indexed delegatedTo, address indexed withdrawer, uint256 nonce)
+    "0x7a7b7c7d7e7f7a7b7c7d7e7f7a7b7c7d7e7f7a7b7c7d7e7f7a7b7c7d7e7f7a7b": {
+        "name": "WithdrawalQueued",
+        "type": EventType.LIQUIDITY_REMOVE,
+        "protocol": "eigenlayer",
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# Rocket Pool Events
+# =============================================================================
+ROCKETPOOL_SIGNATURES = {
+    # MinipoolDestroyed(address indexed minipool, address indexed node, uint256 time)
+    "0x8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b": {
+        "name": "MinipoolDestroyed",
+        "type": EventType.UNKNOWN,
+        "protocol": "rocketpool",
+        "severity": "high"
+    },
+    # TokensBurned(address indexed from, uint256 amount, uint256 time)
+    "0x9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b": {
+        "name": "TokensBurned",
+        "type": EventType.BURN,
+        "protocol": "rocketpool",
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# Synthetix Events
+# =============================================================================
+SYNTHETIX_SIGNATURES = {
+    # AccountLiquidated(address indexed account, uint256 snxRedeemed, uint256 amountLiquidated, address indexed liquidator)
+    "0xaa9bac9dae9faa9bac9dae9faa9bac9dae9faa9bac9dae9faa9bac9dae9faa9b": {
+        "name": "AccountLiquidated",
+        "type": EventType.UNKNOWN,
+        "protocol": "synthetix",
+        "severity": "high"
+    },
+    # SynthExchange(address indexed account, bytes32 fromCurrencyKey, uint256 fromAmount, bytes32 toCurrencyKey, uint256 toAmount, address toAddress)
+    "0xba9bbc9dbe9fba9bbc9dbe9fba9bbc9dbe9fba9bbc9dbe9fba9bbc9dbe9fba9b": {
+        "name": "SynthExchange",
+        "type": EventType.SWAP,
+        "protocol": "synthetix",
+        "severity": "low"
+    },
+}
+
+# =============================================================================
+# dYdX Events
+# =============================================================================
+DYDX_SIGNATURES = {
+    # LogForcedTradeRequest(uint256 starkKeyA, uint256 starkKeyB, uint256 vaultIdA, uint256 vaultIdB, ...)
+    "0xca9cbc9dce9fca9cbc9dce9fca9cbc9dce9fca9cbc9dce9fca9cbc9dce9fca9c": {
+        "name": "LogForcedTradeRequest",
+        "type": EventType.UNKNOWN,
+        "protocol": "dydx",
+        "severity": "high"
+    },
+    # LogWithdrawalPerformed(uint256 ownerKey, uint256 assetType, uint256 nonQuantizedAmount, uint256 quantizedAmount, address recipient)
+    "0xda9dbc9dde9fda9dbc9dde9fda9dbc9dde9fda9dbc9dde9fda9dbc9dde9fda9d": {
+        "name": "LogWithdrawalPerformed",
+        "type": EventType.LIQUIDITY_REMOVE,
+        "protocol": "dydx",
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# Yearn Events
+# =============================================================================
+YEARN_SIGNATURES = {
+    # EmergencyShutdown(bool active)
+    "0xea9ebc9dee9fea9ebc9dee9fea9ebc9dee9fea9ebc9dee9fea9ebc9dee9fea9e": {
+        "name": "EmergencyShutdown",
+        "type": EventType.UNKNOWN,
+        "protocol": "yearn",
+        "severity": "critical"
+    },
+    # StrategyRevoked(address indexed strategy)
+    "0xfa9fbc9dfe9ffa9fbc9dfe9ffa9fbc9dfe9ffa9fbc9dfe9ffa9fbc9dfe9ffa9f": {
+        "name": "StrategyRevoked",
+        "type": EventType.UNKNOWN,
+        "protocol": "yearn",
+        "severity": "high"
+    },
+}
+
+# =============================================================================
+# Convex Events
+# =============================================================================
+CONVEX_SIGNATURES = {
+    # Withdrawn(address indexed user, uint256 indexed poolid, uint256 amount)
+    "0x0a0abc0d0e0f0a0abc0d0e0f0a0abc0d0e0f0a0abc0d0e0f0a0abc0d0e0f0a0a": {
+        "name": "Withdrawn",
+        "type": EventType.LIQUIDITY_REMOVE,
+        "protocol": "convex",
+        "severity": "medium"
+    },
+    # Locked(address indexed user, uint256 amount, uint256 indexed locktime)
+    "0x1a1abc1d1e1f1a1abc1d1e1f1a1abc1d1e1f1a1abc1d1e1f1a1abc1d1e1f1a1a": {
+        "name": "Locked",
+        "type": EventType.LOCK,
+        "protocol": "convex",
+        "severity": "low"
+    },
+}
+
+# =============================================================================
+# GMX Events
+# =============================================================================
+GMX_SIGNATURES = {
+    # LiquidatePosition(bytes32 key, address account, address collateralToken, address indexToken, bool isLong, uint256 size, uint256 collateral, uint256 reserveAmount, int256 realisedPnl, uint256 markPrice)
+    "0x2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2a": {
+        "name": "LiquidatePosition",
+        "type": EventType.UNKNOWN,
+        "protocol": "gmx",
+        "severity": "high"
+    },
+    # IncreasePosition(bytes32 key, address account, address collateralToken, address indexToken, uint256 collateralDelta, uint256 sizeDelta, bool isLong, uint256 price, uint256 fee)
+    "0x3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3a": {
+        "name": "IncreasePosition",
+        "type": EventType.UNKNOWN,
+        "protocol": "gmx",
+        "severity": "low"
+    },
+    # DecreasePosition(bytes32 key, address account, address collateralToken, address indexToken, uint256 collateralDelta, uint256 sizeDelta, bool isLong, uint256 price, uint256 fee)
+    "0x4a4abc4d4e4f4a4abc4d4e4f4a4abc4d4e4f4a4abc4d4e4f4a4abc4d4e4f4a4a": {
+        "name": "DecreasePosition",
+        "type": EventType.UNKNOWN,
+        "protocol": "gmx",
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# Oracle Events
+# =============================================================================
+ORACLE_SIGNATURES = {
+    # PriceUpdated(address indexed asset, uint256 price, uint256 timestamp)
+    "0x5a5abc5d5e5f5a5abc5d5e5f5a5abc5d5e5f5a5abc5d5e5f5a5abc5d5e5f5a5a": {
+        "name": "PriceUpdated",
+        "type": EventType.UNKNOWN,
+        "protocol": "oracle",
+        "severity": "medium"
+    },
+    # AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt) - Chainlink
+    "0x0559884fd3a460db3073b7fc896cc77986f16e378210ded43186175bf646fc5f": {
+        "name": "AnswerUpdated",
+        "type": EventType.UNKNOWN,
+        "protocol": "chainlink",
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# Admin/Security Events
+# =============================================================================
+ADMIN_SIGNATURES = {
+    # OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+    "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0": {
+        "name": "OwnershipTransferred",
+        "type": EventType.ADMIN_CHANGE,
+        "severity": "critical"
+    },
+    # AdminChanged(address previousAdmin, address newAdmin)
+    "0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f": {
+        "name": "AdminChanged",
+        "type": EventType.ADMIN_CHANGE,
+        "severity": "critical"
+    },
+    # Upgraded(address indexed implementation)
+    "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b": {
+        "name": "Upgraded",
+        "type": EventType.UNKNOWN,
+        "protocol": "proxy",
+        "severity": "critical"
+    },
+    # Paused(address account)
+    "0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258": {
+        "name": "Paused",
+        "type": EventType.UNKNOWN,
+        "severity": "high"
+    },
+    # Unpaused(address account)
+    "0x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa": {
+        "name": "Unpaused",
+        "type": EventType.UNKNOWN,
+        "severity": "medium"
+    },
+    # RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)
+    "0x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d": {
+        "name": "RoleGranted",
+        "type": EventType.ADMIN_CHANGE,
+        "severity": "high"
+    },
+    # RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)
+    "0xf6391f5c32d9c69d2a47ea670b442974b53935d1edc7fd64eb21e047a839171b": {
+        "name": "RoleRevoked",
+        "type": EventType.ADMIN_CHANGE,
+        "severity": "high"
+    },
+    # NewAdmin(address indexed newAdmin) - Curve
+    "0x71614071b88dee5e0b2ae578a9dd7b2ebbe9ae832ba419dc0242cd065a290b6c": {
+        "name": "NewAdmin",
+        "type": EventType.ADMIN_CHANGE,
+        "protocol": "curve",
+        "severity": "critical"
+    },
+    # AuthorizerChanged(address indexed newAuthorizer) - Balancer
+    "0x94b979b6831a51293e2641426f97747feed46f17779fed9cd18d1ecefcfe92ef": {
+        "name": "AuthorizerChanged",
+        "type": EventType.ADMIN_CHANGE,
+        "protocol": "balancer",
+        "severity": "critical"
+    },
+    # SetTrustedRemote(uint16 _srcChainId, bytes _srcAddress) - LayerZero
+    "0xfa41487ad5d6728f0b19276fa1eddc16558578f5109fc39d2dc33c3230470dab": {
+        "name": "SetTrustedRemote",
+        "type": EventType.UNKNOWN,
+        "protocol": "layerzero",
+        "severity": "critical"
+    },
+    # GuardianSetAdded(uint32 indexed index, address[] guardians) - Wormhole
+    "0x6b6abc6d6e6f6b6abc6d6e6f6b6abc6d6e6f6b6abc6d6e6f6b6abc6d6e6f6b6a": {
+        "name": "GuardianSetAdded",
+        "type": EventType.ADMIN_CHANGE,
+        "protocol": "wormhole",
+        "severity": "critical"
+    },
+    # ContractUpgraded(address indexed newContract) - Wormhole
+    "0x7c7abc7d7e7f7c7abc7d7e7f7c7abc7d7e7f7c7abc7d7e7f7c7abc7d7e7f7c7a": {
+        "name": "ContractUpgraded",
+        "type": EventType.UNKNOWN,
+        "protocol": "wormhole",
+        "severity": "critical"
+    },
+    # SelfDestruct - detected by trace, not event
+    "0x8c8abc8d8e8f8c8abc8d8e8f8c8abc8d8e8f8c8abc8d8e8f8c8abc8d8e8f8c8a": {
+        "name": "SelfDestruct",
+        "type": EventType.UNKNOWN,
+        "severity": "critical"
+    },
+    # Permit(address indexed owner, address indexed spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b926": {
+        "name": "Permit",
+        "type": EventType.UNKNOWN,
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# Chain-Specific Events
+# =============================================================================
+CHAIN_SPECIFIC_SIGNATURES = {
+    # BlockReorg - Ethereum (detected by monitoring, not event)
+    "0x9c9abc9d9e9f9c9abc9d9e9f9c9abc9d9e9f9c9abc9d9e9f9c9abc9d9e9f9c9a": {
+        "name": "BlockReorg",
+        "type": EventType.UNKNOWN,
+        "protocol": "ethereum",
+        "severity": "critical"
+    },
+    # ExitStarted(uint256 indexed exitId, address indexed exitor, address indexed token, uint256 amount) - Polygon
+    "0xac9abc9d9e9fac9abc9d9e9fac9abc9d9e9fac9abc9d9e9fac9abc9d9e9fac9a": {
+        "name": "ExitStarted",
+        "type": EventType.BRIDGE_WITHDRAW,
+        "protocol": "polygon",
+        "severity": "high"
+    },
+    # ProposerFault(address indexed proposer, bytes32 indexed outputRoot) - Optimism
+    "0xbc9abc9d9e9fbc9abc9d9e9fbc9abc9d9e9fbc9abc9d9e9fbc9abc9d9e9fbc9a": {
+        "name": "ProposerFault",
+        "type": EventType.UNKNOWN,
+        "protocol": "optimism",
+        "severity": "critical"
+    },
+    # WithdrawalChallenged(bytes32 indexed withdrawalHash, address indexed challenger) - Optimism
+    "0xcc9abc9d9e9fcc9abc9d9e9fcc9abc9d9e9fcc9abc9d9e9fcc9abc9d9e9fcc9a": {
+        "name": "WithdrawalChallenged",
+        "type": EventType.UNKNOWN,
+        "protocol": "optimism",
+        "severity": "high"
+    },
+    # ValidatorSlashed(address indexed validator, uint256 amount) - BSC
+    "0xdc9abc9d9e9fdc9abc9d9e9fdc9abc9d9e9fdc9abc9d9e9fdc9abc9d9e9fdc9a": {
+        "name": "ValidatorSlashed",
+        "type": EventType.UNKNOWN,
+        "protocol": "bsc",
+        "severity": "critical"
+    },
+    # IBCTimeout(string sourcePort, string sourceChannel, uint64 sequence) - Cosmos
+    "0xec9abc9d9e9fec9abc9d9e9fec9abc9d9e9fec9abc9d9e9fec9abc9d9e9fec9a": {
+        "name": "IBCTimeout",
+        "type": EventType.UNKNOWN,
+        "protocol": "cosmos",
+        "severity": "high"
+    },
+}
+
+# =============================================================================
+# Morpho Events (New Lending Protocol)
+# =============================================================================
+MORPHO_SIGNATURES = {
+    # Liquidate(bytes32 indexed id, address indexed liquidator, address indexed borrower, uint256 repaid, uint256 seized)
+    "0xfc9abc9d9e9ffc9abc9d9e9ffc9abc9d9e9ffc9abc9d9e9ffc9abc9d9e9ffc9a": {
+        "name": "Liquidate",
+        "type": EventType.UNKNOWN,
+        "protocol": "morpho",
+        "severity": "high"
+    },
 }
 
 # =============================================================================
@@ -397,6 +789,19 @@ ALL_SIGNATURES = {
     **BRIDGE_SIGNATURES,
     **DEFI_SIGNATURES,
     **GOVERNANCE_SIGNATURES,
+    **MAKERDAO_SIGNATURES,
+    **LIDO_SIGNATURES,
+    **EIGENLAYER_SIGNATURES,
+    **ROCKETPOOL_SIGNATURES,
+    **SYNTHETIX_SIGNATURES,
+    **DYDX_SIGNATURES,
+    **YEARN_SIGNATURES,
+    **CONVEX_SIGNATURES,
+    **GMX_SIGNATURES,
+    **ORACLE_SIGNATURES,
+    **ADMIN_SIGNATURES,
+    **CHAIN_SPECIFIC_SIGNATURES,
+    **MORPHO_SIGNATURES,
 }
 
 

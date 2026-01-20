@@ -21,101 +21,303 @@ from typing import Optional, Set
 
 # Mapping from ingested event types to rule-expected types
 EVENT_TYPE_MAP = {
-    # Basic transfers
+    # =========================================================================
+    # Basic ERC20 Events
+    # =========================================================================
     "transfer": "Transfer",
     "Transfer": "Transfer",
+    "Approval": "Approval",
+    "Permit": "Permit",
     
-    # Swaps
+    # =========================================================================
+    # Swaps / DEX
+    # =========================================================================
     "swap": "Swap",
     "Swap": "Swap",
     "SwapV3": "Swap",
-    "TokenExchange": "Swap",
+    "TokenExchange": "Swap",  # Curve
     "Stargate:Swap": "Swap",
+    "SynthExchange": "Swap",  # Synthetix
     
-    # Minting
+    # =========================================================================
+    # Minting / Burning
+    # =========================================================================
     "mint": "Mint",
     "Mint": "Mint",
-    
-    # Burning
     "burn": "Burn",
     "Burn": "Burn",
+    "TokensBurned": "Burn",  # Rocket Pool
     
-    # Liquidity
+    # =========================================================================
+    # Liquidity Events
+    # =========================================================================
     "liquidity_add": "LiquidityAdd",
     "liquidity_remove": "LiquidityRemove",
-    "RemoveLiquidity": "LiquidityRemove",
+    "RemoveLiquidity": "RemoveLiquidity",  # Curve, GMX
+    "AddLiquidity": "LiquidityAdd",
+    "Supply": "LiquidityAdd",  # Aave
+    "Redeem": "LiquidityRemove",  # Compound
     
-    # Bridge events
+    # =========================================================================
+    # Bridge Events
+    # =========================================================================
     "bridge_deposit": "Lock",
     "Lock": "Lock",
+    "Locked": "Locked",  # Convex
     "message_sent": "LogMessagePublished",
+    "LogMessagePublished": "LogMessagePublished",  # Wormhole
     "Wormhole:MessagePublished": "LogMessagePublished",
+    "SendToChain": "SendToChain",  # LayerZero
     "LayerZero:SendToChain": "SendToChain",
+    "TransferRedeemed": "TransferRedeemed",  # Wormhole
     "Wormhole:TransferRedeemed": "TransferRedeemed",
     "Synapse:TokenDeposit": "Lock",
     "Stargate:SendCredits": "SendToChain",
     "Stargate:CreditChainPath": "SendToChain",
+    "FundsDeposited": "FundsDeposited",  # Across
+    "RootBundleExecuted": "RootBundleExecuted",  # Across
+    "SetTrustedRemote": "SetTrustedRemote",  # LayerZero
+    "TransferInitiated": "TransferInitiated",
     
-    # Contract deployments
+    # =========================================================================
+    # Contract Deployments
+    # =========================================================================
     "contract_deploy": "ContractDeploy",
     "ContractDeploy:Safe": "ContractDeploy",
     "ContractDeploy:Suspicious": "ContractDeploy",
     "ContractDeploy:reentrancy_exploit": "ContractDeploy",
+    "SelfDestruct": "SelfDestruct",
     
-    # Flash loans
+    # =========================================================================
+    # Flash Loans
+    # =========================================================================
     "flash_borrow": "FlashLoan",
     "flash_repay": "FlashLoan",
     "FlashLoan": "FlashLoan",
+    "Flash": "FlashLoan",  # Uniswap V3
     
-    # Approvals
-    "Approval": "Approval",
+    # =========================================================================
+    # Borrowing / Lending
+    # =========================================================================
+    "Borrow": "Borrow",
+    "Repay": "Repay",
+    "RepayBorrow": "Repay",  # Compound
     
+    # =========================================================================
     # Withdrawals
+    # =========================================================================
     "Withdrawal": "Withdrawal",
-    "Withdraw": "Withdrawal",
-    "Withdrawn": "Withdrawal",
+    "Withdraw": "Withdraw",
+    "Withdrawn": "Withdrawn",  # Convex
+    "WithdrawalRequested": "WithdrawalRequested",  # Lido
+    "WithdrawalQueued": "WithdrawalQueued",  # EigenLayer
+    "WithdrawalChallenged": "WithdrawalChallenged",  # Optimism
+    "LogWithdrawalPerformed": "LogWithdrawalPerformed",  # dYdX
     
+    # =========================================================================
     # Liquidations
-    "LiquidationCall": "LiquidationCall",
-    "Liquidate": "LiquidationCall",
-    "LiquidateBorrow": "LiquidationCall",
-    "LiquidatePosition": "LiquidationCall",
-    "Bite": "LiquidationCall",  # MakerDAO
-    "Bark": "LiquidationCall",  # MakerDAO
+    # =========================================================================
+    "LiquidationCall": "LiquidationCall",  # Aave
+    "Liquidate": "Liquidate",  # Morpho
+    "LiquidateBorrow": "LiquidateBorrow",  # Compound
+    "LiquidatePosition": "LiquidatePosition",  # GMX
+    "Bite": "Bite",  # MakerDAO
+    "Bark": "Bark",  # MakerDAO
+    "AccountLiquidated": "AccountLiquidated",  # Synthetix
     
+    # =========================================================================
     # Governance
+    # =========================================================================
     "ProposalCreated": "ProposalCreated",
+    "ProposalSubmitted": "ProposalSubmitted",  # Cosmos
     "VoteCast": "VoteCast",
     "QueueTransaction": "QueueTransaction",
     
-    # Admin events
-    "OwnershipTransferred": "AdminAction",
-    "AdminChanged": "AdminAction",
-    "RoleGranted": "AdminAction",
-    "Paused": "AdminAction",
-    "Unpaused": "AdminAction",
+    # =========================================================================
+    # Admin / Security Events
+    # =========================================================================
+    "OwnershipTransferred": "OwnershipTransferred",
+    "AdminChanged": "AdminChanged",
+    "RoleGranted": "RoleGranted",
+    "Paused": "Paused",
+    "Unpaused": "Unpaused",
+    "NewAdmin": "NewAdmin",  # Curve
+    "AuthorizerChanged": "AuthorizerChanged",  # Balancer
+    "GuardianSetAdded": "GuardianSetAdded",  # Wormhole
+    "ContractUpgraded": "ContractUpgraded",  # Wormhole
+    "Upgraded": "Upgraded",  # Proxy
     
-    # Oracle
+    # =========================================================================
+    # MakerDAO Specific
+    # =========================================================================
+    "Cage": "Cage",  # Emergency shutdown
+    "File": "File",  # Parameter change
+    
+    # =========================================================================
+    # Lido Specific
+    # =========================================================================
+    "ValidatorExitRequest": "ValidatorExitRequest",
+    
+    # =========================================================================
+    # EigenLayer Specific
+    # =========================================================================
+    "OperatorSlashed": "OperatorSlashed",
+    
+    # =========================================================================
+    # Rocket Pool Specific
+    # =========================================================================
+    "MinipoolDestroyed": "MinipoolDestroyed",
+    
+    # =========================================================================
+    # dYdX Specific
+    # =========================================================================
+    "LogForcedTradeRequest": "LogForcedTradeRequest",
+    
+    # =========================================================================
+    # Yearn Specific
+    # =========================================================================
+    "EmergencyShutdown": "EmergencyShutdown",
+    "StrategyRevoked": "StrategyRevoked",
+    
+    # =========================================================================
+    # GMX Specific
+    # =========================================================================
+    "IncreasePosition": "IncreasePosition",
+    "DecreasePosition": "DecreasePosition",
+    
+    # =========================================================================
+    # Oracle Events
+    # =========================================================================
     "PriceUpdated": "PriceUpdated",
+    "AnswerUpdated": "PriceUpdated",  # Chainlink
     
-    # Unknown/generic
+    # =========================================================================
+    # Chain-Specific Events
+    # =========================================================================
+    "BlockReorg": "BlockReorg",  # Ethereum
+    "ExitStarted": "ExitStarted",  # Polygon
+    "ProposerFault": "ProposerFault",  # Optimism
+    "ValidatorSlashed": "ValidatorSlashed",  # BSC
+    "IBCTimeout": "IBCTimeout",  # Cosmos
+    
+    # =========================================================================
+    # Unknown / Generic
+    # =========================================================================
     "unknown": "Unknown",
+    "Unknown": "Unknown",
     "Event": "Unknown",
 }
 
 # Reverse mapping for rules that use multiple event types
 RULE_TO_INGESTED_MAP = {
+    # Basic events
     "Transfer": {"transfer", "Transfer"},
-    "Swap": {"swap", "Swap", "SwapV3", "TokenExchange", "Stargate:Swap"},
+    "Approval": {"Approval"},
+    "Permit": {"Permit"},
+    
+    # Swaps
+    "Swap": {"swap", "Swap", "SwapV3", "TokenExchange", "Stargate:Swap", "SynthExchange"},
+    
+    # Minting/Burning
     "Mint": {"mint", "Mint"},
-    "Burn": {"burn", "Burn"},
+    "Burn": {"burn", "Burn", "TokensBurned"},
+    
+    # Liquidity
+    "LiquidityAdd": {"liquidity_add", "AddLiquidity", "Supply"},
+    "LiquidityRemove": {"liquidity_remove", "RemoveLiquidity", "Redeem"},
+    "RemoveLiquidity": {"RemoveLiquidity"},
+    
+    # Bridge events
     "Lock": {"bridge_deposit", "Lock", "Synapse:TokenDeposit"},
-    "FlashLoan": {"flash_borrow", "flash_repay", "FlashLoan"},
-    "LiquidationCall": {"LiquidationCall", "Liquidate", "LiquidateBorrow", "Bite", "Bark"},
-    "Withdrawal": {"Withdrawal", "Withdraw", "Withdrawn"},
-    "LogMessagePublished": {"message_sent", "Wormhole:MessagePublished"},
-    "SendToChain": {"LayerZero:SendToChain", "Stargate:SendCredits", "Stargate:CreditChainPath"},
+    "Locked": {"Locked"},
+    "LogMessagePublished": {"message_sent", "LogMessagePublished", "Wormhole:MessagePublished"},
+    "SendToChain": {"SendToChain", "LayerZero:SendToChain", "Stargate:SendCredits", "Stargate:CreditChainPath"},
+    "TransferRedeemed": {"TransferRedeemed", "Wormhole:TransferRedeemed"},
+    "FundsDeposited": {"FundsDeposited"},
+    "RootBundleExecuted": {"RootBundleExecuted"},
+    "SetTrustedRemote": {"SetTrustedRemote"},
+    "TransferInitiated": {"TransferInitiated"},
+    
+    # Contract events
     "ContractDeploy": {"contract_deploy", "ContractDeploy:Safe", "ContractDeploy:Suspicious", "ContractDeploy:reentrancy_exploit"},
+    "SelfDestruct": {"SelfDestruct"},
+    
+    # Flash loans
+    "FlashLoan": {"flash_borrow", "flash_repay", "FlashLoan", "Flash"},
+    
+    # Borrowing
+    "Borrow": {"Borrow"},
+    
+    # Withdrawals
+    "Withdrawal": {"Withdrawal"},
+    "Withdraw": {"Withdraw"},
+    "Withdrawn": {"Withdrawn"},
+    "WithdrawalRequested": {"WithdrawalRequested"},
+    "WithdrawalQueued": {"WithdrawalQueued"},
+    "WithdrawalChallenged": {"WithdrawalChallenged"},
+    "LogWithdrawalPerformed": {"LogWithdrawalPerformed"},
+    
+    # Liquidations (comprehensive)
+    "LiquidationCall": {"LiquidationCall"},
+    "Liquidate": {"Liquidate"},
+    "LiquidateBorrow": {"LiquidateBorrow"},
+    "LiquidatePosition": {"LiquidatePosition"},
+    "Bite": {"Bite"},
+    "Bark": {"Bark"},
+    "AccountLiquidated": {"AccountLiquidated"},
+    
+    # Governance
+    "ProposalCreated": {"ProposalCreated"},
+    "ProposalSubmitted": {"ProposalSubmitted"},
+    "VoteCast": {"VoteCast"},
+    "QueueTransaction": {"QueueTransaction"},
+    
+    # Admin events
+    "OwnershipTransferred": {"OwnershipTransferred"},
+    "AdminChanged": {"AdminChanged"},
+    "RoleGranted": {"RoleGranted"},
+    "Paused": {"Paused"},
+    "Unpaused": {"Unpaused"},
+    "NewAdmin": {"NewAdmin"},
+    "AuthorizerChanged": {"AuthorizerChanged"},
+    "GuardianSetAdded": {"GuardianSetAdded"},
+    "ContractUpgraded": {"ContractUpgraded"},
+    "Upgraded": {"Upgraded"},
+    
+    # MakerDAO
+    "Cage": {"Cage"},
+    "File": {"File"},
+    
+    # Lido
+    "ValidatorExitRequest": {"ValidatorExitRequest"},
+    
+    # EigenLayer
+    "OperatorSlashed": {"OperatorSlashed"},
+    
+    # Rocket Pool
+    "MinipoolDestroyed": {"MinipoolDestroyed"},
+    "TokensBurned": {"TokensBurned"},
+    
+    # dYdX
+    "LogForcedTradeRequest": {"LogForcedTradeRequest"},
+    
+    # Yearn
+    "EmergencyShutdown": {"EmergencyShutdown"},
+    "StrategyRevoked": {"StrategyRevoked"},
+    
+    # GMX
+    "IncreasePosition": {"IncreasePosition"},
+    "DecreasePosition": {"DecreasePosition"},
+    
+    # Oracle
+    "PriceUpdated": {"PriceUpdated", "AnswerUpdated"},
+    
+    # Chain-specific
+    "BlockReorg": {"BlockReorg"},
+    "ExitStarted": {"ExitStarted"},
+    "ProposerFault": {"ProposerFault"},
+    "ValidatorSlashed": {"ValidatorSlashed"},
+    "IBCTimeout": {"IBCTimeout"},
 }
 
 

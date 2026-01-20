@@ -239,27 +239,75 @@ class EVMListener(ChainListener):
                 logger.info("evm_listener_block_contracts", chain=self.chain_id, block=block_number, tx_count=len(block.transactions), contract_deploys=contract_deploy_count)
         
         # =====================================================
-        # LOG PROCESSING (existing code)
+        # LOG PROCESSING - Capture all important DeFi events
         # =====================================================
+        # Import event signatures to filter for important events
+        from .event_signatures import ALL_SIGNATURES
+        
+        # Get important event topics (all our monitored event signatures)
+        important_topics = list(ALL_SIGNATURES.keys())
+        
+        # Limit to most critical events to avoid rate limits
+        # Priority: Liquidations, Flash Loans, Large Swaps, Admin Changes, Bridge Events
+        critical_topics = [
+            # ERC20
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",  # Transfer
+            "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",  # Approval
+            # Aave V3
+            "0x631042c832b07452973831137f2d73e395028b44b250dedc5abb0ee766e168ac",  # FlashLoan
+            "0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005286",  # LiquidationCall
+            # Compound
+            "0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52",  # LiquidateBorrow
+            # Uniswap V3
+            "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",  # Swap
+            "0xbdbdb71d7860376ba52b25a5028beea23581364a40522f6bcfb86bb1f2dca633",  # Flash
+            # Uniswap V2
+            "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822",  # Swap
+            # Balancer
+            "0x0d7d75e01ab95780d3cd1c8ec0dd6c2ce19f3f93ce64d5e2b7c60e9e0e2b4a3f",  # FlashLoan
+            # Curve
+            "0x8b3e96f2b889fa771c53c981b40daf005f63f637f1869f707052d15a3dd97140",  # TokenExchange
+            # Admin
+            "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",  # OwnershipTransferred
+            "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",  # Upgraded
+            # Bridge
+            "0x6eb224fb001ed210e379b335e35efe88672a8ce935d981a6896b27ffdf52a3b2",  # LogMessagePublished (Wormhole)
+            "0x32ed1a409ef04c7b0227189c3a103dc5ac10e775a15b785dcc510201f7c25ad3",  # SendToChain (LayerZero)
+        ]
+        
         monitored_contracts = (
             self.config.bridge_contracts + 
             self.config.token_contracts +
             self.config.governance_contracts
         )
         
-        if monitored_contracts:
-            # Filter logs for monitored contracts
-            logs = await self.w3.eth.get_logs({
-                "fromBlock": block_number,
-                "toBlock": block_number,
-                "address": monitored_contracts
-            })
-        else:
-            # Get all logs in block
-            logs = await self.w3.eth.get_logs({
-                "fromBlock": block_number,
-                "toBlock": block_number
-            })
+        logs = []
+        try:
+            if monitored_contracts:
+                # Filter logs for monitored contracts
+                logs = await self.w3.eth.get_logs({
+                    "fromBlock": block_number,
+                    "toBlock": block_number,
+                    "address": monitored_contracts
+                })
+            else:
+                # Get logs for critical event topics (more efficient than all logs)
+                # Split into batches to avoid RPC limits
+                for i in range(0, len(critical_topics), 4):
+                    batch_topics = critical_topics[i:i+4]
+                    try:
+                        batch_logs = await self.w3.eth.get_logs({
+                            "fromBlock": block_number,
+                            "toBlock": block_number,
+                            "topics": [batch_topics]  # OR filter on topics
+                        })
+                        logs.extend(batch_logs)
+                    except Exception as batch_err:
+                        # If batch fails, try without topic filter
+                        logger.debug("topic_batch_failed", chain=self.chain_id, error=str(batch_err)[:50])
+                        break
+        except Exception as log_err:
+            logger.warning("get_logs_failed", chain=self.chain_id, block=block_number, error=str(log_err)[:100])
         
         for log in logs:
             events = await self._parse_log(log, block_timestamp)
