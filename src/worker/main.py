@@ -612,10 +612,13 @@ class Sentinel3Worker:
                                             if amount_usd is not None:
                                                 amount_usd = float(amount_usd) if hasattr(amount_usd, '__float__') else amount_usd
                                             
+                                            # Get event type string
+                                            event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+                                            
                                             db_event = {
                                                 "event_id": event_id,
                                                 "chain_id": chain_id,
-                                                "event_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                                                "event_type": event_type_str,
                                                 "tx_hash": event.tx_hash,
                                                 "block_number": event.block_number,
                                                 "block_timestamp": block_ts_str,
@@ -632,7 +635,24 @@ class Sentinel3Worker:
                                                 chain=chain_id,
                                                 status=event.status.value
                                             ).inc()
-                                            logger.info("event_saved_directly", chain=chain_id, tx_hash=event.tx_hash)
+                                            
+                                            # Track event types for debugging
+                                            if not hasattr(self, '_event_type_stats'):
+                                                self._event_type_stats = {}
+                                                self._event_type_stats_last_log = datetime.now(timezone.utc)
+                                            
+                                            self._event_type_stats[event_type_str] = self._event_type_stats.get(event_type_str, 0) + 1
+                                            
+                                            # Log event type stats every 60 seconds
+                                            if (datetime.now(timezone.utc) - self._event_type_stats_last_log).total_seconds() > 60:
+                                                logger.info(
+                                                    "event_type_stats",
+                                                    stats=dict(sorted(self._event_type_stats.items(), key=lambda x: -x[1])[:10]),
+                                                    total=sum(self._event_type_stats.values())
+                                                )
+                                                self._event_type_stats_last_log = datetime.now(timezone.utc)
+                                            
+                                            logger.debug("event_saved_directly", chain=chain_id, tx_hash=event.tx_hash, event_type=event_type_str)
                                             
                                             # ========================================
                                             # YAML RULE EVALUATION (in ingestion loop)

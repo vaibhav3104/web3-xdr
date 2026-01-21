@@ -537,6 +537,22 @@ class EVMListener(ChainListener):
         protocol = event_info.get("protocol", "unknown")
         event_severity = event_info.get("severity", "low")
         
+        # DEBUG: Log unknown topic0 values so we can add them to our signature database
+        if event_name == "Unknown":
+            # Only log unique topic0 values (use a class-level set to avoid spam)
+            if not hasattr(self, '_logged_unknown_topics'):
+                self._logged_unknown_topics = set()
+            
+            if topic0 not in self._logged_unknown_topics and len(self._logged_unknown_topics) < 100:
+                self._logged_unknown_topics.add(topic0)
+                logger.info(
+                    "unknown_event_topic",
+                    chain=self.chain_id,
+                    topic0=topic0,
+                    contract=contract_address[:20] + "..." if contract_address else "N/A",
+                    tx_hash=log.transactionHash.hex()[:20] if hasattr(log, 'transactionHash') and log.transactionHash else "N/A"
+                )
+        
         # Map severity string to Severity enum
         severity_map = {
             "low": Severity.LOW,
