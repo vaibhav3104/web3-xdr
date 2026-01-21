@@ -1085,6 +1085,36 @@ class Sentinel3Worker:
                 event_type=event_type_str,
                 tx_hash=event.tx_hash[:20] + "..."
             )
+            
+            # ========================================
+            # YAML RULE EVALUATION (in event handler)
+            # ========================================
+            if self.rule_engine:
+                try:
+                    rule_matches = self.rule_engine.evaluate(db_event)
+                    if rule_matches:
+                        for match in rule_matches:
+                            logger.warning(
+                                "yaml_rule_triggered",
+                                rule_id=match.rule.id,
+                                rule_name=match.rule.name,
+                                severity=match.rule.severity,
+                                chain=chain_id,
+                                event_type=event_type_str,
+                                tx_hash=event.tx_hash[:20] if event.tx_hash else ""
+                            )
+                            
+                            # Create incident for HIGH, CRITICAL, and MEDIUM severity rules
+                            if match.rule.severity.upper() in ["HIGH", "CRITICAL", "MEDIUM"]:
+                                await self._create_incident_from_rule(
+                                    rule=match.rule,
+                                    event_data=db_event,
+                                    db_event=db_event,
+                                    match_details=match.match_details
+                                )
+                except Exception as rule_err:
+                    logger.debug("event_handler_rule_evaluation_error", error=str(rule_err))
+                    
         except Exception as e:
             logger.error("event_handler_save_failed", error=str(e), exc_info=True)
     
