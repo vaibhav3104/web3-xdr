@@ -1118,14 +1118,27 @@ class Sentinel3Worker:
         db_event: Dict,
         match_details: Dict
     ):
-        """Create an incident when a HIGH/CRITICAL rule is triggered."""
+        """Create an incident when a HIGH/CRITICAL/MEDIUM rule is triggered."""
         from src.database.service import DatabaseService
         
         try:
             # Generate unique incident ID based on rule and event
             chain_id = event_data.get("chain_id", "unknown")
             tx_hash = event_data.get("tx_hash", "")[:16]
-            incident_id = f"inc_{rule.id}_{chain_id}_{tx_hash}_{int(datetime.now(timezone.utc).timestamp())}"
+            incident_id = f"inc_rule_{rule.id}_{chain_id}_{tx_hash}_{int(datetime.now(timezone.utc).timestamp())}"
+            
+            # Get category safely (may not exist on AlertRule)
+            category = getattr(rule, 'category', None) or "RULE_TRIGGERED"
+            
+            # Get recommended_actions safely (may not exist on AlertRule)
+            recommended_actions = getattr(rule, 'recommended_actions', None) or [
+                "Review the transaction details",
+                "Check related transactions",
+                "Investigate the involved addresses"
+            ]
+            
+            # Get confidence safely
+            confidence = getattr(rule, 'confidence', 0.8) or 0.8
             
             # Build incident data
             incident_data = {
@@ -1134,17 +1147,13 @@ class Sentinel3Worker:
                 "summary": rule.description or f"Rule {rule.name} triggered on {chain_id}",
                 "severity": rule.severity.upper(),
                 "status": "OPEN_PENDING",
-                "attack_type": rule.category or "RULE_TRIGGERED",
-                "confidence": rule.confidence or 0.8,
-                "total_loss_usd": 0,  # Will be updated if amount is available
+                "attack_type": category,
+                "confidence": confidence,
+                "total_loss_usd": float(event_data.get("amount_usd", 0) or 0),
                 "affected_chains": [chain_id],
                 "event_ids": [db_event.get("event_id", "")],
                 "rule_ids": [rule.id],
-                "recommended_actions": rule.recommended_actions or [
-                    "Review the transaction details",
-                    "Check related transactions",
-                    "Investigate the involved addresses"
-                ],
+                "recommended_actions": recommended_actions,
                 "cluster_key": f"{rule.id}_{chain_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
             }
             
@@ -1160,7 +1169,7 @@ class Sentinel3Worker:
                     chain=chain_id
                 )
         except Exception as e:
-            logger.error("incident_creation_failed", error=str(e), rule_id=rule.id)
+            logger.error("incident_creation_failed", error=str(e), rule_id=rule.id, exc_info=True)
     
     async def detection_loop(self):
         """Loop B: Consume events from bus and process."""
