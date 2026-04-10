@@ -1,0 +1,291 @@
+# =============================================================================
+# Sentinel3 - Kyverno Security Policies
+# =============================================================================
+# Admission control policies enforced at deploy time.
+# Requires Kyverno to be installed: kubectl apply -f https://github.com/kyverno/kyverno/releases/latest/download/install.yaml
+# =============================================================================
+
+# --- Policy: Only allow images from our trusted registry ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-verify-image-registry
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/description: >-
+      Only allow container images from the trusted Artifact Registry.
+      Prevents supply chain attacks via unauthorized images.
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-image-registry
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: >-
+          Images must come from the trusted registry:
+          us-central1-docker.pkg.dev/web3-xdr/sentinel3/
+        pattern:
+          spec:
+            containers:
+              - image: "us-central1-docker.pkg.dev/web3-xdr/sentinel3/*"
+
+---
+# --- Policy: Disallow privileged containers ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-disallow-privileged
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/severity: critical
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: disallow-privileged
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "Privileged containers are not allowed in sentinel3 namespace."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  privileged: "false"
+    - name: disallow-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "Privilege escalation is not allowed."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: "false"
+
+---
+# --- Policy: Require resource limits ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-require-resource-limits
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Require Resource Limits
+    policies.kyverno.io/description: >-
+      All containers must specify CPU and memory limits to prevent
+      resource exhaustion attacks (DoS against the cluster).
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "All containers must have CPU and memory limits defined."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+
+---
+# --- Policy: Require read-only root filesystem ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-require-readonly-rootfs
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Require Read-Only Root Filesystem
+    policies.kyverno.io/description: >-
+      Containers must use read-only root filesystems to prevent
+      runtime code injection and persist-on-disk attacks.
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-readonly-rootfs
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "Containers must have a read-only root filesystem."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+
+---
+# --- Policy: Disallow host namespaces ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-disallow-host-namespaces
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Disallow Host Namespaces
+    policies.kyverno.io/description: >-
+      Pods must not use host PID, IPC, or network namespaces.
+      Prevents container escape and lateral movement.
+    policies.kyverno.io/severity: critical
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: disallow-host-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "Host PID, IPC, and network namespaces are not allowed."
+        pattern:
+          spec:
+            =(hostPID): "false"
+            =(hostIPC): "false"
+            =(hostNetwork): "false"
+
+---
+# --- Policy: Require non-root user ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-require-nonroot
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Require Non-Root User
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-nonroot
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "Containers must run as non-root user."
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+
+---
+# --- Policy: Disallow latest tag ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-disallow-latest-tag
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/description: >-
+      Images must not use the :latest tag. Ensures reproducible deployments
+      and prevents accidental rollouts of untested code.
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      validate:
+        message: "Images must not use the :latest tag. Use a specific version or SHA digest."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
+
+---
+# --- Policy: Auto-add security labels to sentinel3 pods ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: sentinel3-add-security-labels
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+  annotations:
+    policies.kyverno.io/title: Add Security Labels
+    policies.kyverno.io/description: >-
+      Automatically adds security classification labels to all
+      pods in the sentinel3 namespace for audit tracking.
+spec:
+  rules:
+    - name: add-security-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sentinel3
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              security.sentinel3.io/scanned: "true"
+              security.sentinel3.io/policy-version: "v1"

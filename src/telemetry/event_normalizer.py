@@ -95,6 +95,8 @@ EVENT_TYPE_MAP = {
     "flash_repay": "FlashLoan",
     "FlashLoan": "FlashLoan",
     "Flash": "FlashLoan",  # Uniswap V3
+    "flash_loan": "FlashLoan",
+    "flashloan": "FlashLoan",
     
     # =========================================================================
     # Borrowing / Lending
@@ -117,13 +119,14 @@ EVENT_TYPE_MAP = {
     # =========================================================================
     # Liquidations
     # =========================================================================
+    "liquidation_call": "LiquidationCall",  # From event_signatures.py
     "LiquidationCall": "LiquidationCall",  # Aave
-    "Liquidate": "Liquidate",  # Morpho
-    "LiquidateBorrow": "LiquidateBorrow",  # Compound
-    "LiquidatePosition": "LiquidatePosition",  # GMX
-    "Bite": "Bite",  # MakerDAO
-    "Bark": "Bark",  # MakerDAO
-    "AccountLiquidated": "AccountLiquidated",  # Synthetix
+    "Liquidate": "LiquidationCall",  # Morpho - map to common type
+    "LiquidateBorrow": "LiquidationCall",  # Compound - map to common type
+    "LiquidatePosition": "LiquidationCall",  # GMX - map to common type
+    "Bite": "LiquidationCall",  # MakerDAO - map to common type
+    "Bark": "LiquidationCall",  # MakerDAO - map to common type
+    "AccountLiquidated": "LiquidationCall",  # Synthetix - map to common type
     
     # =========================================================================
     # Governance
@@ -136,6 +139,8 @@ EVENT_TYPE_MAP = {
     # =========================================================================
     # Admin / Security Events
     # =========================================================================
+    "admin_changed": "AdminChanged",  # From event_signatures.py
+    "admin_action": "AdminAction",  # From event_signatures.py
     "OwnershipTransferred": "OwnershipTransferred",
     "AdminChanged": "AdminChanged",
     "RoleGranted": "RoleGranted",
@@ -188,6 +193,7 @@ EVENT_TYPE_MAP = {
     # =========================================================================
     # Oracle Events
     # =========================================================================
+    "price_update": "PriceUpdated",  # From event_signatures.py
     "PriceUpdated": "PriceUpdated",
     "AnswerUpdated": "PriceUpdated",  # Chainlink
     
@@ -243,7 +249,7 @@ RULE_TO_INGESTED_MAP = {
     "SelfDestruct": {"SelfDestruct"},
     
     # Flash loans
-    "FlashLoan": {"flash_borrow", "flash_repay", "FlashLoan", "Flash"},
+    "FlashLoan": {"flash_borrow", "flash_repay", "FlashLoan", "Flash", "flash_loan", "flashloan"},
     
     # Borrowing
     "Borrow": {"Borrow"},
@@ -257,14 +263,14 @@ RULE_TO_INGESTED_MAP = {
     "WithdrawalChallenged": {"WithdrawalChallenged"},
     "LogWithdrawalPerformed": {"LogWithdrawalPerformed"},
     
-    # Liquidations (comprehensive)
-    "LiquidationCall": {"LiquidationCall"},
-    "Liquidate": {"Liquidate"},
-    "LiquidateBorrow": {"LiquidateBorrow"},
-    "LiquidatePosition": {"LiquidatePosition"},
-    "Bite": {"Bite"},
-    "Bark": {"Bark"},
-    "AccountLiquidated": {"AccountLiquidated"},
+    # Liquidations (comprehensive) - all map to LiquidationCall
+    "LiquidationCall": {"liquidation_call", "LiquidationCall", "Liquidate", "LiquidateBorrow", "LiquidatePosition", "Bite", "Bark", "AccountLiquidated"},
+    "Liquidate": {"liquidation_call", "Liquidate"},
+    "LiquidateBorrow": {"liquidation_call", "LiquidateBorrow"},
+    "LiquidatePosition": {"liquidation_call", "LiquidatePosition"},
+    "Bite": {"liquidation_call", "Bite"},
+    "Bark": {"liquidation_call", "Bark"},
+    "AccountLiquidated": {"liquidation_call", "AccountLiquidated"},
     
     # Governance
     "ProposalCreated": {"ProposalCreated"},
@@ -310,7 +316,7 @@ RULE_TO_INGESTED_MAP = {
     "DecreasePosition": {"DecreasePosition"},
     
     # Oracle
-    "PriceUpdated": {"PriceUpdated", "AnswerUpdated"},
+    "PriceUpdated": {"price_update", "PriceUpdated", "AnswerUpdated"},
     
     # Chain-specific
     "BlockReorg": {"BlockReorg"},

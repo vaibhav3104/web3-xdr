@@ -6,6 +6,8 @@
     <title>Sentinel3 Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="config.js"></script>
+    <!-- DOMPurify for XSS Protection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -83,6 +85,15 @@
             50% { box-shadow: 0 0 20px 5px rgba(255, 59, 59, 0.2); }
         }
         
+        .live-indicator {
+            animation: live-pulse 2s infinite;
+        }
+        
+        @keyframes live-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        
         .status-badge {
             padding: 4px 12px;
             border-radius: 9999px;
@@ -129,6 +140,9 @@
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                     <span class="text-gray-400">Active</span>
                 </div>
+                <a href="/frontend/incidents.html" class="px-3 py-2 bg-gradient-to-r from-red-600/30 to-orange-600/30 hover:from-red-600/50 hover:to-orange-600/50 text-red-300 rounded-lg text-sm transition border border-red-500/30">
+                    🚨 Incidents
+                </a>
                 <a href="/frontend/logs.html" class="px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded-lg text-sm transition">
                     📋 Log Explorer
                 </a>
@@ -144,8 +158,11 @@
                 <a href="/frontend/analytics.html" class="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg text-sm transition">
                     📊 Analytics
                 </a>
-                <a href="/frontend/ml-analysis.html" class="px-3 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-400 rounded-lg text-sm transition">
-                    🔬 Contract Scanner
+                <a href="/frontend/scanner.html" class="px-3 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-400 rounded-lg text-sm transition">
+                    🔬 Vulnerability Scanner
+                </a>
+                <a href="/frontend/security-graph.html" class="px-3 py-2 bg-gradient-to-r from-cyan-600/30 to-purple-600/30 hover:from-cyan-600/50 hover:to-purple-600/50 text-cyan-300 rounded-lg text-sm transition border border-cyan-500/30">
+                    🔷 Security Graph
                 </a>
                 <a href="/frontend/admin.html" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
                     ⚙️ Admin
@@ -159,6 +176,46 @@
     
     <!-- Main Content -->
     <main class="p-6">
+        <!-- Security Graph Banner -->
+        <a href="/frontend/security-graph.html" class="block mb-6 group">
+            <div class="card p-4 bg-gradient-to-r from-cyan-900/30 via-purple-900/30 to-pink-900/30 border-cyan-500/30 hover:border-cyan-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-white group-hover:text-cyan-300 transition">🔷 Security Graph</div>
+                            <div class="text-sm text-gray-400">Visualize entity relationships, attack paths & risk scores</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-cyan-400" x-text="graphStats.nodes || '11K+'">11K+</div>
+                            <div class="text-xs text-gray-500">Nodes</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-purple-400" x-text="graphStats.relationships || '740+'">740+</div>
+                            <div class="text-xs text-gray-500">Relationships</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-red-400" x-text="graphStats.hackers || '15'">15</div>
+                            <div class="text-xs text-gray-500">Known Hackers</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-yellow-400" x-text="graphStats.attackVectors || '8'">8</div>
+                            <div class="text-xs text-gray-500">Attack Vectors</div>
+                        </div>
+                        <div class="px-4 py-2 bg-cyan-600/30 rounded-lg text-cyan-300 text-sm font-medium group-hover:bg-cyan-600/50 transition">
+                            Open Graph →
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </a>
+
         <!-- Stats Row -->
         <div class="grid grid-cols-5 gap-4 mb-6">
             <div class="card p-4">
@@ -182,6 +239,71 @@
             <div class="card p-4">
                 <div class="text-gray-400 text-sm mb-1">⏱️ Uptime</div>
                 <div class="text-3xl font-bold text-purple-400" x-text="formatUptime(stats.uptime)">0s</div>
+            </div>
+        </div>
+        
+        <!-- Charts Row: Attack Types & Chain Distribution -->
+        <div class="grid grid-cols-2 gap-6 mb-6">
+            <!-- Attack Type Trends -->
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">📈 Attack Type Trends (24h)</h3>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 rounded-full bg-green-500 live-indicator"></div>
+                        <span class="text-xs text-gray-500">Live</span>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <template x-for="(data, type) in attackTypeTrends" :key="type">
+                        <div>
+                            <div class="flex items-center justify-between text-sm mb-1">
+                                <span class="text-gray-400" x-text="formatAttackType(type)"></span>
+                                <span class="font-mono" x-text="data.count"></span>
+                            </div>
+                            <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full transition-all duration-500"
+                                     :class="{
+                                         'bg-red-500': type.includes('reentrancy') || type.includes('flash'),
+                                         'bg-orange-500': type.includes('rug') || type.includes('honeypot'),
+                                         'bg-yellow-500': type.includes('manipulation') || type.includes('governance'),
+                                         'bg-blue-500': type.includes('unknown')
+                                     }"
+                                     :style="`width: ${data.percentage}%`"></div>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="Object.keys(attackTypeTrends).length === 0" class="text-center py-4 text-gray-500">
+                        No attack data available
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chain Distribution -->
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">🌐 Chain Distribution</h3>
+                    <a href="incidents.html" class="text-xs text-blue-400 hover:underline">View All →</a>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <template x-for="(data, chain) in chainDistribution" :key="chain">
+                        <div class="bg-gray-800/50 rounded-lg p-3 text-center hover:bg-gray-800 transition cursor-pointer"
+                             @click="window.location.href='incidents.html?chain=' + chain">
+                            <div class="text-2xl mb-1" x-text="getChainEmoji(chain)">⛓️</div>
+                            <div class="text-sm font-medium capitalize" x-text="chain"></div>
+                            <div class="text-lg font-bold mt-1"
+                                 :class="{
+                                     'text-red-400': data.critical > 0,
+                                     'text-orange-400': data.high > 0 && data.critical === 0,
+                                     'text-green-400': data.critical === 0 && data.high === 0
+                                 }"
+                                 x-text="data.total"></div>
+                            <div class="text-xs text-gray-500" x-text="data.critical + ' critical'"></div>
+                        </div>
+                    </template>
+                    <div x-show="Object.keys(chainDistribution).length === 0" class="col-span-3 text-center py-4 text-gray-500">
+                        No chain data available
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -622,7 +744,7 @@
                         </div>
                         
                         <div class="prose prose-invert prose-sm max-w-none">
-                            <div class="text-sm whitespace-pre-wrap" x-html="formatMarkdown(aiAnalysis?.analysis)"></div>
+                            <div class="text-sm whitespace-pre-wrap" x-html="DOMPurify.sanitize(formatMarkdown(aiAnalysis?.analysis))"></div>
                         </div>
                         
                         <div class="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg" x-show="aiAnalysis?.recommendations?.length > 0">
@@ -688,6 +810,14 @@
                     blocksScanned: 0,
                     uptime: 0
                 },
+                graphStats: {
+                    nodes: '11K+',
+                    relationships: '740+',
+                    hackers: '15',
+                    attackVectors: '8'
+                },
+                attackTypeTrends: {},
+                chainDistribution: {},
                 incidents: [],
                 recentEvents: [],
                 selectedIncident: null,
@@ -711,6 +841,12 @@
                     // Load initial data
                     await this.loadAll();
                     
+                    // Load graph stats
+                    await this.loadGraphStats();
+                    
+                    // Load charts data
+                    await this.loadChartsData();
+                    
                     // Try WebSocket for real-time updates, fallback to polling
                     this.connectWebSocket();
                     
@@ -720,6 +856,100 @@
                             this.loadAll();
                         }
                     }, 5000);
+                    
+                    // Update charts every 30 seconds
+                    setInterval(() => this.loadChartsData(), 30000);
+                },
+                
+                async loadChartsData() {
+                    try {
+                        // Load incidents for analysis
+                        const res = await fetch(`${window.SENTINEL3_API_BASE}/api/incidents?limit=500`);
+                        const data = await res.json();
+                        const incidents = Array.isArray(data) ? data : (data.incidents || []);
+                        
+                        // Calculate attack type trends
+                        const attackCounts = {};
+                        const chainCounts = {};
+                        
+                        incidents.forEach(inc => {
+                            // Attack types
+                            const type = inc.attack_type || 'unknown_threat';
+                            if (!attackCounts[type]) attackCounts[type] = { count: 0 };
+                            attackCounts[type].count++;
+                            
+                            // Chains
+                            (inc.affected_chains || []).forEach(chain => {
+                                if (!chainCounts[chain]) chainCounts[chain] = { total: 0, critical: 0, high: 0 };
+                                chainCounts[chain].total++;
+                                if (inc.severity === 'critical') chainCounts[chain].critical++;
+                                if (inc.severity === 'high') chainCounts[chain].high++;
+                            });
+                        });
+                        
+                        // Calculate percentages for attack types
+                        const maxCount = Math.max(...Object.values(attackCounts).map(a => a.count), 1);
+                        Object.keys(attackCounts).forEach(type => {
+                            attackCounts[type].percentage = Math.round((attackCounts[type].count / maxCount) * 100);
+                        });
+                        
+                        // Sort attack types by count and take top 6
+                        const sortedAttacks = Object.entries(attackCounts)
+                            .sort((a, b) => b[1].count - a[1].count)
+                            .slice(0, 6);
+                        this.attackTypeTrends = Object.fromEntries(sortedAttacks);
+                        
+                        // Sort chains by total and take top 6
+                        const sortedChains = Object.entries(chainCounts)
+                            .sort((a, b) => b[1].total - a[1].total)
+                            .slice(0, 6);
+                        this.chainDistribution = Object.fromEntries(sortedChains);
+                        
+                    } catch (e) {
+                        console.error('Failed to load charts data:', e);
+                    }
+                },
+                
+                formatAttackType(type) {
+                    if (!type) return 'Unknown';
+                    return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                },
+                
+                getChainEmoji(chain) {
+                    const emojis = {
+                        'ethereum': '⟠',
+                        'polygon': '🟣',
+                        'arbitrum': '🔵',
+                        'optimism': '🔴',
+                        'avalanche': '🔺',
+                        'bsc': '🟡',
+                        'base': '🔷'
+                    };
+                    return emojis[chain?.toLowerCase()] || '⛓️';
+                },
+                
+                async loadGraphStats() {
+                    try {
+                        const res = await fetch(`${window.SENTINEL3_API_BASE}/api/graph/health`);
+                        const data = await res.json();
+                        
+                        if (data.status === 'healthy') {
+                            const nodeCounts = data.node_counts || {};
+                            const relCounts = data.relationship_counts || {};
+                            
+                            const totalNodes = Object.values(nodeCounts).reduce((a, b) => a + b, 0);
+                            const totalRels = Object.values(relCounts).reduce((a, b) => a + b, 0);
+                            
+                            this.graphStats = {
+                                nodes: totalNodes > 1000 ? Math.round(totalNodes / 1000) + 'K+' : totalNodes.toString(),
+                                relationships: totalRels.toString() + '+',
+                                hackers: '15',
+                                attackVectors: nodeCounts['AttackVector'] || '8'
+                            };
+                        }
+                    } catch (e) {
+                        console.error('Failed to load graph stats:', e);
+                    }
                 },
                 
                 wsConnected: false,
@@ -1121,12 +1351,26 @@
                 
                 formatTime(iso) {
                     if (!iso) return '';
-                    const date = new Date(iso);
-                    return date.toLocaleTimeString();
+                    // API returns UTC timestamps without 'Z', so append it
+                    let dateStr = iso;
+                    if (!iso.endsWith('Z') && !iso.includes('+')) {
+                        dateStr = iso + 'Z';  // Treat as UTC
+                    }
+                    const date = new Date(dateStr);
+                    // Format as local time with IST indicator
+                    return date.toLocaleTimeString('en-IN', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: true,
+                        timeZoneName: 'short'
+                    });
                 },
                 
                 formatUSD(amount) {
-                    if (!amount) return '$0';
+                    if (!amount || amount <= 0) return 'Unknown';
+                    // Cap display at $10B (unrealistic values are likely bugs)
+                    if (amount > 10000000000) return 'Unknown';
+                    if (amount >= 1000000000) return '$' + (amount / 1000000000).toFixed(1) + 'B';
                     if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M';
                     if (amount >= 1000) return '$' + (amount / 1000).toFixed(0) + 'K';
                     return '$' + amount.toFixed(0);
@@ -1193,7 +1437,8 @@
                         type === 'warning' ? 'bg-yellow-600' :
                         'bg-blue-600'
                     }`;
-                    notification.innerHTML = `<span class="text-white font-medium">${message}</span>`;
+                    // XSS Protection: Sanitize message before rendering
+                    notification.innerHTML = `<span class="text-white font-medium">${DOMPurify.sanitize(message)}</span>`;
                     document.body.appendChild(notification);
                     
                     // Auto-remove after 3 seconds

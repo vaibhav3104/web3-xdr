@@ -15,7 +15,7 @@ Detects complex attack patterns across multiple events:
 
 from typing import Dict, Any, Optional, List, Set
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from enum import Enum
 import structlog
@@ -200,7 +200,8 @@ class PatternMatcher:
     
     def _cleanup_old_events(self):
         """Remove events older than window."""
-        cutoff = datetime.utcnow() - timedelta(minutes=self._window_minutes)
+        # Use timezone-aware datetime to avoid comparison errors
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=self._window_minutes)
         
         self._events = [
             e for e in self._events
@@ -228,16 +229,22 @@ class PatternMatcher:
                 self._events_by_contract[contract].append(event)
     
     def _get_event_time(self, event: Dict) -> datetime:
-        """Get event timestamp."""
+        """Get event timestamp (always returns timezone-aware datetime)."""
         ts = event.get("timestamp") or event.get("block_timestamp")
         if isinstance(ts, datetime):
+            # Make sure it's timezone-aware
+            if ts.tzinfo is None:
+                return ts.replace(tzinfo=timezone.utc)
             return ts
         if isinstance(ts, str):
             try:
-                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    return parsed.replace(tzinfo=timezone.utc)
+                return parsed
             except:
                 pass
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
     
     def _detect_sandwich(self, event: Dict[str, Any]) -> List[PatternMatch]:
         """Detect sandwich attack pattern."""
@@ -297,7 +304,7 @@ class PatternMatcher:
                             loss_usd=profit * 0.5,
                             attacker_addresses=[front_addr],
                             victim_addresses=[victim_addr],
-                            timestamp=datetime.utcnow(),
+                            timestamp=datetime.now(timezone.utc),
                             details={
                                 "same_block": True,
                                 "swap_count": 3,
@@ -336,7 +343,7 @@ class PatternMatcher:
                 loss_usd=total_volume * 0.01,
                 attacker_addresses=[event.get("from_address", "")],
                 victim_addresses=[],
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "same_block": True,
                     "block_operation_count": operation_count,
@@ -382,7 +389,7 @@ class PatternMatcher:
                     loss_usd=total_removed,
                     attacker_addresses=[event.get("from_address", "")],
                     victim_addresses=[],
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     details={
                         "liquidity_removed_percent": removed_percent,
                         "total_added_usd": total_added,
@@ -430,7 +437,7 @@ class PatternMatcher:
                 loss_usd=0,
                 attacker_addresses=[from_addr, to_addr],
                 victim_addresses=[],
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "buyer_seller_connected": True,
                     "trade_count": total_trades,
@@ -470,7 +477,7 @@ class PatternMatcher:
                 loss_usd=0,
                 attacker_addresses=[from_addr],
                 victim_addresses=[],
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "bridge_count": len(bridge_events),
                     "total_bridged_usd": total_bridged,

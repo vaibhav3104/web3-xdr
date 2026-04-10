@@ -11,6 +11,7 @@ resources:
 
 commonLabels:
   app.kubernetes.io/name: sentinel3
-  app.kubernetes.io/component: security
+  app.kubernetes.io/component: core
   app.kubernetes.io/part-of: sentinel3
+  app.kubernetes.io/managed-by: kustomize
 

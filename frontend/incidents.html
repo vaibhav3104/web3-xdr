@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incidents - Sentinel3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <!-- DOMPurify for XSS Protection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent-red: #ff3b3b;
+            --accent-orange: #ff8a3b;
+            --accent-yellow: #ffd93b;
+            --accent-green: #3bff7e;
+            --accent-blue: #3b8aff;
+            --accent-purple: #8a3bff;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border-color: #2a2a3a;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; }
+        
+        .severity-critical { background: linear-gradient(135deg, rgba(255, 59, 59, 0.2), rgba(255, 59, 59, 0.1)); border-left: 4px solid var(--accent-red); }
+        .severity-high { background: linear-gradient(135deg, rgba(255, 138, 59, 0.2), rgba(255, 138, 59, 0.1)); border-left: 4px solid var(--accent-orange); }
+        .severity-medium { background: linear-gradient(135deg, rgba(255, 217, 59, 0.2), rgba(255, 217, 59, 0.1)); border-left: 4px solid var(--accent-yellow); }
+        .severity-low { background: linear-gradient(135deg, rgba(59, 255, 126, 0.2), rgba(59, 255, 126, 0.1)); border-left: 4px solid var(--accent-green); }
+        
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        
+        .modal-backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
+        
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .notification-enter { animation: slideIn 0.3s ease-out; }
+        
+        .live-indicator { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="min-h-screen" x-data="incidentsApp()">
+    <!-- Live Notifications Toast -->
+    <div class="fixed top-20 right-4 z-50 space-y-2" x-show="notifications.length > 0">
+        <template x-for="(notif, idx) in notifications.slice(0, 3)" :key="notif.id">
+            <div class="notification-enter bg-gray-900 border border-gray-700 rounded-lg p-4 shadow-xl max-w-sm"
+                 :class="{
+                     'border-red-500': notif.severity === 'critical',
+                     'border-orange-500': notif.severity === 'high',
+                     'border-yellow-500': notif.severity === 'medium'
+                 }">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <div class="text-sm font-medium" x-text="notif.title"></div>
+                        <div class="text-xs text-gray-400 mt-1" x-text="notif.message"></div>
+                    </div>
+                    <button @click="dismissNotification(notif.id)" class="text-gray-500 hover:text-white">×</button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Header -->
+    <header class="border-b border-gray-800 bg-[#12121a]/90 backdrop-blur sticky top-0 z-40">
+        <div class="flex items-center justify-between px-6 py-3">
+            <div class="flex items-center space-x-4">
+                <a href="index.html" class="flex items-center space-x-2">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
+                        <span class="text-xl">🛡️</span>
+                    </div>
+                    <span class="text-xl font-bold">Sentinel3</span>
+                </a>
+                <span class="text-gray-600">|</span>
+                <span class="text-lg font-semibold text-orange-400">🚨 Incidents</span>
+                <!-- WebSocket Status -->
+                <div class="flex items-center space-x-2 ml-4">
+                    <div class="w-2 h-2 rounded-full" :class="wsConnected ? 'bg-green-500 live-indicator' : 'bg-red-500'"></div>
+                    <span class="text-xs text-gray-400" x-text="wsConnected ? 'Live' : 'Offline'"></span>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <a href="index.html" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">← Dashboard</a>
+                <a href="analytics.html" class="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg text-sm transition">📊 Analytics</a>
+                <a href="security-graph.html" class="px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded-lg text-sm transition">🔷 Graph</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="p-6">
+        <!-- Query Filters -->
+        <div class="card p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <span class="mr-2">🔍</span> Query Incidents
+            </h2>
+            
+            <div class="grid grid-cols-6 gap-4 mb-4">
+                <!-- Time Range -->
+                <div class="col-span-2">
+                    <label class="block text-sm text-gray-400 mb-1">Time Range</label>
+                    <select x-model="filters.timeRange" @change="applyFilters()" 
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
+                        <option value="1h">Last 1 Hour</option>
+                        <option value="6h">Last 6 Hours</option>
+                        <option value="24h" selected>Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                        <option value="30d">Last 30 Days</option>
+                        <option value="custom">Custom Range</option>
+                    </select>
+                </div>
+                
+                <template x-if="filters.timeRange === 'custom'">
+                    <div class="col-span-2 flex space-x-2">
+                        <div class="flex-1">
+                            <label class="block text-sm text-gray-400 mb-1">From</label>
+                            <input type="datetime-local" x-model="filters.startDate" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-sm text-gray-400 mb-1">To</label>
+                            <input type="datetime-local" x-model="filters.endDate" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        </div>
+                    </div>
+                </template>
+                
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Severity</label>
+                    <select x-model="filters.severity" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="critical">🔴 Critical</option>
+                        <option value="high">🟠 High</option>
+                        <option value="medium">🟡 Medium</option>
+                        <option value="low">🟢 Low</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Status</label>
+                    <select x-model="filters.status" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="open_pending">Open</option>
+                        <option value="open_acknowledged">Acknowledged</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Attack Type</label>
+                    <select x-model="filters.attackType" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="rug_pull">Rug Pull</option>
+                        <option value="flash_loan_exploit">Flash Loan</option>
+                        <option value="reentrancy_exploit">Reentrancy</option>
+                        <option value="price_manipulation">Price Manipulation</option>
+                        <option value="honeypot">Honeypot</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Chain</label>
+                    <select x-model="filters.chain" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="ethereum">Ethereum</option>
+                        <option value="polygon">Polygon</option>
+                        <option value="arbitrum">Arbitrum</option>
+                        <option value="optimism">Optimism</option>
+                        <option value="avalanche">Avalanche</option>
+                        <option value="bsc">BSC</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <input type="text" x-model="filters.search" @input="debounceSearch()"
+                               placeholder="Search by ID, contract, or address..."
+                               class="w-80 bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm">
+                        <svg class="w-4 h-4 absolute left-3 top-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                    <button @click="onFilterChange()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition">Apply</button>
+                    <button @click="resetFilters(); onFilterChange()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">Reset</button>
+                </div>
+                
+                <div class="flex items-center space-x-4 text-sm text-gray-400">
+                    <span x-text="`${filteredIncidents.length} incidents`"></span>
+                    <button @click="exportCSV()" class="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg transition">📥 Export</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stats Summary -->
+        <div class="grid grid-cols-5 gap-4 mb-6">
+            <div class="card p-4 text-center">
+                <div class="text-3xl font-bold text-red-400" x-text="stats.critical">0</div>
+                <div class="text-sm text-gray-400">🔴 Critical</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-3xl font-bold text-orange-400" x-text="stats.high">0</div>
+                <div class="text-sm text-gray-400">🟠 High</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-3xl font-bold text-yellow-400" x-text="stats.medium">0</div>
+                <div class="text-sm text-gray-400">🟡 Medium</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-3xl font-bold text-green-400" x-text="stats.low">0</div>
+                <div class="text-sm text-gray-400">🟢 Low</div>
+            </div>
+            <div class="card p-4 text-center">
+                <div class="text-3xl font-bold text-blue-400" x-text="stats.total">0</div>
+                <div class="text-sm text-gray-400">📊 Total</div>
+            </div>
+        </div>
+        
+        <!-- Bulk Actions Bar -->
+        <div x-show="selectedIncidents.length > 0" class="card p-4 mb-4 bg-blue-900/20 border-blue-500/30">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-blue-400" x-text="`${selectedIncidents.length} selected`"></span>
+                    <button @click="bulkAcknowledge()" class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm transition">
+                        ✓ Acknowledge All
+                    </button>
+                    <button @click="bulkResolve()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-sm transition">
+                        ✓ Resolve All
+                    </button>
+                </div>
+                <button @click="clearSelection()" class="text-sm text-gray-400 hover:text-white">Clear Selection</button>
+            </div>
+        </div>
+        
+        <!-- Incidents Table -->
+        <div class="card overflow-hidden">
+            <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <h2 class="text-lg font-bold">📋 Incident List</h2>
+                    <label class="flex items-center space-x-2 text-sm text-gray-400">
+                        <input type="checkbox" @change="toggleSelectAll($event)" class="rounded bg-gray-700 border-gray-600">
+                        <span>Select All</span>
+                    </label>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button @click="refreshIncidents()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">🔄 Refresh</button>
+                    <span class="text-xs text-gray-500" x-text="`Updated: ${lastUpdated}`"></span>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-800/50">
+                        <tr>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-10">
+                                <input type="checkbox" @change="toggleSelectAll($event)" class="rounded bg-gray-700 border-gray-600">
+                            </th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">ID</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Severity</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Risk Score</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Attack Type</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Chain</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Confidence</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Loss</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Time</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                            <th class="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800">
+                        <template x-for="incident in paginatedIncidents" :key="incident.id">
+                            <tr class="hover:bg-gray-800/30 transition cursor-pointer" 
+                                :class="{'bg-blue-900/10': selectedIncidents.includes(incident.id)}"
+                                @click="selectIncident(incident)">
+                                <td class="px-3 py-3" @click.stop>
+                                    <input type="checkbox" 
+                                           :checked="selectedIncidents.includes(incident.id)"
+                                           @change="toggleIncidentSelection(incident.id)"
+                                           class="rounded bg-gray-700 border-gray-600">
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="font-mono text-xs text-blue-400" x-text="incident.id?.substring(0, 25) + '...'"></span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="px-2 py-1 rounded text-xs font-medium"
+                                          :class="{
+                                              'bg-red-500/20 text-red-400': incident.severity === 'critical',
+                                              'bg-orange-500/20 text-orange-400': incident.severity === 'high',
+                                              'bg-yellow-500/20 text-yellow-400': incident.severity === 'medium',
+                                              'bg-green-500/20 text-green-400': incident.severity === 'low'
+                                          }"
+                                          x-text="incident.severity?.toUpperCase()">
+                                    </span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <div class="flex items-center space-x-2">
+                                        <div class="w-12 h-2 bg-gray-700 rounded-full overflow-hidden">
+                                            <div class="h-full rounded-full"
+                                                 :class="{
+                                                     'bg-red-500': extractRiskScore(incident) >= 80,
+                                                     'bg-orange-500': extractRiskScore(incident) >= 60 && extractRiskScore(incident) < 80,
+                                                     'bg-yellow-500': extractRiskScore(incident) >= 40 && extractRiskScore(incident) < 60,
+                                                     'bg-green-500': extractRiskScore(incident) < 40
+                                                 }"
+                                                 :style="`width: ${extractRiskScore(incident)}%`"></div>
+                                        </div>
+                                        <span class="text-xs font-mono" x-text="extractRiskScore(incident)"></span>
+                                    </div>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="text-sm" x-text="formatAttackType(incident.attack_type)"></span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="text-sm capitalize" x-text="incident.affected_chains?.[0] || 'Unknown'"></span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <div class="flex items-center">
+                                        <div class="w-12 h-2 bg-gray-700 rounded-full overflow-hidden mr-2">
+                                            <div class="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                                                 :style="`width: ${(incident.confidence || 0) * 100}%`"></div>
+                                        </div>
+                                        <span class="text-xs" x-text="`${((incident.confidence || 0) * 100).toFixed(0)}%`"></span>
+                                    </div>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="text-sm font-medium" x-text="formatUSD(incident.total_loss_usd)"></span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="text-xs text-gray-400" x-text="formatTime(incident.created_at)"></span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <span class="px-2 py-1 rounded text-xs"
+                                          :class="{
+                                              'bg-red-500/20 text-red-400': incident.status === 'open_pending',
+                                              'bg-yellow-500/20 text-yellow-400': incident.status === 'open_acknowledged',
+                                              'bg-green-500/20 text-green-400': incident.status === 'resolved'
+                                          }"
+                                          x-text="formatStatus(incident.status)">
+                                    </span>
+                                </td>
+                                <td class="px-3 py-3 text-center">
+                                    <div class="flex items-center justify-center space-x-1" @click.stop>
+                                        <button @click="showCorrelatedEvents(incident)" 
+                                                class="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded text-xs transition"
+                                                title="Correlated Events">🔗</button>
+                                        <button @click="selectIncident(incident)" 
+                                                class="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-xs transition"
+                                                title="Details">👁️</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                        
+                        <template x-if="filteredIncidents.length === 0">
+                            <tr>
+                                <td colspan="11" class="px-4 py-12 text-center text-gray-500">
+                                    <div class="text-4xl mb-2">🔍</div>
+                                    <div>No incidents found</div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="p-4 border-t border-gray-800 flex items-center justify-between">
+                <div class="text-sm text-gray-400">Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></div>
+                <div class="flex items-center space-x-2">
+                    <button @click="prevPage()" :disabled="currentPage === 1" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-sm">← Prev</button>
+                    <template x-for="page in visiblePages" :key="page">
+                        <button @click="goToPage(page)" :class="page === currentPage ? 'bg-blue-600' : 'bg-gray-700'" class="px-3 py-1.5 rounded-lg text-sm" x-text="page"></button>
+                    </template>
+                    <button @click="nextPage()" :disabled="currentPage === totalPages" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-sm">Next →</button>
+                </div>
+                <select x-model="perPage" @change="currentPage = 1" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Incident Details Modal -->
+    <div x-show="selectedIncident" x-cloak class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" @click.self="selectedIncident = null">
+        <div class="bg-[#12121a] border border-gray-700 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl"
+             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95">
+            
+            <div class="p-4 border-b border-gray-800 flex items-center justify-between"
+                 :class="{'bg-red-900/20': selectedIncident?.severity === 'critical', 'bg-orange-900/20': selectedIncident?.severity === 'high'}">
+                <div>
+                    <h3 class="text-lg font-bold" x-text="selectedIncident?.title || 'Incident Details'"></h3>
+                    <p class="text-sm text-gray-400 font-mono" x-text="selectedIncident?.id"></p>
+                </div>
+                <button @click="selectedIncident = null" class="p-2 hover:bg-gray-700 rounded-lg">✕</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto max-h-[60vh] scrollbar-thin">
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">Severity & Risk Score</label>
+                            <div class="mt-2 flex items-center space-x-4">
+                                <span class="px-3 py-1 rounded text-sm font-medium"
+                                      :class="{'bg-red-500/20 text-red-400': selectedIncident?.severity === 'critical'}"
+                                      x-text="selectedIncident?.severity?.toUpperCase()"></span>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm text-gray-400">Risk:</span>
+                                    <span class="text-xl font-bold" x-text="extractRiskScore(selectedIncident)"></span>
+                                    <span class="text-sm text-gray-500">/100</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">ML Confidence Breakdown</label>
+                            <div class="mt-2 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-400">Overall Confidence</span>
+                                    <div class="flex items-center">
+                                        <div class="w-32 h-3 bg-gray-700 rounded-full overflow-hidden mr-3">
+                                            <div class="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                                                 :style="`width: ${(selectedIncident?.confidence || 0) * 100}%`"></div>
+                                        </div>
+                                        <span class="font-bold" x-text="`${((selectedIncident?.confidence || 0) * 100).toFixed(1)}%`"></span>
+                                    </div>
+                                </div>
+                                <div class="text-xs text-gray-500 bg-gray-800/50 p-2 rounded">
+                                    <div>• Bytecode Analysis: <span class="text-blue-400">Transformer Model</span></div>
+                                    <div>• Pattern Matching: <span class="text-purple-400">XGBoost Ensemble</span></div>
+                                    <div>• Rule Correlation: <span class="text-green-400">Domain Knowledge</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">Attack Type</label>
+                            <p class="mt-1 text-white" x-text="formatAttackType(selectedIncident?.attack_type)"></p>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">Total Loss (USD)</label>
+                            <p class="mt-1 text-2xl font-bold text-red-400" x-text="formatUSD(selectedIncident?.total_loss_usd)"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">Affected Chains</label>
+                            <div class="mt-1 flex flex-wrap gap-2">
+                                <template x-for="chain in selectedIncident?.affected_chains || []" :key="chain">
+                                    <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-sm capitalize" x-text="chain"></span>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">Affected Contracts</label>
+                            <div class="mt-1 space-y-1 max-h-20 overflow-y-auto">
+                                <template x-for="contract in selectedIncident?.affected_contracts || []" :key="contract">
+                                    <div class="font-mono text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded" x-text="contract"></div>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-500 uppercase">Created At</label>
+                            <p class="mt-1" x-text="formatDateTime(selectedIncident?.created_at)"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <label class="text-xs text-gray-500 uppercase">Summary</label>
+                    <p class="mt-2 text-gray-300 bg-gray-800/50 p-4 rounded-lg" x-text="selectedIncident?.summary"></p>
+                </div>
+                
+                <div class="mt-6" x-show="selectedIncident?.recommended_actions?.length > 0">
+                    <label class="text-xs text-gray-500 uppercase">Recommended Actions</label>
+                    <ul class="mt-2 space-y-2">
+                        <template x-for="action in selectedIncident?.recommended_actions || []" :key="action">
+                            <li class="flex items-start"><span class="text-blue-400 mr-2">•</span><span class="text-gray-300" x-text="action"></span></li>
+                        </template>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-gray-800 bg-gray-900/50">
+                <!-- Feedback Section -->
+                <div class="mb-4 p-3 bg-gray-800/50 rounded-lg" x-show="!selectedIncident?.feedbackSubmitted">
+                    <label class="text-xs text-gray-500 uppercase mb-2 block">Analyst Feedback (TP/FP)</label>
+                    <div class="flex items-center space-x-3">
+                        <button @click="submitFeedback(selectedIncident, true)" 
+                                class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium flex items-center space-x-2"
+                                :disabled="submittingFeedback">
+                            <span>✅</span><span>True Positive</span>
+                        </button>
+                        <button @click="submitFeedback(selectedIncident, false)" 
+                                class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium flex items-center space-x-2"
+                                :disabled="submittingFeedback">
+                            <span>❌</span><span>False Positive</span>
+                        </button>
+                        <input type="text" x-model="feedbackNotes" placeholder="Optional notes..." 
+                               class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">Your feedback helps improve ML detection accuracy</p>
+                </div>
+                <div class="mb-4 p-3 bg-green-900/20 border border-green-500/30 rounded-lg" x-show="selectedIncident?.feedbackSubmitted">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-green-400">✓</span>
+                        <span class="text-sm text-green-400">Feedback submitted - marked as <span x-text="selectedIncident?.feedbackIsTP ? 'True Positive' : 'False Positive'"></span></span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <button @click="showCorrelatedEvents(selectedIncident)" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium">🔗 Events</button>
+                        <button @click="acknowledgeIncident(selectedIncident)" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm" x-show="selectedIncident?.status === 'open_pending'">✓ Acknowledge</button>
+                        <button @click="resolveIncident(selectedIncident)" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm" x-show="selectedIncident?.status !== 'resolved'">✓ Resolve</button>
+                    </div>
+                    <button @click="selectedIncident = null" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Correlated Events Modal -->
+    <div x-show="showEventsModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" @click.self="showEventsModal = false">
+        <div class="bg-[#12121a] border border-gray-700 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-gray-800 bg-purple-900/20 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-bold">🔗 Correlated Events</h3>
+                    <p class="text-sm text-gray-400">Events related to: <span class="font-mono" x-text="eventsForIncident?.id?.substring(0, 30)"></span></p>
+                </div>
+                <button @click="showEventsModal = false" class="p-2 hover:bg-gray-700 rounded-lg">✕</button>
+            </div>
+            
+            <div x-show="loadingEvents" class="p-12 text-center">
+                <div class="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p class="text-gray-400">Loading events...</p>
+            </div>
+            
+            <div x-show="!loadingEvents" class="overflow-y-auto max-h-[70vh]">
+                <!-- ML Detection Info Cards (for ML-detected incidents) -->
+                <template x-if="correlatedEvents.some(e => e.is_ml_detection)">
+                    <div class="p-4 space-y-4">
+                        <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+                            <div class="flex items-center space-x-2 mb-3">
+                                <span class="text-2xl">🤖</span>
+                                <h4 class="text-lg font-semibold text-purple-400">ML Contract Analysis</h4>
+                            </div>
+                            <p class="text-sm text-gray-400 mb-4">This incident was detected by our ML model analyzing contract bytecode. No transaction events are associated yet.</p>
+                        </div>
+                        
+                        <template x-for="event in correlatedEvents.filter(e => e.is_ml_detection)" :key="event.event_id">
+                            <div class="card p-4" :class="{'border-l-4 border-purple-500': event.event_type.includes('ML'), 'border-l-4 border-blue-500': event.event_type.includes('Deployer')}">
+                                <div class="flex items-start justify-between mb-3">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-xl" x-text="event.event_type.includes('ML') ? '📋' : '👤'"></span>
+                                        <span class="font-medium" x-text="event.event_type"></span>
+                                        <span class="px-2 py-0.5 bg-gray-700 rounded text-xs capitalize" x-text="event.chain"></span>
+                                    </div>
+                                    <a x-show="event.ml_details?.explorer_url" 
+                                       :href="event.ml_details?.explorer_url" 
+                                       target="_blank" 
+                                       class="px-3 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-sm transition">
+                                        🔗 View on Explorer
+                                    </a>
+                                </div>
+                                
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-500 w-24">Address:</span>
+                                        <span class="font-mono text-xs bg-gray-800 px-2 py-1 rounded" x-text="event.contract_address"></span>
+                                    </div>
+                                    
+                                    <template x-if="event.ml_details?.detection_type">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="text-gray-500 w-24">Threat Type:</span>
+                                            <span class="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs" x-text="event.ml_details.detection_type"></span>
+                                        </div>
+                                    </template>
+                                    
+                                    <template x-if="event.ml_details?.confidence">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="text-gray-500 w-24">Confidence:</span>
+                                            <span class="text-yellow-400" x-text="event.ml_details.confidence"></span>
+                                        </div>
+                                    </template>
+                                    
+                                    <template x-if="event.ml_details?.risk_score">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="text-gray-500 w-24">Risk Score:</span>
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
+                                                    <div class="h-full rounded-full"
+                                                         :class="{
+                                                             'bg-red-500': event.ml_details.risk_score >= 80,
+                                                             'bg-orange-500': event.ml_details.risk_score >= 60,
+                                                             'bg-yellow-500': event.ml_details.risk_score >= 40,
+                                                             'bg-green-500': event.ml_details.risk_score < 40
+                                                         }"
+                                                         :style="`width: ${event.ml_details.risk_score}%`"></div>
+                                                </div>
+                                                <span x-text="`${event.ml_details.risk_score}/100`"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    
+                                    <template x-if="event.ml_details?.deployer">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="text-gray-500 w-24">Deployer:</span>
+                                            <span class="font-mono text-xs text-gray-400" x-text="event.ml_details.deployer"></span>
+                                        </div>
+                                    </template>
+                                    
+                                    <template x-if="event.ml_details?.note">
+                                        <div class="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded text-xs text-yellow-400">
+                                            💡 <span x-text="event.ml_details.note"></span>
+                                        </div>
+                                    </template>
+                                    
+                                    <template x-if="event.ml_details?.analysis_summary">
+                                        <div class="mt-2 p-2 bg-gray-800 rounded text-xs text-gray-400">
+                                            <span x-text="event.ml_details.analysis_summary"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                
+                                <div class="mt-3 text-xs text-gray-500">
+                                    Detected: <span x-text="formatTime(event.timestamp)"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                
+                <!-- Regular Events Table (for non-ML incidents) -->
+                <template x-if="!correlatedEvents.some(e => e.is_ml_detection)">
+                    <table class="w-full">
+                        <thead class="bg-gray-800/50 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Chain</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Contract</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Amount</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">USD</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Time</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tx</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800">
+                            <template x-for="event in correlatedEvents" :key="event.event_id">
+                                <tr class="hover:bg-gray-800/30">
+                                    <td class="px-4 py-3"><span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs" x-text="event.event_type"></span></td>
+                                    <td class="px-4 py-3 text-sm capitalize" x-text="event.chain || event.chain_id"></td>
+                                    <td class="px-4 py-3"><span class="font-mono text-xs text-gray-400" x-text="event.contract_address?.substring(0, 10) + '...'"></span></td>
+                                    <td class="px-4 py-3 text-sm" x-text="formatAmount(event.amount)"></td>
+                                    <td class="px-4 py-3 text-sm font-medium" x-text="formatUSD(event.amount_usd)"></td>
+                                    <td class="px-4 py-3 text-xs text-gray-400" x-text="formatTime(event.timestamp || event.block_timestamp)"></td>
+                                    <td class="px-4 py-3"><a :href="`https://etherscan.io/tx/${event.tx_hash}`" target="_blank" class="font-mono text-xs text-blue-400 hover:underline" x-text="event.tx_hash?.substring(0, 10) + '...'"></a></td>
+                                </tr>
+                            </template>
+                            <template x-if="correlatedEvents.length === 0">
+                                <tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">📭 No events found</td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </template>
+            </div>
+            
+            <div class="p-4 border-t border-gray-800 flex justify-between">
+                <span class="text-sm text-gray-400" x-text="`${correlatedEvents.length} events`"></span>
+                <button @click="showEventsModal = false" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function incidentsApp() {
+            return {
+                incidents: [],
+                filteredIncidents: [],
+                selectedIncident: null,
+                selectedIncidents: [],
+                showEventsModal: false,
+                eventsForIncident: null,
+                correlatedEvents: [],
+                loadingEvents: false,
+                lastUpdated: 'Never',
+                currentPage: 1,
+                perPage: 25,
+                searchTimeout: null,
+                wsConnected: false,
+                ws: null,
+                notifications: [],
+                feedbackNotes: '',
+                submittingFeedback: false,
+                feedbackStats: null,
+                
+                filters: { timeRange: '30d', startDate: '', endDate: '', severity: '', status: '', attackType: '', chain: '', search: '' },
+                stats: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+                
+                get totalPages() { return Math.ceil(this.filteredIncidents.length / this.perPage) || 1; },
+                get paginatedIncidents() { const start = (this.currentPage - 1) * this.perPage; return this.filteredIncidents.slice(start, start + parseInt(this.perPage)); },
+                get visiblePages() {
+                    const pages = [], total = this.totalPages, current = this.currentPage;
+                    let start = Math.max(1, current - 2), end = Math.min(total, start + 4);
+                    if (end - start < 4) start = Math.max(1, end - 4);
+                    for (let i = start; i <= end; i++) pages.push(i);
+                    return pages;
+                },
+                
+                async init() {
+                    await new Promise(r => setTimeout(r, 100));
+                    await this.loadIncidents();
+                    this.connectWebSocket();
+                    setInterval(() => this.loadIncidents(), 30000);
+                },
+                
+                getApiBase() {
+                    return window.SENTINEL3_API_BASE || window.API_BASE_URL || 'https://web3-xdr-production-api-1003459948096.us-central1.run.app';
+                },
+                
+                connectWebSocket() {
+                    const wsBase = this.getApiBase().replace('https://', 'wss://').replace('http://', 'ws://');
+                    try {
+                        this.ws = new WebSocket(`${wsBase}/ws/incidents`);
+                        this.ws.onopen = () => { this.wsConnected = true; console.log('WebSocket connected'); };
+                        this.ws.onclose = () => { this.wsConnected = false; setTimeout(() => this.connectWebSocket(), 5000); };
+                        this.ws.onmessage = (event) => {
+                            try {
+                                const data = JSON.parse(event.data);
+                                if (data.type === 'incident') {
+                                    this.handleNewIncident(data.data);
+                                }
+                            } catch (e) { console.error('WS parse error:', e); }
+                        };
+                    } catch (e) { console.error('WS connection error:', e); }
+                },
+                
+                handleNewIncident(incident) {
+                    // Add to list if not exists
+                    const exists = this.incidents.find(i => i.id === incident.id);
+                    if (!exists) {
+                        this.incidents.unshift(incident);
+                        this.applyFilters();
+                        
+                        // Show notification
+                        this.notifications.unshift({
+                            id: Date.now(),
+                            title: `New ${incident.severity?.toUpperCase()} Incident`,
+                            message: incident.title?.substring(0, 50) + '...',
+                            severity: incident.severity
+                        });
+                        
+                        // Auto-dismiss after 5 seconds
+                        setTimeout(() => this.notifications.pop(), 5000);
+                    }
+                },
+                
+                dismissNotification(id) {
+                    this.notifications = this.notifications.filter(n => n.id !== id);
+                },
+                
+                async loadIncidents() {
+                    try {
+                        // Build query params for server-side filtering
+                        const params = new URLSearchParams();
+                        params.append('limit', '500'); // Fetch up to 500 incidents
+                        
+                        // Add time range filter (server-side)
+                        if (this.filters.timeRange && this.filters.timeRange !== 'custom') {
+                            params.append('time_range', this.filters.timeRange);
+                        }
+                        
+                        // Add other filters
+                        if (this.filters.severity) {
+                            params.append('severity', this.filters.severity);
+                        }
+                        if (this.filters.chain) {
+                            params.append('chain', this.filters.chain);
+                        }
+                        if (this.filters.attackType) {
+                            params.append('attack_type', this.filters.attackType);
+                        }
+                        
+                        const url = `${this.getApiBase()}/api/incidents?${params.toString()}`;
+                        console.log('Fetching incidents:', url);
+                        
+                        const response = await fetch(url);
+                        if (!response.ok) {
+                            throw new Error(`API returned ${response.status}`);
+                        }
+                        const data = await response.json();
+                        this.incidents = Array.isArray(data) ? data : (data.incidents || []);
+                        console.log('Loaded incidents:', this.incidents.length);
+                        this.applyFilters();
+                        this.lastUpdated = new Date().toLocaleTimeString();
+                    } catch (error) {
+                        console.error('Failed to load incidents:', error);
+                        this.incidents = [];
+                    }
+                },
+                
+                refreshIncidents() { this.loadIncidents(); },
+                
+                // Parse timestamp as UTC (API returns UTC timestamps without Z suffix)
+                parseUTCTimestamp(timestamp) {
+                    if (!timestamp) return new Date(0);
+                    // If timestamp doesn't have timezone info, treat as UTC
+                    if (!timestamp.endsWith('Z') && !timestamp.includes('+')) {
+                        timestamp = timestamp + 'Z';
+                    }
+                    return new Date(timestamp);
+                },
+                
+                applyFilters() {
+                    // Server-side filtering already applied, just do client-side refinements
+                    let filtered = [...this.incidents];
+                    const now = new Date();
+                    
+                    // Custom time range (client-side only for custom dates)
+                    if (this.filters.timeRange === 'custom') {
+                        if (this.filters.startDate) {
+                            const startTime = new Date(this.filters.startDate);
+                            filtered = filtered.filter(inc => this.parseUTCTimestamp(inc.created_at) >= startTime);
+                        }
+                        if (this.filters.endDate) {
+                            filtered = filtered.filter(inc => this.parseUTCTimestamp(inc.created_at) <= new Date(this.filters.endDate));
+                        }
+                    }
+                    
+                    // Status filter (client-side, not in server yet)
+                    if (this.filters.status) {
+                        filtered = filtered.filter(inc => inc.status?.toLowerCase() === this.filters.status.toLowerCase());
+                    }
+                    
+                    // Search filter (client-side)
+                    if (this.filters.search) {
+                        const s = this.filters.search.toLowerCase();
+                        filtered = filtered.filter(inc => 
+                            inc.id?.toLowerCase().includes(s) || 
+                            inc.title?.toLowerCase().includes(s) || 
+                            inc.affected_contracts?.some(c => c.toLowerCase().includes(s))
+                        );
+                    }
+                    
+                    // Sort by time (most recent first)
+                    filtered.sort((a, b) => this.parseUTCTimestamp(b.created_at) - this.parseUTCTimestamp(a.created_at));
+                    this.filteredIncidents = filtered;
+                    this.currentPage = 1;
+                    this.updateStats();
+                },
+                
+                // Reload incidents when major filters change (server-side)
+                async onFilterChange() {
+                    await this.loadIncidents();
+                },
+                
+                updateStats() {
+                    this.stats = {
+                        critical: this.filteredIncidents.filter(i => i.severity === 'critical').length,
+                        high: this.filteredIncidents.filter(i => i.severity === 'high').length,
+                        medium: this.filteredIncidents.filter(i => i.severity === 'medium').length,
+                        low: this.filteredIncidents.filter(i => i.severity === 'low').length,
+                        total: this.filteredIncidents.length
+                    };
+                },
+                
+                resetFilters() {
+                    this.filters = { timeRange: '24h', startDate: '', endDate: '', severity: '', status: '', attackType: '', chain: '', search: '' };
+                    this.applyFilters();
+                },
+                
+                debounceSearch() { clearTimeout(this.searchTimeout); this.searchTimeout = setTimeout(() => this.applyFilters(), 300); },
+                
+                selectIncident(incident) { this.selectedIncident = incident; },
+                
+                toggleIncidentSelection(id) {
+                    const idx = this.selectedIncidents.indexOf(id);
+                    if (idx > -1) this.selectedIncidents.splice(idx, 1);
+                    else this.selectedIncidents.push(id);
+                },
+                
+                toggleSelectAll(event) {
+                    if (event.target.checked) this.selectedIncidents = this.paginatedIncidents.map(i => i.id);
+                    else this.selectedIncidents = [];
+                },
+                
+                clearSelection() { this.selectedIncidents = []; },
+                
+                async bulkAcknowledge() {
+                    for (const id of this.selectedIncidents) {
+                        try { await fetch(`${this.getApiBase()}/api/incidents/${id}/acknowledge`, { method: 'POST' }); } catch (e) {}
+                    }
+                    this.selectedIncidents = [];
+                    await this.loadIncidents();
+                },
+                
+                async bulkResolve() {
+                    for (const id of this.selectedIncidents) {
+                        try { await fetch(`${this.getApiBase()}/api/incidents/${id}/resolve`, { method: 'POST' }); } catch (e) {}
+                    }
+                    this.selectedIncidents = [];
+                    await this.loadIncidents();
+                },
+                
+                async showCorrelatedEvents(incident) {
+                    this.eventsForIncident = incident;
+                    this.showEventsModal = true;
+                    this.loadingEvents = true;
+                    this.correlatedEvents = [];
+                    
+                    try {
+                        const contracts = incident.affected_contracts || [];
+                        const chain = incident.affected_chains?.[0] || '';
+                        const response = await fetch(`${this.getApiBase()}/api/events?limit=100&chain_id=${chain}`);
+                        const data = await response.json();
+                        let events = Array.isArray(data) ? data : (data.events || []);
+                        
+                        this.correlatedEvents = events.filter(event => {
+                            if (contracts.length > 0) {
+                                const ec = event.contract_address?.toLowerCase();
+                                if (contracts.some(c => c.toLowerCase() === ec)) return true;
+                            }
+                            const addresses = incident.affected_addresses || [];
+                            if (addresses.length > 0) {
+                                const from = event.from_address?.toLowerCase();
+                                const to = event.to_address?.toLowerCase();
+                                if (addresses.some(a => a.toLowerCase() === from || a.toLowerCase() === to)) return true;
+                            }
+                            return false;
+                        }).slice(0, 50);
+                    } catch (e) { console.error('Events error:', e); }
+                    finally { this.loadingEvents = false; }
+                },
+                
+                async acknowledgeIncident(incident) {
+                    try {
+                        await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/acknowledge`, { method: 'POST' });
+                        incident.status = 'open_acknowledged';
+                        await this.loadIncidents();
+                    } catch (e) { console.error('Acknowledge error:', e); }
+                },
+                
+                async resolveIncident(incident) {
+                    try {
+                        await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/resolve`, { method: 'POST' });
+                        incident.status = 'resolved';
+                        this.selectedIncident = null;
+                        await this.loadIncidents();
+                    } catch (e) { console.error('Resolve error:', e); }
+                },
+                
+                async submitFeedback(incident, isTP) {
+                    if (!incident) return;
+                    this.submittingFeedback = true;
+                    
+                    try {
+                        const response = await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/feedback`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                is_true_positive: isTP,
+                                feedback_notes: this.feedbackNotes || null,
+                                analyst_id: 'web_user'
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            // Mark as feedback submitted
+                            incident.feedbackSubmitted = true;
+                            incident.feedbackIsTP = isTP;
+                            this.feedbackNotes = '';
+                            
+                            // Show notification
+                            this.notifications.unshift({
+                                id: Date.now(),
+                                title: 'Feedback Submitted',
+                                message: `Marked as ${isTP ? 'True Positive' : 'False Positive'}`,
+                                severity: isTP ? 'medium' : 'low'
+                            });
+                            setTimeout(() => this.notifications.pop(), 3000);
+                            
+                            // Reload to get updated status
+                            await this.loadIncidents();
+                        } else {
+                            const error = await response.text();
+                            console.error('Feedback error:', error);
+                            alert('Failed to submit feedback: ' + error);
+                        }
+                    } catch (e) {
+                        console.error('Feedback error:', e);
+                        alert('Failed to submit feedback');
+                    } finally {
+                        this.submittingFeedback = false;
+                    }
+                },
+                
+                async loadFeedbackStats() {
+                    try {
+                        const response = await fetch(`${this.getApiBase()}/api/incidents/feedback/stats`);
+                        if (response.ok) {
+                            this.feedbackStats = await response.json();
+                        }
+                    } catch (e) {
+                        console.error('Feedback stats error:', e);
+                    }
+                },
+                
+                extractRiskScore(incident) {
+                    if (!incident) return 0;
+                    const summary = incident.summary || '';
+                    const match = summary.match(/risk score[:\s]+(\d+)/i);
+                    return match ? parseInt(match[1]) : Math.round((incident.confidence || 0) * 100);
+                },
+                
+                exportCSV() {
+                    const headers = ['ID', 'Severity', 'Risk Score', 'Attack Type', 'Chain', 'Confidence', 'Loss USD', 'Status', 'Created At'];
+                    const rows = this.filteredIncidents.map(inc => [inc.id, inc.severity, this.extractRiskScore(inc), inc.attack_type, inc.affected_chains?.join(';'), inc.confidence, inc.total_loss_usd, inc.status, inc.created_at]);
+                    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c || ''}"`).join(','))].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `incidents_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+                },
+                
+                prevPage() { if (this.currentPage > 1) this.currentPage--; },
+                nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
+                goToPage(page) { this.currentPage = page; },
+                
+                formatTime(iso) {
+                    if (!iso) return '';
+                    // Treat timestamps without timezone as UTC
+                    const utcDate = (iso.endsWith('Z') || iso.includes('+')) ? new Date(iso) : new Date(iso + 'Z');
+                    // Format in IST (UTC+5:30)
+                    const options = { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        day: '2-digit',
+                        month: 'short',
+                        timeZone: 'Asia/Kolkata'
+                    };
+                    return utcDate.toLocaleString('en-IN', options) + ' IST';
+                },
+                formatDateTime(iso) { 
+                    if (!iso) return '';
+                    const utcDate = (iso.endsWith('Z') || iso.includes('+')) ? new Date(iso) : new Date(iso + 'Z');
+                    const options = { 
+                        year: 'numeric',
+                        month: 'short',
+                        day: '2-digit',
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        second: '2-digit',
+                        timeZone: 'Asia/Kolkata'
+                    };
+                    return utcDate.toLocaleString('en-IN', options) + ' IST';
+                },
+                formatUSD(amount) {
+                    if (!amount || amount <= 0) return 'Unknown';
+                    if (amount > 10_000_000_000) return 'Unknown';
+                    if (amount >= 1_000_000_000) return '$' + (amount / 1_000_000_000).toFixed(1) + 'B';
+                    if (amount >= 1_000_000) return '$' + (amount / 1_000_000).toFixed(1) + 'M';
+                    if (amount >= 1_000) return '$' + (amount / 1_000).toFixed(0) + 'K';
+                    return '$' + amount.toFixed(0);
+                },
+                formatAmount(amount) {
+                    if (!amount) return '0';
+                    if (amount >= 1_000_000) return (amount / 1_000_000).toFixed(2) + 'M';
+                    if (amount >= 1_000) return (amount / 1_000).toFixed(2) + 'K';
+                    return amount.toFixed(4);
+                },
+                formatAttackType(type) { return type ? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'; },
+                formatStatus(status) {
+                    const map = { 'open_pending': 'Open', 'open_acknowledged': 'Acknowledged', 'resolved': 'Resolved' };
+                    return map[status?.toLowerCase()] || status || 'Unknown';
+                }
+            };
+        }
+    </script>
+</body>
+</html>

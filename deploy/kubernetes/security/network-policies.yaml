@@ -1,0 +1,316 @@
+# =============================================================================
+# Sentinel3 - Kubernetes Network Policies
+# =============================================================================
+# Zero-trust network model: deny all traffic, then allow only what's needed.
+# =============================================================================
+
+# --- Default Deny All Ingress ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# --- Default Deny All Egress ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+---
+# --- Allow Sentinel3 API Ingress (from Ingress controller + internal pods) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sentinel3-api-ingress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector:
+    matchLabels:
+      app: sentinel3
+      component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    # From ingress controller (nginx)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    # From Prometheus (metrics scraping)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Internal: worker -> API communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sentinel3
+              component: worker
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# --- Allow Sentinel3 API Egress (to databases, external chains, DNS) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sentinel3-api-egress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector:
+    matchLabels:
+      app: sentinel3
+      component: api
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution (kube-dns)
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # External: Blockchain RPC endpoints (HTTPS)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8545   # Ethereum JSON-RPC
+        - protocol: TCP
+          port: 8546   # Ethereum WebSocket
+
+---
+# --- Allow Sentinel3 Worker Egress (blockchain listeners, databases) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sentinel3-worker-egress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector:
+    matchLabels:
+      app: sentinel3
+      component: worker
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Internal: Worker -> API
+    - to:
+        - podSelector:
+            matchLabels:
+              app: sentinel3
+              component: api
+      ports:
+        - protocol: TCP
+          port: 8080
+    # External: Blockchain RPC + WebSocket endpoints
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8545
+        - protocol: TCP
+          port: 8546
+        # Solana RPC
+        - protocol: TCP
+          port: 8899
+        - protocol: TCP
+          port: 8900
+
+---
+# --- Allow GPU/ML Pod Egress (model serving, limited external) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sentinel3-gpu-egress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector:
+    matchLabels:
+      app: sentinel3
+      component: gpu
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Internal: GPU -> API (return predictions)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: sentinel3
+              component: api
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Vertex AI endpoints (HTTPS only)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+
+---
+# --- Allow Database Pods Ingress (only from sentinel3 pods) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-ingress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sentinel3
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+# --- Allow Redis Pods Ingress (only from sentinel3 pods) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-ingress
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: network-security
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sentinel3
+      ports:
+        - protocol: TCP
+          port: 6379

@@ -27,18 +27,24 @@ spec:
     metadata:
       labels:
         app: sentinel3
+        component: api
         version: v1
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: sentinel3
+      serviceAccountName: sentinel3-api
+      automountServiceAccountToken: false
       
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
         fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       
       containers:
         - name: sentinel3
@@ -108,13 +114,22 @@ spec:
             - name: rules
               mountPath: /app/config/rules
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.cache
           
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
             capabilities:
               drop:
                 - ALL
+            seccompProfile:
+              type: RuntimeDefault
       
       volumes:
         - name: config
@@ -123,6 +138,15 @@ spec:
         - name: rules
           configMap:
             name: sentinel3-rules
+        # Ephemeral writable dirs (required with readOnlyRootFilesystem)
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 100Mi
+        - name: cache
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
       
       affinity:
         podAntiAffinity:
@@ -159,6 +183,9 @@ spec:
   selector:
     app: sentinel3
 ---
+# ServiceAccounts are defined in security/rbac.yaml with per-component
+# granularity (sentinel3-api, sentinel3-worker, sentinel3-gpu).
+# This generic SA is kept for backward compatibility.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -166,4 +193,5 @@ metadata:
   namespace: sentinel3
   labels:
     app: sentinel3
+automountServiceAccountToken: false
 

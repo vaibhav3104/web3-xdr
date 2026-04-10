@@ -1,0 +1,99 @@
+# =============================================================================
+# Sentinel3 - Pod Security Standards (PSS)
+# =============================================================================
+# Enforces the "restricted" Pod Security Standard on the sentinel3 namespace.
+# This is the most restrictive built-in policy (Kubernetes 1.25+).
+# See: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+# =============================================================================
+
+# --- Namespace labels enforce PSS ---
+# Apply these labels to the sentinel3 namespace to enforce restricted profile.
+# This is done via a patch in Kustomize (see security overlay).
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel3
+  labels:
+    app: sentinel3
+    istio-injection: enabled
+    # Pod Security Standards - Restricted profile
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# =============================================================================
+# Resource Quotas - Prevent runaway resource usage
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sentinel3-resource-quota
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+spec:
+  hard:
+    # Pod limits
+    pods: "30"
+    # CPU limits
+    requests.cpu: "20"
+    limits.cpu: "40"
+    # Memory limits
+    requests.memory: 40Gi
+    limits.memory: 80Gi
+    # Storage limits
+    requests.storage: 100Gi
+    persistentvolumeclaims: "10"
+    # Service limits
+    services: "10"
+    services.loadbalancers: "2"
+    services.nodeports: "0"
+    # Secret/ConfigMap limits
+    secrets: "20"
+    configmaps: "20"
+
+---
+# =============================================================================
+# LimitRange - Enforce per-pod resource boundaries
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sentinel3-limit-range
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+spec:
+  limits:
+    # Container defaults
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 1Gi
+      defaultRequest:
+        cpu: 250m
+        memory: 256Mi
+      max:
+        cpu: "8"
+        memory: 16Gi
+      min:
+        cpu: 50m
+        memory: 64Mi
+    # Pod maximums
+    - type: Pod
+      max:
+        cpu: "16"
+        memory: 32Gi
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 50Gi
+      min:
+        storage: 1Gi

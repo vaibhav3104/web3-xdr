@@ -1,0 +1,253 @@
+# =============================================================================
+# Sentinel3 - Falco Runtime Security Rules
+# =============================================================================
+# Real-time container runtime threat detection.
+# Install Falco: helm install falco falcosecurity/falco --namespace falco --create-namespace
+#
+# These rules detect suspicious runtime behavior inside sentinel3 containers:
+# - Unexpected process execution
+# - Sensitive file access
+# - Network anomalies
+# - Web3-specific threats (private key exfiltration, RPC hijacking)
+# =============================================================================
+
+# --- Falco custom rules for sentinel3 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-sentinel3-rules
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: runtime-security
+data:
+  sentinel3_rules.yaml: |
+    # =========================================================================
+    # Sentinel3 Custom Falco Rules
+    # =========================================================================
+
+    # --- Macro: Match sentinel3 containers ---
+    - macro: sentinel3_container
+      condition: >
+        container.image.repository startswith "us-central1-docker.pkg.dev/web3-xdr/sentinel3"
+
+    # --- Macro: Allowed processes in sentinel3 containers ---
+    - macro: sentinel3_allowed_processes
+      condition: >
+        proc.name in (python3, python, gunicorn, uvicorn, celery, bash, sh, 
+                       anvil, curl, wget, pip, git)
+
+    # =========================================================================
+    # Rule 1: Unexpected process in sentinel3 container
+    # =========================================================================
+    - rule: Sentinel3 Unexpected Process
+      desc: >
+        Detect execution of unexpected processes in sentinel3 containers.
+        Could indicate container compromise or malicious payload execution.
+      condition: >
+        spawned_process and
+        sentinel3_container and
+        not sentinel3_allowed_processes and
+        not proc.name in (cat, ls, id, whoami, env, ps, grep, awk, sed, tee)
+      output: >
+        Unexpected process in sentinel3 container
+        (user=%user.name user_loginuid=%user.loginuid command=%proc.cmdline
+        pid=%proc.pid container=%container.name image=%container.image.repository
+        pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [sentinel3, process, mitre_execution]
+
+    # =========================================================================
+    # Rule 2: Private key file access
+    # =========================================================================
+    - rule: Sentinel3 Private Key Access
+      desc: >
+        Detect attempts to read or exfiltrate private key files.
+        Critical for Web3 apps that may handle wallet keys.
+      condition: >
+        sentinel3_container and
+        (open_read or open_write) and
+        (fd.name contains "private" or
+         fd.name contains ".pem" or
+         fd.name contains "keystore" or
+         fd.name contains "wallet" or
+         fd.name contains "mnemonic" or
+         fd.name endswith ".key" or
+         fd.name contains "seed_phrase")
+      output: >
+        CRITICAL: Private key file accessed in sentinel3 container
+        (user=%user.name command=%proc.cmdline file=%fd.name
+        container=%container.name pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: CRITICAL
+      tags: [sentinel3, web3, private_key, mitre_credential_access]
+
+    # =========================================================================
+    # Rule 3: Sensitive environment variable access
+    # =========================================================================
+    - rule: Sentinel3 Env Secrets Dump
+      desc: >
+        Detect attempts to dump environment variables which may
+        contain API keys, database passwords, or RPC endpoints.
+      condition: >
+        sentinel3_container and
+        spawned_process and
+        (proc.cmdline contains "/proc/self/environ" or
+         proc.cmdline contains "/proc/1/environ" or
+         (proc.name = "env" and proc.args = "") or
+         proc.cmdline contains "printenv")
+      output: >
+        Environment variable dump detected in sentinel3
+        (user=%user.name command=%proc.cmdline container=%container.name
+        pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [sentinel3, credentials, mitre_credential_access]
+
+    # =========================================================================
+    # Rule 4: Unexpected outbound connection
+    # =========================================================================
+    - rule: Sentinel3 Unexpected Outbound Connection
+      desc: >
+        Detect outbound connections to non-standard ports from sentinel3.
+        Legitimate traffic should only go to: 443, 5432, 6379, 8545, 8546, 8899, 8900.
+      condition: >
+        sentinel3_container and
+        outbound and
+        not (fd.sport in (443, 5432, 6379, 8080, 8545, 8546, 8899, 8900, 53, 9090))
+      output: >
+        Unexpected outbound connection from sentinel3
+        (command=%proc.cmdline connection=%fd.name sport=%fd.sport
+        container=%container.name pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [sentinel3, network, mitre_exfiltration]
+
+    # =========================================================================
+    # Rule 5: Reverse shell detection
+    # =========================================================================
+    - rule: Sentinel3 Reverse Shell
+      desc: >
+        Detect reverse shell attempts in sentinel3 containers.
+        Indicates active compromise and remote access.
+      condition: >
+        sentinel3_container and
+        spawned_process and
+        ((proc.name in (bash, sh, zsh, dash) and
+          proc.cmdline contains "-i") or
+         proc.cmdline contains "/dev/tcp" or
+         proc.cmdline contains "nc -e" or
+         proc.cmdline contains "ncat -e" or
+         proc.cmdline contains "mkfifo" or
+         (proc.name = "python3" and proc.cmdline contains "socket" and
+          proc.cmdline contains "subprocess"))
+      output: >
+        CRITICAL: Reverse shell detected in sentinel3 container!
+        (user=%user.name command=%proc.cmdline container=%container.name
+        pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: CRITICAL
+      tags: [sentinel3, reverse_shell, mitre_execution, mitre_command_control]
+
+    # =========================================================================
+    # Rule 6: Cryptocurrency/Web3 RPC hijacking attempt
+    # =========================================================================
+    - rule: Sentinel3 RPC Endpoint Modification
+      desc: >
+        Detect attempts to modify RPC endpoint configurations.
+        Could redirect blockchain queries to attacker-controlled nodes.
+      condition: >
+        sentinel3_container and
+        open_write and
+        (fd.name contains "rpc" or
+         fd.name contains "endpoint" or
+         fd.name contains "provider") and
+        (fd.name endswith ".json" or
+         fd.name endswith ".yaml" or
+         fd.name endswith ".yml" or
+         fd.name endswith ".env")
+      output: >
+        CRITICAL: Possible RPC endpoint hijacking in sentinel3
+        (user=%user.name command=%proc.cmdline file=%fd.name
+        container=%container.name pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: CRITICAL
+      tags: [sentinel3, web3, rpc_hijack, mitre_impact]
+
+    # =========================================================================
+    # Rule 7: Package manager execution (supply chain attack)
+    # =========================================================================
+    - rule: Sentinel3 Runtime Package Install
+      desc: >
+        Detect package manager execution at runtime. Packages should
+        only be installed at build time, not in running containers.
+      condition: >
+        sentinel3_container and
+        spawned_process and
+        proc.name in (pip, pip3, npm, yarn, apt, apt-get, apk, yum, dnf, gem)
+      output: >
+        Package manager executed at runtime in sentinel3
+        (user=%user.name command=%proc.cmdline container=%container.name
+        pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: ERROR
+      tags: [sentinel3, supply_chain, mitre_persistence]
+
+    # =========================================================================
+    # Rule 8: Kubernetes API access from container
+    # =========================================================================
+    - rule: Sentinel3 K8s API Access
+      desc: >
+        Detect direct access to the Kubernetes API from sentinel3 containers.
+        Service account tokens should be disabled (automountServiceAccountToken: false).
+      condition: >
+        sentinel3_container and
+        outbound and
+        fd.sip = "10.96.0.1" and fd.sport = 443
+      output: >
+        Kubernetes API access from sentinel3 container
+        (command=%proc.cmdline connection=%fd.name
+        container=%container.name pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: ERROR
+      tags: [sentinel3, k8s_api, mitre_discovery]
+
+    # =========================================================================
+    # Rule 9: Sensitive mount access
+    # =========================================================================
+    - rule: Sentinel3 Sensitive Mount Access
+      desc: >
+        Detect access to sensitive host paths or service account tokens.
+      condition: >
+        sentinel3_container and
+        (open_read or open_write) and
+        (fd.name startswith "/var/run/secrets" or
+         fd.name startswith "/run/secrets" or
+         fd.name startswith "/etc/shadow" or
+         fd.name startswith "/etc/passwd" and not proc.name in (python3, python))
+      output: >
+        Sensitive mount access in sentinel3
+        (user=%user.name command=%proc.cmdline file=%fd.name
+        container=%container.name pod=%k8s.pod.name ns=%k8s.ns.name)
+      priority: ERROR
+      tags: [sentinel3, sensitive_mount, mitre_credential_access]
+
+---
+# =============================================================================
+# Falco DaemonSet configuration for sentinel3 integration
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-sentinel3-config
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: runtime-security
+data:
+  falco-config.yaml: |
+    # Falco outputs - send alerts to sentinel3 for correlation
+    json_output: true
+    json_include_output_property: true
+    http_output:
+      enabled: true
+      url: "http://sentinel3.sentinel3.svc.cluster.local:8080/api/v1/security/falco-alerts"
+    # Also send to stdout for log aggregation
+    stdout_output:
+      enabled: true
+    # Syslog output for SIEM integration
+    syslog_output:
+      enabled: true

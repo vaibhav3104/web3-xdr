@@ -166,7 +166,9 @@ rules:
       handles L1 to L2 messages.
     severity: high
     confidence: 0.75
-    enabled: true
+    # DISABLED: Rule was triggering on non-Arbitrum chains (false positives)
+    # Re-enable when Arbitrum-specific event detection is implemented
+    enabled: false
     
     detection:
       type: velocity

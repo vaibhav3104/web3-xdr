@@ -1,0 +1,91 @@
+# =============================================================================
+# Sentinel3 - Hardened Deployment Patch
+# =============================================================================
+# Applied via Kustomize strategic merge patch to add security hardening
+# on top of the base deployment.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel3
+  namespace: sentinel3
+spec:
+  template:
+    metadata:
+      annotations:
+        # Falco monitoring
+        security.sentinel3.io/falco-enabled: "true"
+        # Seccomp profile annotation
+        container.seccomp.security.alpha.kubernetes.io/sentinel3: runtime/default
+    spec:
+      # Use per-component service accounts (not the generic one)
+      serviceAccountName: sentinel3-api
+      # Disable auto-mount of SA token (no K8s API access needed)
+      automountServiceAccountToken: false
+
+      # Pod-level security context (hardened)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        # Seccomp profile (Kubernetes 1.19+)
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: sentinel3
+          # Container-level security context (defense in depth)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+
+          # Projected volume for SA token with short TTL (if K8s API access needed)
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: rules
+              mountPath: /app/config/rules
+              readOnly: true
+            # Writable tmp directory (since rootfs is read-only)
+            - name: tmp
+              mountPath: /tmp
+            # Writable cache directory for Python
+            - name: cache
+              mountPath: /app/.cache
+
+      volumes:
+        - name: config
+          configMap:
+            name: sentinel3-chain-config
+        - name: rules
+          configMap:
+            name: sentinel3-rules
+        # EmptyDir volumes for writable paths (ephemeral, pod-scoped)
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 100Mi
+        - name: cache
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+      
+      # DNS policy: prevent DNS exfiltration
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+          - name: single-request-reopen

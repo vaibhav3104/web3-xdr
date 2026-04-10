@@ -1,0 +1,209 @@
+# =============================================================================
+# Sentinel3 - RBAC (Role-Based Access Control)
+# =============================================================================
+# Principle of least privilege: pods and operators get only the permissions
+# they absolutely need.
+# =============================================================================
+
+# --- ServiceAccount for API pods ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinel3-api
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: api
+  annotations:
+    # GKE Workload Identity (bind to GCP service account)
+    iam.gke.io/gcp-service-account: sentinel3-api@web3-xdr.iam.gserviceaccount.com
+automountServiceAccountToken: false
+
+---
+# --- ServiceAccount for Worker pods ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinel3-worker
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: worker
+  annotations:
+    iam.gke.io/gcp-service-account: sentinel3-worker@web3-xdr.iam.gserviceaccount.com
+automountServiceAccountToken: false
+
+---
+# --- ServiceAccount for GPU/ML pods ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinel3-gpu
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: gpu
+  annotations:
+    iam.gke.io/gcp-service-account: sentinel3-ml@web3-xdr.iam.gserviceaccount.com
+automountServiceAccountToken: false
+
+---
+# --- Role: API pod permissions (minimal) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sentinel3-api-role
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+rules:
+  # Read ConfigMaps for dynamic configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["sentinel3-config", "sentinel3-chain-config", "sentinel3-rules"]
+    verbs: ["get", "watch"]
+  # Read own pod info (for health reporting)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+    resourceNames: []
+  # Read secrets (for DB credentials - prefer external secrets operator)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["sentinel3-secrets"]
+    verbs: ["get"]
+
+---
+# --- Role: Worker pod permissions ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sentinel3-worker-role
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["sentinel3-config", "sentinel3-chain-config", "sentinel3-rules"]
+    verbs: ["get", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["sentinel3-secrets"]
+    verbs: ["get"]
+  # Workers need to update leader election configmap
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+
+---
+# --- Role: GPU/ML pod permissions (very minimal) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sentinel3-gpu-role
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["sentinel3-config"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["sentinel3-secrets"]
+    verbs: ["get"]
+
+---
+# --- RoleBindings ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sentinel3-api-binding
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+subjects:
+  - kind: ServiceAccount
+    name: sentinel3-api
+    namespace: sentinel3
+roleRef:
+  kind: Role
+  name: sentinel3-api-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sentinel3-worker-binding
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+subjects:
+  - kind: ServiceAccount
+    name: sentinel3-worker
+    namespace: sentinel3
+roleRef:
+  kind: Role
+  name: sentinel3-worker-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sentinel3-gpu-binding
+  namespace: sentinel3
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: security
+subjects:
+  - kind: ServiceAccount
+    name: sentinel3-gpu
+    namespace: sentinel3
+roleRef:
+  kind: Role
+  name: sentinel3-gpu-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# --- ClusterRole: Read-only for monitoring (Prometheus, Grafana) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel3-monitoring-reader
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+# --- ClusterRoleBinding: Prometheus -> sentinel3 namespace ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sentinel3-monitoring-binding
+  labels:
+    app.kubernetes.io/name: sentinel3
+    app.kubernetes.io/component: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: sentinel3-monitoring-reader
+  apiGroup: rbac.authorization.k8s.io

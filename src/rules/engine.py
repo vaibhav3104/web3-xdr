@@ -7,7 +7,7 @@ Similar to Sigma rules for traditional SIEM systems.
 
 import os
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,6 +61,7 @@ class AlertRule:
     actions: List[Dict[str, Any]] = field(default_factory=list)
     rate_limit: Optional[Dict[str, Any]] = None
     schedule: Optional[Dict[str, Any]] = None
+    exclusions: Dict[str, Any] = field(default_factory=dict)  # Contracts/addresses to exclude
     
     @property
     def is_critical(self) -> bool:
@@ -69,6 +70,28 @@ class AlertRule:
     @property
     def is_high(self) -> bool:
         return self.severity == "high"
+    
+    def is_excluded(self, contract_address: str, addresses: List[str] = None) -> bool:
+        """Check if the contract or addresses should be excluded from this rule."""
+        if not self.exclusions:
+            return False
+        
+        # Check contract exclusions
+        excluded_contracts = self.exclusions.get('contracts', [])
+        if contract_address and excluded_contracts:
+            contract_lower = contract_address.lower()
+            if any(c.lower() == contract_lower for c in excluded_contracts):
+                return True
+        
+        # Check address exclusions
+        excluded_addresses = self.exclusions.get('addresses', [])
+        if addresses and excluded_addresses:
+            excluded_lower = [a.lower() for a in excluded_addresses]
+            for addr in addresses:
+                if addr and addr.lower() in excluded_lower:
+                    return True
+        
+        return False
 
 
 @dataclass
@@ -171,7 +194,8 @@ class RuleEngine:
             thresholds=data.get('thresholds', {}),
             actions=data.get('actions', []),
             rate_limit=data.get('rate_limit'),
-            schedule=data.get('schedule')
+            schedule=data.get('schedule'),
+            exclusions=data.get('exclusions', {})
         )
     
     def evaluate(self, event: Dict[str, Any]) -> List[AlertMatch]:
@@ -231,7 +255,7 @@ class RuleEngine:
                 match = AlertMatch(
                     rule=rule,
                     event=event,
-                    matched_at=datetime.utcnow(),
+                    matched_at=datetime.now(timezone.utc),
                     match_details=match_result
                 )
                 matches.append(match)
@@ -255,6 +279,41 @@ class RuleEngine:
         detection = rule.detection
         detection_type = detection.get('type', 'event')
         
+        # ========================================
+        # EXCLUSION CHECK: Skip if contract/address is excluded
+        # ========================================
+        if rule.exclusions:
+            contract_address = event.get('contract_address', '')
+            involved_addresses = [
+                event.get('from_address', ''),
+                event.get('to_address', ''),
+                event.get('source_address', ''),
+                event.get('dest_address', ''),
+            ]
+            involved_addresses = [a for a in involved_addresses if a]  # Filter empty
+            
+            if rule.is_excluded(contract_address, involved_addresses):
+                return None  # Skip this rule for excluded contracts/addresses
+        
+        # ========================================
+        # CONTRACT TYPE CHECK: Only match specific contract types (e.g., ERC-721)
+        # ========================================
+        required_contract_types = detection.get('contract_types', [])
+        if required_contract_types:
+            event_contract_type = event.get('contract_type', '').upper()
+            # If contract type is specified in rule, event must match
+            if event_contract_type:
+                type_matched = any(
+                    ct.upper() in event_contract_type or event_contract_type in ct.upper()
+                    for ct in required_contract_types
+                )
+                if not type_matched:
+                    return None  # Contract type doesn't match
+            else:
+                # If event has no contract type info, skip NFT-specific rules
+                # This prevents ERC-20 tokens from triggering NFT rules
+                return None
+        
         # Handle invariant-based rules
         if detection_type == 'invariant':
             if not self._invariant_engine:
@@ -270,14 +329,39 @@ class RuleEngine:
             if pattern_name and self._pattern_matcher.check_pattern(pattern_name, event):
                 return {
                     "pattern": pattern_name,
-                    "matched_at": datetime.utcnow().isoformat(),
+                    "matched_at": datetime.now(timezone.utc).isoformat(),
                 }
             return None
         
+        # Handle velocity-based rules
+        if detection_type == 'velocity':
+            # ========================================
+            # FIX: Check chain BEFORE triggering velocity rules
+            # ========================================
+            if 'chain' in detection:
+                expected_chain = detection['chain']
+                if expected_chain != 'any':
+                    event_chain = event.get('chain', '') or event.get('chain_id', '')
+                    # Normalize chain names
+                    expected_chain_lower = expected_chain.lower()
+                    event_chain_lower = str(event_chain).lower() if event_chain else ''
+                    if event_chain_lower != expected_chain_lower:
+                        return None  # Chain doesn't match, skip this rule
+            
+            # Velocity rules are based on frequency, not individual events
+            # They should trigger to track velocity metrics
+            return {
+                "velocity_type": detection.get('metric', 'events_per_minute'),
+                "threshold": detection.get('threshold', 0),
+                "chain": detection.get('chain', 'any'),
+                "matched_at": datetime.now(timezone.utc).isoformat(),
+            }
+        
         # Standard event-based rule evaluation
         # Check event type with normalization
-        if 'event_type' in detection:
-            expected_types = detection['event_type']
+        # Support both 'event_type' (singular) and 'event_types' (plural)
+        expected_types = detection.get('event_types') or detection.get('event_type')
+        if expected_types:
             if isinstance(expected_types, str):
                 expected_types = [expected_types]
             
@@ -306,31 +390,40 @@ class RuleEngine:
         # Check thresholds
         thresholds = rule.thresholds
         if thresholds:
-            if 'min_amount_usd' in thresholds:
-                # Handle amount_usd as string, Decimal, or number
-                amount_usd_raw = event.get('amount_usd', 0)
-                try:
-                    amount_usd = float(amount_usd_raw) if amount_usd_raw else 0
-                except (ValueError, TypeError):
-                    amount_usd = 0
-                
-                if amount_usd < thresholds['min_amount_usd']:
-                    return None
-                
-                # Add matched threshold to details
-                match_details["amount_usd"] = amount_usd
+            # Get both amount values
+            amount_usd_raw = event.get('amount_usd', 0)
+            amount_raw = event.get('amount', 0)
             
-            if 'min_amount' in thresholds:
-                # Also support raw token amount thresholds
-                amount_raw = event.get('amount', 0)
-                try:
-                    amount = float(amount_raw) if amount_raw else 0
-                except (ValueError, TypeError):
-                    amount = 0
+            try:
+                amount_usd = float(amount_usd_raw) if amount_usd_raw else 0
+            except (ValueError, TypeError):
+                amount_usd = 0
+            
+            try:
+                amount = float(amount_raw) if amount_raw else 0
+            except (ValueError, TypeError):
+                amount = 0
+            
+            # Check USD threshold (if price is available)
+            if 'min_amount_usd' in thresholds:
+                min_usd = thresholds['min_amount_usd']
                 
+                # If USD value is available and meets threshold, pass
+                if amount_usd >= min_usd:
+                    match_details["amount_usd"] = amount_usd
+                # If USD is 0 but we have token amount, check conditions instead
+                elif amount_usd == 0 and amount > 0:
+                    # Fall through to condition checks (already passed above)
+                    match_details["amount"] = amount
+                    match_details["note"] = "USD price unavailable, matched on token amount"
+                else:
+                    # USD value below threshold
+                    return None
+            
+            # Check raw token amount threshold
+            if 'min_amount' in thresholds:
                 if amount < thresholds['min_amount']:
                     return None
-                
                 match_details["amount"] = amount
         
         return match_details
@@ -387,7 +480,7 @@ class RuleEngine:
         
         # Parse period
         period_seconds = self._parse_period(period)
-        cutoff = datetime.utcnow() - timedelta(seconds=period_seconds)
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=period_seconds)
         
         # Count recent alerts
         history = self._alert_history.get(rule.id, [])
@@ -400,10 +493,10 @@ class RuleEngine:
         if rule.id not in self._alert_history:
             self._alert_history[rule.id] = []
         
-        self._alert_history[rule.id].append(datetime.utcnow())
+        self._alert_history[rule.id].append(datetime.now(timezone.utc))
         
         # Cleanup old history
-        cutoff = datetime.utcnow() - timedelta(hours=24)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         self._alert_history[rule.id] = [
             t for t in self._alert_history[rule.id] if t > cutoff
         ]

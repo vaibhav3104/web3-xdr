@@ -1,0 +1,495 @@
+# ============================================================================
+# FINE-TUNED ALERT RULES
+# Optimized for actual event patterns observed in production
+# Created: 2026-01-25
+# ============================================================================
+
+rules:
+  # ==========================================================================
+  # WHALE TRANSFER DETECTION (No USD threshold - uses token amount)
+  # ==========================================================================
+  - id: whale-transfer-ft001
+    name: Whale Transfer Detected
+    description: |
+      Detects large token transfers based on raw token amount.
+      Works without price feed dependency.
+    
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - Transfer
+        - transfer
+      conditions:
+        - field: amount
+          operator: gt
+          value: 100  # > 100 tokens (lowered for testing)
+    
+    thresholds:
+      min_amount_usd: 10000  # $10K+ (lowered for testing)
+    
+    rate_limit:
+      max_alerts: 5
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # MULTI-CHAIN ACTIVITY DETECTION
+  # ==========================================================================
+  - id: multichain-activity-ft002
+    name: Multi-Chain Activity Spike
+    description: |
+      Detects when same address is active on multiple chains within short window.
+      Potential cross-chain attack preparation.
+    
+    severity: high
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: multichain_activity
+      conditions:
+        - field: chain_count
+          operator: gt
+          value: 2
+        - field: time_window
+          operator: lt
+          value: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # SWAP MONITORING (DeFi Activity)
+  # ==========================================================================
+  - id: large-swap-ft003
+    name: Large Swap Detected
+    description: |
+      Monitors swap events for large trades that could indicate
+      market manipulation or attack preparation.
+    
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - Swap
+        - swap
+        - TokenExchange
+      chain: any
+      conditions:
+        - field: amount
+          operator: gt
+          value: 100  # > 100 tokens (lowered for testing)
+    
+    # Also check USD if available
+    thresholds:
+      min_amount_usd: 5000  # $5K+ swaps (lowered for testing)
+    
+    rate_limit:
+      max_alerts: 10
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # LIQUIDITY REMOVAL MONITORING
+  # ==========================================================================
+  - id: liquidity-removal-ft004
+    name: Large Liquidity Removal Detected
+    description: |
+      Monitors large liquidity removal events which could indicate
+      rug pull preparation or protocol drain.
+    
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - LiquidityRemove
+        - liquidity_remove
+        - RemoveLiquidity
+        - Withdraw
+        - Redeem
+      chain: any
+      conditions:
+        - field: amount
+          operator: gt
+          value: 50  # > 50 tokens (lowered for testing)
+    
+    thresholds:
+      min_amount_usd: 10000  # $10K+ liquidity removal (lowered for testing)
+    
+    rate_limit:
+      max_alerts: 5
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # FLASH LOAN MONITORING
+  # ==========================================================================
+  - id: flashloan-detected-ft005
+    name: Large Flash Loan Activity
+    description: |
+      Monitors large flash loan events. Flash loans are often used
+      in attacks for instant capital access.
+    
+    severity: critical
+    confidence: 0.85
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - FlashLoan
+        - flash_borrow
+        - flash_repay
+        - Flash
+      chain: any
+      conditions:
+        - field: amount
+          operator: gt
+          value: 10  # > 10 tokens (lowered for testing)
+    
+    thresholds:
+      min_amount_usd: 50000  # $50K+ flash loans (lowered for testing)
+    
+    rate_limit:
+      max_alerts: 20
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack, telegram]
+        priority: P1
+
+  # ==========================================================================
+  # LIQUIDATION MONITORING
+  # ==========================================================================
+  - id: liquidation-detected-ft006
+    name: Large Liquidation Event
+    description: |
+      Monitors large liquidation events across DeFi protocols.
+      High liquidation activity may indicate market stress or attacks.
+    
+    severity: high
+    confidence: 0.80
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - LiquidationCall
+        - liquidation_call
+        - Liquidate
+        - LiquidateBorrow
+        - Bite
+        - Bark
+      chain: any
+      conditions:
+        - field: amount
+          operator: gt
+          value: 10  # > 10 tokens (lowered for testing)
+    
+    thresholds:
+      min_amount_usd: 5000  # $5K+ liquidations (lowered for testing)
+    
+    rate_limit:
+      max_alerts: 10
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # ADMIN/GOVERNANCE MONITORING
+  # ==========================================================================
+  - id: admin-change-ft007
+    name: Admin/Ownership Change
+    description: |
+      Critical monitoring for ownership and admin changes.
+      Could indicate protocol takeover or legitimate governance.
+      NOTE: These are always critical regardless of amount.
+    
+    severity: critical
+    confidence: 0.90
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - OwnershipTransferred
+        - AdminChanged
+        - RoleGranted
+        - NewAdmin
+        - Upgraded
+        - admin_changed
+      chain: any
+    
+    # No amount threshold - admin changes are always important
+    # But rate limit to prevent spam
+    rate_limit:
+      max_alerts: 10
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack, telegram]
+        priority: P1
+
+  # ==========================================================================
+  # BRIDGE EVENT MONITORING
+  # ==========================================================================
+  - id: bridge-activity-ft008
+    name: Large Bridge Transfer
+    description: |
+      Monitors large cross-chain bridge events for suspicious patterns.
+    
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - Lock
+        - bridge_deposit
+        - LogMessagePublished
+        - SendToChain
+        - TransferRedeemed
+        - FundsDeposited
+      chain: any
+      conditions:
+        - field: amount
+          operator: gt
+          value: 50  # > 50 tokens (lowered for testing)
+    
+    thresholds:
+      min_amount_usd: 10000  # $10K+ bridge transfers (lowered for testing)
+    
+    rate_limit:
+      max_alerts: 10
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # CONTRACT DEPLOYMENT MONITORING
+  # ==========================================================================
+  - id: contract-deploy-ft009
+    name: New Contract Deployment
+    description: |
+      Monitors new contract deployments for potential malicious contracts.
+    
+    severity: high
+    confidence: 0.70
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - ContractDeploy
+        - contract_deploy
+      chain: any
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - bytecode_analysis
+          - similarity_score
+
+  # ==========================================================================
+  # PAUSE/EMERGENCY MONITORING
+  # ==========================================================================
+  - id: emergency-action-ft010
+    name: Emergency Protocol Action
+    description: |
+      Monitors pause, emergency shutdown, and critical governance actions.
+    
+    severity: critical
+    confidence: 0.95
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - Paused
+        - EmergencyShutdown
+        - Cage
+        - SelfDestruct
+      chain: any
+    
+    actions:
+      - type: alert
+        channels: [slack, telegram, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # ORACLE PRICE UPDATE MONITORING
+  # ==========================================================================
+  - id: oracle-update-ft011
+    name: Oracle Price Update
+    description: |
+      Monitors oracle price updates for potential manipulation.
+    
+    severity: medium
+    confidence: 0.60
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - PriceUpdated
+        - AnswerUpdated
+        - price_update
+      chain: any
+    
+    # Rate limit to avoid noise
+    rate_limit:
+      max_alerts: 5
+      period: 1h
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # UNKNOWN EVENT ANOMALY DETECTION
+  # ==========================================================================
+  - id: unknown-event-spike-ft012
+    name: Unknown Event Type Spike
+    description: |
+      Detects spike in unknown event types which could indicate
+      new attack vectors or unclassified protocol activity.
+    
+    severity: medium
+    confidence: 0.50
+    enabled: true
+    
+    detection:
+      type: velocity
+      metric: unknown_events_per_minute
+      chain: any
+      threshold: 50
+    
+    time_window: 5m
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # HIGH-FREQUENCY TRADING DETECTION
+  # ==========================================================================
+  - id: hft-pattern-ft013
+    name: High-Frequency Trading Pattern
+    description: |
+      Detects rapid sequential transactions from same address
+      indicating automated trading or potential MEV activity.
+    
+    severity: medium
+    confidence: 0.65
+    enabled: true
+    
+    detection:
+      type: velocity
+      metric: txs_per_address_per_minute
+      threshold: 20
+    
+    time_window: 1m
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P3
+
+  # ==========================================================================
+  # ZERO-VALUE TRANSFER DETECTION
+  # ==========================================================================
+  - id: zero-transfer-ft014
+    name: Zero-Value Transfer Detected
+    description: |
+      Monitors zero-value transfers which are often used for
+      address poisoning attacks or spam.
+    
+    severity: low
+    confidence: 0.40
+    enabled: true
+    
+    detection:
+      type: event
+      event_types:
+        - Transfer
+        - transfer
+      conditions:
+        - field: amount
+          operator: eq
+          value: 0
+    
+    rate_limit:
+      max_alerts: 5
+      period: 1h
+    
+    actions:
+      - type: log
+        level: warning
+
+  # ==========================================================================
+  # SAME-BLOCK MULTI-TX DETECTION (MEV Indicator)
+  # ==========================================================================
+  - id: same-block-multitx-ft015
+    name: Same-Block Multi-Transaction
+    description: |
+      Detects multiple transactions from same address in same block.
+      Strong indicator of MEV or sandwich attack.
+    
+    severity: high
+    confidence: 0.75
+    enabled: true
+    
+    detection:
+      type: pattern
+      pattern: same_block_multi_tx
+      conditions:
+        - field: tx_count_same_block
+          operator: gt
+          value: 2
+        - field: same_sender
+          operator: eq
+          value: true
+    
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2

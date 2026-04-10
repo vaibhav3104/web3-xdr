@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guardian System - Sentinel3</title>
+    <script src="config.js"></script>
+    <!-- DOMPurify for XSS Protection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -811,6 +814,12 @@
         const API_BASE = window.SENTINEL3_API_BASE || window.location.origin;
         let protocols = [];
 
+        // XSS Protection Helper
+        function sanitize(str) {
+            if (str === null || str === undefined) return '';
+            return DOMPurify.sanitize(String(str));
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadGuardianStatus();
@@ -924,26 +933,27 @@
                 return;
             }
 
+            // XSS Protection: Sanitize all user-controlled data
             container.innerHTML = protocols.map(p => `
                 <div class="protocol-item">
                     <div class="protocol-info">
                         <div class="protocol-icon">🛡️</div>
                         <div>
-                            <div class="protocol-name">${p.name}</div>
-                            <div class="protocol-chain">${p.chain} • ${p.contract.substring(0, 15)}...</div>
+                            <div class="protocol-name">${sanitize(p.name)}</div>
+                            <div class="protocol-chain">${sanitize(p.chain)} • ${sanitize(p.contract?.substring(0, 15))}...</div>
                         </div>
                     </div>
                     <div class="protocol-status">
                         ${p.auto_pause_critical ? '<span class="auto-pause-badge">Auto-Pause</span>' : ''}
-                        <button class="btn btn-secondary" onclick="removeProtocol('${p.id}')">Remove</button>
+                        <button class="btn btn-secondary" onclick="removeProtocol('${sanitize(p.id)}')">Remove</button>
                     </div>
                 </div>
             `).join('');
 
-            // Update emergency modal select
+            // Update emergency modal select (XSS Protected)
             const emergencySelect = document.getElementById('emergencyProtocol');
             emergencySelect.innerHTML = '<option value="">-- Select Protocol --</option>' +
-                protocols.map(p => `<option value="${p.id}">${p.name} (${p.chain})</option>`).join('');
+                protocols.map(p => `<option value="${sanitize(p.id)}">${sanitize(p.name)} (${sanitize(p.chain)})</option>`).join('');
         }
 
         // Load Protocols (called separately for initial load)

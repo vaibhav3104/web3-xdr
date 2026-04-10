@@ -1,6 +1,9 @@
 """
 Admin API Routes for Sentinel3.
 Manage rules, chains, and alerting configuration through the UI.
+
+SECURITY: All write operations require API key authentication.
+Read operations are public for dashboard access.
 """
 
 import os
@@ -10,12 +13,18 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel, Field
 from pathlib import Path
+import structlog
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+logger = structlog.get_logger(__name__)
 
 # Import auth dependencies
 from ..auth.jwt_handler import require_role
 from ..auth.models import User
+
+# Import API key authentication
+from .middleware.security import require_api_key, validate_api_key
 
 # Get config directory
 CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
@@ -302,8 +311,12 @@ async def get_rule(rule_id: str):
 
 
 @router.post("/rules")
-async def create_rule(rule: RuleCreate):
-    """Create a new alert rule."""
+async def create_rule(
+    rule: RuleCreate,
+    client: dict = Depends(require_api_key(["write", "admin"]))
+):
+    """Create a new alert rule. Requires write or admin API key."""
+    logger.info("rule_create_attempt", rule_id=rule.id, client=client.get("name", "unknown"))
     # Build rule dict
     rule_dict = {
         'id': rule.id,
@@ -329,8 +342,13 @@ async def create_rule(rule: RuleCreate):
 
 
 @router.put("/rules/{rule_id}")
-async def update_rule(rule_id: str, update: RuleUpdate):
-    """Update an existing rule."""
+async def update_rule(
+    rule_id: str, 
+    update: RuleUpdate,
+    client: dict = Depends(require_api_key(["write", "admin"]))
+):
+    """Update an existing rule. Requires write or admin API key."""
+    logger.info("rule_update_attempt", rule_id=rule_id, client=client.get("name", "unknown"))
     rules = load_all_rules()
     
     for rule in rules:
@@ -363,16 +381,24 @@ async def update_rule(rule_id: str, update: RuleUpdate):
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_rule(rule_id: str):
-    """Delete a rule."""
+async def delete_rule(
+    rule_id: str,
+    client: dict = Depends(require_api_key(["admin"]))
+):
+    """Delete a rule. Requires admin API key."""
+    logger.info("rule_delete_attempt", rule_id=rule_id, client=client.get("name", "unknown"))
     if delete_rule_from_file(rule_id):
         return {"status": "deleted", "rule_id": rule_id}
     raise HTTPException(status_code=404, detail="Rule not found")
 
 
 @router.post("/rules/{rule_id}/toggle")
-async def toggle_rule(rule_id: str):
-    """Toggle a rule's enabled status."""
+async def toggle_rule(
+    rule_id: str,
+    client: dict = Depends(require_api_key(["write", "admin"]))
+):
+    """Toggle a rule's enabled status. Requires write or admin API key."""
+    logger.info("rule_toggle_attempt", rule_id=rule_id, client=client.get("name", "unknown"))
     rules = load_all_rules()
     
     for rule in rules:
@@ -386,8 +412,11 @@ async def toggle_rule(rule_id: str):
 
 
 @router.post("/rules/reload")
-async def reload_rules():
-    """Reload all rules from files."""
+async def reload_rules(
+    client: dict = Depends(require_api_key(["write", "admin"]))
+):
+    """Reload all rules from files. Requires write or admin API key."""
+    logger.info("rules_reload_attempt", client=client.get("name", "unknown"))
     rules = load_all_rules()
     return {"status": "reloaded", "rule_count": len(rules)}
 

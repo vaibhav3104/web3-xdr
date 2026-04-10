@@ -54,6 +54,16 @@ xgboost>=2.0.0  # Optional: for XGBoost classifier
 # Using CPU-only PyTorch to reduce image size (~200MB vs ~2GB)
 torch>=2.0.0
 
+# Graph Database (Neo4j for Security Graph)
+neo4j>=5.0.0
+
+# Google Cloud AI Platform (Vertex AI)
+google-cloud-aiplatform>=1.40.0
+
+# ONNX for model export
+onnx>=1.15.0
+onnxruntime>=1.16.0
+
 # AI/LLM Integration (Optional)
 # openai>=1.0.0
 # anthropic>=0.8.0

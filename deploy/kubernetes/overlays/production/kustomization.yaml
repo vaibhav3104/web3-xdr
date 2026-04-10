@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Sentinel3 - Production Overlay (Security Hardened)
+# =============================================================================
+# Deploy with: kubectl apply -k deploy/kubernetes/overlays/production
+# =============================================================================
+
+# Base resources
+resources:
+  - ../../base
+  - ../../security
+
+# Patches for security hardening
+patches:
+  # Hardened deployment (seccomp, SA token projection, tmpfs mounts)
+  - path: ../../security/hardened-deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: sentinel3
+
+# Namespace override with Pod Security Standards
+namespace: sentinel3
+
+# Common labels for all resources
+commonLabels:
+  app.kubernetes.io/name: sentinel3
+  app.kubernetes.io/part-of: sentinel3
+  environment: production
+
+# Image configuration (override base)
+images:
+  - name: sentinel3
+    newName: us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu
+    newTag: "${IMAGE_TAG:-latest}"
+
+# Replica count for production
+replicas:
+  - name: sentinel3
+    count: 3
