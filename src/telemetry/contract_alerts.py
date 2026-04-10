@@ -3,7 +3,7 @@ Contract Threat Alerts - Storage and management of contract deployment alerts
 """
 
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict
 from enum import Enum
 import structlog
@@ -217,7 +217,7 @@ class ContractAlertStore:
         
         # Recent alerts (last 24h)
         from datetime import timedelta
-        cutoff = datetime.utcnow() - timedelta(hours=24)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         recent = len([a for a in alerts if a.timestamp > cutoff])
         
         return {

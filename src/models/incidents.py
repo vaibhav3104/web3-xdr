@@ -3,7 +3,7 @@ Incident Model - Represents security incidents.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import uuid
@@ -127,8 +127,8 @@ class Incident:
     
     # Identity
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     # Classification
     severity: Severity = Severity.MEDIUM
@@ -184,20 +184,20 @@ class Incident:
         """Add an event to this incident."""
         if event_id not in self.event_ids:
             self.event_ids.append(event_id)
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
     
     def add_violation(self, violation_id: str):
         """Add a violation to this incident."""
         if violation_id not in self.violation_ids:
             self.violation_ids.append(violation_id)
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
     
     def acknowledge(self, user: str):
         """Mark incident as acknowledged."""
         self.acknowledged_by = user
-        self.acknowledged_at = datetime.utcnow()
+        self.acknowledged_at = datetime.now(timezone.utc)
         self.status = IncidentStatus.INVESTIGATING
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
     
     def to_dict(self) -> dict:
         """Convert to dictionary."""

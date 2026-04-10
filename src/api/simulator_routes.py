@@ -4,7 +4,7 @@ Allows triggering test attacks to demonstrate XDR detection capabilities.
 """
 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
@@ -130,7 +130,7 @@ async def execute_attack(request: AttackRequest):
         total_loss_usd=float(request.value_usd),
         affected_chains=[request.chain.capitalize()],
         events=[f"sim-event-{attack_id}"],
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         recommended_actions=[
             "No action required - this is a simulation",
             f"Review {template['name']} detection rules",

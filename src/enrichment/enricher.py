@@ -13,7 +13,7 @@ Enriches events with:
 """
 
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import structlog
 
@@ -260,7 +260,7 @@ class EventEnricher:
                 event_type=event.get("event_type") or "",
                 amount_usd=float(event.get("amount_usd") or 0),
                 gas_price=event.get("gas_price") or 0,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 contract_address=event.get("contract_address"),
             )
             

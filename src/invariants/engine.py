@@ -2,7 +2,7 @@
 Invariant Engine - Orchestrates invariant evaluation.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Any, Callable, Dict, List, Optional
 import asyncio
 import structlog
@@ -105,7 +105,7 @@ class InvariantEngine:
         self.context.add_event(event)
         
         self._stats["events_processed"] += 1
-        self._stats["last_event_time"] = datetime.utcnow()
+        self._stats["last_event_time"] = datetime.now(timezone.utc)
         
         # Trigger event-driven invariants
         await self._check_invariants(event_triggered=True)
@@ -142,7 +142,7 @@ class InvariantEngine:
                     error=str(e)
                 )
         
-        self._stats["last_check_time"] = datetime.utcnow()
+        self._stats["last_check_time"] = datetime.now(timezone.utc)
         
         # Notify handlers
         for result in results:

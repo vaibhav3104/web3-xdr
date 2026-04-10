@@ -3,7 +3,7 @@ Entity Graph - Tracks relationships between blockchain entities.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set, Tuple
 import structlog
 
@@ -68,7 +68,7 @@ class EntityGraph:
             address=address.lower(),
             chain_id=chain_id,
             entity_type=entity_type,
-            first_seen=datetime.utcnow()
+            first_seen=datetime.now(timezone.utc)
         )
         
         self._known_entities[key] = entity
@@ -228,7 +228,7 @@ class EntityGraph:
         Returns list of paths, each path is list of (entity_id, amount) tuples.
         """
         paths = []
-        cutoff = datetime.utcnow() - time_window if time_window else None
+        cutoff = datetime.now(timezone.utc) - time_window if time_window else None
         
         def dfs(current_id: str, path: List[Tuple[str, float]], visited: Set[str]):
             if current_id in visited:

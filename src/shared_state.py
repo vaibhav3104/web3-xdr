@@ -363,7 +363,7 @@ class MonitorState:
         """Update statistics counters."""
         with self._event_lock:
             self.stats["total_events"] += 1
-            self.stats["last_event_time"] = datetime.utcnow()
+            self.stats["last_event_time"] = datetime.now(timezone.utc)
             
             # Chain stats
             chain = event.chain
@@ -561,7 +561,7 @@ class MonitorState:
             "chain_type": chain_type,
             "status": status,
             "last_block": last_block,
-            "last_update": datetime.utcnow().isoformat(),
+            "last_update": datetime.now(timezone.utc).isoformat(),
             "error": error,
             "events_count": self.stats.get("events_by_chain", {}).get(chain_id, 0)
         }
@@ -598,7 +598,7 @@ class MonitorState:
         stats = dict(self.stats)
         
         if stats.get("start_time"):
-            stats["uptime_seconds"] = int((datetime.utcnow() - stats["start_time"]).total_seconds())
+            stats["uptime_seconds"] = int((datetime.now(timezone.utc) - stats["start_time"]).total_seconds())
         
         stats["db_enabled"] = POSTGRES_ENABLED
         stats["db_connected"] = self._db_initialized
@@ -623,7 +623,7 @@ class MonitorState:
     
     def set_start_time(self):
         """Set monitoring start time."""
-        self.stats["start_time"] = datetime.utcnow()
+        self.stats["start_time"] = datetime.now(timezone.utc)
     
     def add_blocks_scanned(self, count: int):
         """Increment blocks scanned counter."""

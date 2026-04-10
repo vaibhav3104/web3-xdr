@@ -8,7 +8,7 @@ import time
 import hashlib
 from typing import Dict, Optional, Callable
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 
 from fastapi import Request, HTTPException, Depends
@@ -207,7 +207,7 @@ def register_api_key(key: str, name: str, scopes: list = None, rate_limit: int =
         "name": name,
         "scopes": scopes or ["read"],
         "rate_limit": rate_limit,
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
     logger.info("api_key_registered", name=name, scopes=scopes)
 

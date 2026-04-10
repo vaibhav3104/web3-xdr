@@ -2,7 +2,7 @@
 Threshold Invariants - Signature, access control, and governance thresholds.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Set
 import structlog
@@ -155,7 +155,7 @@ class AdminActionInvariant(Invariant):
             if e.contract_address.lower() in self.contract_addresses
         ]
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Track actions
         for event in relevant_events:
@@ -351,7 +351,7 @@ class WithdrawalLimitInvariant(Invariant):
             window=timedelta(hours=24)
         )
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         violations = []
         
         for event in events:

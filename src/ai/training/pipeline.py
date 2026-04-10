@@ -6,7 +6,7 @@ Orchestrates the complete training workflow
 import os
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -453,7 +453,7 @@ class TrainingPipeline:
             confusion_matrix=cm,
             classification_report=report,
             training_time_seconds=training_time,
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).isoformat()
         )
         
         return result

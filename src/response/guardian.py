@@ -195,7 +195,7 @@ class GuardianSystem:
         
         # Create response record
         record = ResponseRecord(
-            id=f"resp-{incident_id[:8]}-{datetime.utcnow().strftime('%H%M%S')}",
+            id=f"resp-{incident_id[:8]}-{datetime.now(timezone.utc).strftime('%H%M%S')}",
             incident_id=incident_id,
             action=action,
             status=ResponseStatus.PENDING,

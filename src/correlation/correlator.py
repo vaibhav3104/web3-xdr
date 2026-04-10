@@ -2,7 +2,7 @@
 XDR Correlator - Main correlation engine.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Any, Callable, Dict, List, Optional, Set
 import asyncio
 import structlog
@@ -44,7 +44,7 @@ class XDRCorrelator:
         # Pending violations for aggregation
         self._pending_violations: List[InvariantResult] = []
         self._pending_events: List[SecurityEvent] = []
-        self._last_aggregation: datetime = datetime.utcnow()
+        self._last_aggregation: datetime = datetime.now(timezone.utc)
         
         # Configuration
         self.aggregation_window = timedelta(minutes=5)
@@ -78,7 +78,7 @@ class XDRCorrelator:
         self._pending_events.append(event)
         
         # Prune old events
-        cutoff = datetime.utcnow() - timedelta(hours=2)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
         self._pending_events = [
             e for e in self._pending_events
             if e.block_timestamp > cutoff
@@ -116,7 +116,7 @@ class XDRCorrelator:
             return True
         
         # Aggregate on time window
-        elapsed = datetime.utcnow() - self._last_aggregation
+        elapsed = datetime.now(timezone.utc) - self._last_aggregation
         if elapsed > self.aggregation_window and self._pending_violations:
             return True
         
@@ -159,7 +159,7 @@ class XDRCorrelator:
         
         # Clear processed violations
         self._pending_violations.clear()
-        self._last_aggregation = datetime.utcnow()
+        self._last_aggregation = datetime.now(timezone.utc)
     
     def _group_violations(
         self,
@@ -217,7 +217,7 @@ class XDRCorrelator:
         """
         Find an existing incident that matches these violations.
         """
-        cutoff = datetime.utcnow() - self.incident_merge_window
+        cutoff = datetime.now(timezone.utc) - self.incident_merge_window
         
         # Get bridges from violations
         bridge_ids = {v.bridge_id for v in violations if v.bridge_id}
@@ -297,7 +297,7 @@ class XDRCorrelator:
             if violation.severity.value > incident.severity.value:
                 incident.severity = violation.severity
         
-        incident.updated_at = datetime.utcnow()
+        incident.updated_at = datetime.now(timezone.utc)
         
         logger.info(
             "incident_updated",
@@ -346,7 +346,7 @@ class XDRCorrelator:
                 incident.status = IncidentStatus.FALSE_POSITIVE
             else:
                 incident.status = IncidentStatus.RESOLVED
-            incident.updated_at = datetime.utcnow()
+            incident.updated_at = datetime.now(timezone.utc)
             return True
         return False
     

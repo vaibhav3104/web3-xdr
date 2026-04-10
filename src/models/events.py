@@ -4,7 +4,7 @@ Enhanced with lifecycle status and finality tracking.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Optional
@@ -59,6 +59,10 @@ class EventType(Enum):
     SWAP = "swap"
     LIQUIDITY_ADD = "liquidity_add"
     LIQUIDITY_REMOVE = "liquidity_remove"
+    LIQUIDATION_CALL = "liquidation_call"
+    PRICE_UPDATE = "price_update"
+    WITHDRAWAL = "withdrawal"
+    DEPOSIT = "deposit"
     
     # Contract operations
     CONTRACT_DEPLOY = "contract_deploy"
@@ -106,7 +110,7 @@ class SecurityEvent:
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     chain_id: str = ""  # "ethereum", "solana", "polygon", etc.
     block_number: int = 0
-    block_timestamp: datetime = field(default_factory=datetime.utcnow)
+    block_timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     tx_hash: str = ""
     log_index: int = 0
     
@@ -189,7 +193,7 @@ class SecurityEvent:
             chain_id=data.get("chain_id", ""),
             block_number=data.get("block_number", 0),
             block_timestamp=datetime.fromisoformat(data["block_timestamp"]) 
-                if "block_timestamp" in data else datetime.utcnow(),
+                if "block_timestamp" in data else datetime.now(timezone.utc),
             tx_hash=data.get("tx_hash", ""),
             log_index=data.get("log_index", 0),
             status=EventStatus(data.get("status", "pending")),

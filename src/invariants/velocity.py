@@ -2,7 +2,7 @@
 Velocity Invariants - Rate and speed-based detection.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional
 import structlog
@@ -54,7 +54,7 @@ class TVLVelocityInvariant(Invariant):
         """
         # Get current TVL
         current_tvl = await context.get_tvl(self.bridge_id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Record snapshot
         self._tvl_history.append({
@@ -165,7 +165,7 @@ class TransactionVelocityInvariant(Invariant):
         )
         
         current_count = len(events)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Record
         self._tx_counts.append({"timestamp": now, "count": current_count})

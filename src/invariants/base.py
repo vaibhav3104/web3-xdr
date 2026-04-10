@@ -4,7 +4,7 @@ Base classes for invariant detection.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Type
 import structlog
@@ -39,7 +39,7 @@ class InvariantContext:
         self._pending_messages: Dict[str, SecurityEvent] = {}  # message_hash -> lock event
         
         # Timestamp of last update
-        self._last_update: datetime = datetime.utcnow()
+        self._last_update: datetime = datetime.now(timezone.utc)
     
     def add_event(self, event: SecurityEvent):
         """Add an event to the context."""
@@ -56,7 +56,7 @@ class InvariantContext:
         if event.message_hash:
             self._track_message(event)
         
-        self._last_update = datetime.utcnow()
+        self._last_update = datetime.now(timezone.utc)
         
         # Prune old events
         self._prune_old_events(timedelta(hours=24))
@@ -93,7 +93,7 @@ class InvariantContext:
     
     def _prune_old_events(self, max_age: timedelta):
         """Remove events older than max_age."""
-        cutoff = datetime.utcnow() - max_age
+        cutoff = datetime.now(timezone.utc) - max_age
         for key in list(self._events.keys()):
             self._events[key] = [
                 e for e in self._events[key]
@@ -112,7 +112,7 @@ class InvariantContext:
         Get events matching criteria.
         """
         results = []
-        cutoff = datetime.utcnow() - window if window else None
+        cutoff = datetime.now(timezone.utc) - window if window else None
         
         for key, events in self._events.items():
             for event in events:
@@ -208,7 +208,7 @@ class InvariantContext:
     
     def get_recent_events(self, minutes: int = 30) -> List[SecurityEvent]:
         """Get recent events within time window."""
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         results = []
         
         for events in self._events.values():
@@ -257,7 +257,7 @@ class Invariant(ABC):
             return False
         
         if self._last_violation:
-            elapsed = (datetime.utcnow() - self._last_violation).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - self._last_violation).total_seconds()
             if elapsed < self.cooldown_seconds:
                 return False
         
@@ -265,7 +265,7 @@ class Invariant(ABC):
     
     def record_violation(self):
         """Record that a violation was detected."""
-        self._last_violation = datetime.utcnow()
+        self._last_violation = datetime.now(timezone.utc)
     
     def get_metadata(self) -> dict:
         """Get invariant metadata."""

@@ -7,7 +7,7 @@ Supports both direct connection and DATABASE_URL (for Cloud SQL).
 import os
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 import structlog
 
@@ -175,7 +175,7 @@ def purge_old_events(hours: int = 24) -> Dict[str, int]:
     
     try:
         cursor = conn.cursor()
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
         
         # Delete old events
         cursor.execute(

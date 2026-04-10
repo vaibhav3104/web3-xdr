@@ -10,7 +10,7 @@ Tracks Total Value Locked (TVL) for protocols to detect:
 
 from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import structlog
 
@@ -92,7 +92,7 @@ class TVLTracker:
         Returns:
             TVLChange if significant change detected
         """
-        timestamp = timestamp or datetime.utcnow()
+        timestamp = timestamp or datetime.now(timezone.utc)
         key = self._get_key(protocol, chain)
         
         # Create snapshot
@@ -141,7 +141,7 @@ class TVLTracker:
     
     def _cleanup_old_snapshots(self, key: str):
         """Remove snapshots older than window."""
-        cutoff = datetime.utcnow() - timedelta(hours=self._window_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=self._window_hours)
         self._snapshots[key] = [
             s for s in self._snapshots[key]
             if s.timestamp > cutoff
@@ -171,7 +171,7 @@ class TVLTracker:
             return 0.0, 0.0
         
         # Get snapshots in time window
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         recent = [s for s in snapshots if s.timestamp > cutoff]
         
         if len(recent) < 2:
@@ -242,7 +242,7 @@ class TVLTracker:
         if len(snapshots) < 2:
             return 0.0
         
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         recent = [s for s in snapshots if s.timestamp > cutoff]
         
         if len(recent) < 2:
@@ -268,7 +268,7 @@ class TVLTracker:
     ) -> List[TVLSnapshot]:
         """Get TVL history for protocol."""
         key = self._get_key(protocol, chain)
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         return [
             s for s in self._snapshots.get(key, [])
             if s.timestamp > cutoff

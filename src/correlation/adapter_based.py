@@ -6,7 +6,7 @@ Phase 3: Uses bridge adapters to extract correlation keys and build paths.
 """
 
 from typing import Dict, List, Optional, Set, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import structlog
 
@@ -171,7 +171,7 @@ class AdapterBasedCorrelator:
     
     def get_orphans(self, max_age_minutes: int = 30) -> List[SecurityEvent]:
         """Get orphan events (no matching correlation)."""
-        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
         
         orphans = []
         for event in self.orphans.values():

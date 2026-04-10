@@ -287,9 +287,9 @@ class TestBloxrouteMempoolSource:
         
         # Get pending transactions
         pending_txs = await source.get_pending_txs(limit=10)
-            
-            await source.stop()
-        
+
+        await source.stop()
+
         # Verify only monitored address transaction is yielded
         # The _normalize_tx method filters out non-monitored addresses
         assert len(pending_txs) >= 1
@@ -302,12 +302,12 @@ class TestBloxrouteMempoolSource:
         """Test: Source with no monitored addresses should warn and not subscribe."""
         # Patch the module-level logger before creating the source
         with patch('src.runtime.intent_sources.bloxroute_source.logger') as mock_log:
-        empty_source = BloxrouteMempoolSource(
-            chain_id="ethereum",
-            auth_header="Bearer test-token",
-            monitored_addresses=[],
-        )
-        
+            empty_source = BloxrouteMempoolSource(
+                chain_id="ethereum",
+                auth_header="Bearer test-token",
+                monitored_addresses=[],
+            )
+
             # Should warn about empty monitored addresses during initialization
             assert mock_log.warning.called
     

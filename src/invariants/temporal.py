@@ -2,7 +2,7 @@
 Temporal Invariants - Sequence and timing invariants.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional, Set
 import structlog
@@ -252,7 +252,7 @@ class MessageDelayInvariant(Invariant):
         """
         # Get pending messages (locks without corresponding mints)
         delayed_messages = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Check all locks in the last few hours
         locks = await context.get_events(

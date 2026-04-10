@@ -8,7 +8,7 @@ import yaml
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/parsers", tags=["parsers"])
 
@@ -90,7 +90,7 @@ def load_parsers() -> dict:
 def save_parsers(config: dict) -> bool:
     """Save parser configuration to YAML."""
     try:
-        config['last_updated'] = datetime.utcnow().strftime("%Y-%m-%d")
+        config['last_updated'] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         with open(PARSERS_FILE, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
         return True

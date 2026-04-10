@@ -7,7 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, List, Set
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -44,7 +44,7 @@ class ConnectionManager:
         await websocket.send_json({
             "type": "connected",
             "channel": channel,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "message": f"Connected to Sentinel3 {channel} stream"
         })
     
@@ -60,7 +60,7 @@ class ConnectionManager:
         if channel not in self.active_connections:
             return
         
-        message["timestamp"] = datetime.utcnow().isoformat()
+        message["timestamp"] = datetime.now(timezone.utc).isoformat()
         
         disconnected = set()
         for connection in self.active_connections[channel]:
@@ -154,7 +154,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif message.get("action") == "ping":
                     await websocket.send_json({
                         "type": "pong",
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(timezone.utc).isoformat()
                     })
                     
             except json.JSONDecodeError:

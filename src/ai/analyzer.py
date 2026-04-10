@@ -10,7 +10,7 @@ Supports multiple LLM backends:
 import os
 import json
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 
 import structlog
@@ -69,7 +69,7 @@ class AIAnalyzer:
         Returns:
             Dict with analysis, recommendations, and metadata
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         
         # Get attack pattern info
         attack_type = incident.get("attack_type", "unknown")
@@ -93,7 +93,7 @@ class AIAnalyzer:
             analysis = self._analyze_local(incident, pattern_info)
         
         # Calculate latency
-        latency = (datetime.utcnow() - start_time).total_seconds()
+        latency = (datetime.now(timezone.utc) - start_time).total_seconds()
         
         return {
             "incident_id": incident.get("id", "unknown"),
@@ -102,7 +102,7 @@ class AIAnalyzer:
             "backend": self.backend,
             "model": self.model if self.backend != "local" else "rule-based",
             "latency_seconds": latency,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
     
     async def get_quick_summary(self, incident: Dict[str, Any]) -> str:

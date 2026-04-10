@@ -316,7 +316,7 @@ class DatabaseService:
                         if start_time_dt.tzinfo is not None:
                             start_time_dt = start_time_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     except (ValueError, TypeError):
-                        start_time_dt = datetime.utcnow()
+                        start_time_dt = datetime.now(timezone.utc)
                 where_parts.append("block_timestamp >= :start_time")
                 params['start_time'] = start_time_dt
             if end_time:
@@ -336,7 +336,7 @@ class DatabaseService:
                         if end_time_dt.tzinfo is not None:
                             end_time_dt = end_time_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     except (ValueError, TypeError):
-                        end_time_dt = datetime.utcnow()
+                        end_time_dt = datetime.now(timezone.utc)
                 where_parts.append("block_timestamp <= :end_time")
                 params['end_time'] = end_time_dt
             if severity:
@@ -543,17 +543,82 @@ class DatabaseService:
     
     @staticmethod
     async def get_events_by_chain(
+        chain: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-    ) -> Dict[str, int]:
+        limit: int = 50
+    ) -> List[Dict]:
         """
-        Get event counts grouped by chain.
+        Get events for a specific chain or counts grouped by chain.
+        If chain is provided, returns list of events.
+        If chain is None, returns counts grouped by chain.
         """
         async with DatabaseManager.get_session() as session:
-            query = select(
-                EventModel.chain_id,
-                func.count(EventModel.id).label("count")
-            ).group_by(EventModel.chain_id)
+            if chain:
+                # Return actual events for the chain
+                query = select(EventModel).where(
+                    EventModel.chain_id == chain
+                ).order_by(EventModel.block_timestamp.desc()).limit(limit)
+                
+                conditions = []
+                if start_time:
+                    conditions.append(EventModel.block_timestamp >= start_time)
+                if end_time:
+                    conditions.append(EventModel.block_timestamp <= end_time)
+                
+                if conditions:
+                    query = query.where(and_(*conditions))
+                
+                result = await session.execute(query)
+                events = result.scalars().all()
+                
+                return [
+                    {
+                        "event_id": e.event_id,
+                        "event_type": e.event_type,
+                        "chain": e.chain_id,
+                        "contract_address": e.contract_address,
+                        "amount": float(e.amount or 0),
+                        "amount_usd": float(e.amount_usd or 0),
+                        "timestamp": e.block_timestamp.isoformat() if e.block_timestamp else "",
+                        "tx_hash": e.tx_hash or "",
+                        "severity": e.severity or "INFO"
+                    }
+                    for e in events
+                ]
+            else:
+                # Return counts grouped by chain
+                query = select(
+                    EventModel.chain_id,
+                    func.count(EventModel.id).label("count")
+                ).group_by(EventModel.chain_id)
+                
+                conditions = []
+                if start_time:
+                    conditions.append(EventModel.block_timestamp >= start_time)
+                if end_time:
+                    conditions.append(EventModel.block_timestamp <= end_time)
+                
+                if conditions:
+                    query = query.where(and_(*conditions))
+                
+                result = await session.execute(query)
+                return {row.chain_id: row.count for row in result}
+    
+    @staticmethod
+    async def get_events_by_contract(
+        contract_address: str,
+        limit: int = 50,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+    ) -> List[Dict]:
+        """
+        Get events for a specific contract address.
+        """
+        async with DatabaseManager.get_session() as session:
+            query = select(EventModel).where(
+                EventModel.contract_address == contract_address.lower()
+            ).order_by(EventModel.block_timestamp.desc()).limit(limit)
             
             conditions = []
             if start_time:
@@ -565,7 +630,50 @@ class DatabaseService:
                 query = query.where(and_(*conditions))
             
             result = await session.execute(query)
-            return {row.chain_id: row.count for row in result}
+            events = result.scalars().all()
+            
+            return [
+                {
+                    "event_id": e.event_id,
+                    "event_type": e.event_type,
+                    "chain": e.chain_id,
+                    "contract_address": e.contract_address,
+                    "amount": float(e.amount or 0),
+                    "amount_usd": float(e.amount_usd or 0),
+                    "timestamp": e.block_timestamp.isoformat() if e.block_timestamp else "",
+                    "tx_hash": e.tx_hash or "",
+                    "severity": e.severity or "INFO"
+                }
+                for e in events
+            ]
+    
+    @staticmethod
+    async def get_event_by_id(event_id: str) -> Optional[Dict]:
+        """
+        Get a single event by its ID.
+        """
+        async with DatabaseManager.get_session() as session:
+            query = select(EventModel).where(EventModel.event_id == event_id)
+            result = await session.execute(query)
+            event = result.scalar_one_or_none()
+            
+            if not event:
+                return None
+            
+            return {
+                "event_id": event.event_id,
+                "event_type": event.event_type,
+                "chain": event.chain_id,
+                "contract_address": event.contract_address,
+                "amount": float(event.amount or 0),
+                "amount_usd": float(event.amount_usd or 0),
+                "timestamp": event.block_timestamp.isoformat() if event.block_timestamp else "",
+                "tx_hash": event.tx_hash or "",
+                "severity": event.severity or "INFO",
+                "from_address": event.from_address,
+                "to_address": event.to_address,
+                "raw_data": event.raw_data
+            }
     
     @staticmethod
     async def get_events_by_type(
@@ -1027,6 +1135,77 @@ class DatabaseService:
                 
             except Exception as e:
                 logger.error("update_incident_status_error", incident_id=incident_id, error=str(e))
+                await session.rollback()
+                return False
+    
+    @staticmethod
+    async def update_incident_feedback(
+        incident_id: str,
+        is_true_positive: bool,
+        feedback_notes: Optional[str] = None,
+        analyst_id: Optional[str] = None,
+        new_status: Optional[str] = None
+    ) -> bool:
+        """
+        Update incident with analyst feedback (TP/FP marking).
+        
+        Args:
+            incident_id: The incident to update
+            is_true_positive: Whether the incident is a true positive
+            feedback_notes: Optional notes from analyst
+            analyst_id: ID of the analyst providing feedback
+            new_status: Optional new status to set
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        async with DatabaseManager.get_session() as session:
+            try:
+                import json
+                
+                # Find incident by incident_id
+                query = select(IncidentModel).where(IncidentModel.incident_id == incident_id)
+                result = await session.execute(query)
+                incident = result.scalar_one_or_none()
+                
+                if not incident:
+                    logger.warning("incident_not_found_for_feedback", incident_id=incident_id)
+                    return False
+                
+                # Update raw_data with feedback
+                raw_data = incident.raw_data or {}
+                if isinstance(raw_data, str):
+                    try:
+                        raw_data = json.loads(raw_data)
+                    except:
+                        raw_data = {}
+                
+                raw_data["analyst_feedback"] = {
+                    "is_true_positive": is_true_positive,
+                    "feedback_notes": feedback_notes,
+                    "analyst_id": analyst_id or "anonymous",
+                    "feedback_time": datetime.now(timezone.utc).isoformat()
+                }
+                
+                incident.raw_data = raw_data
+                incident.updated_at = datetime.now(timezone.utc)
+                
+                # Update status if provided
+                if new_status:
+                    incident.status = new_status.upper()
+                    if new_status.upper() == "RESOLVED":
+                        incident.resolved_at = datetime.now(timezone.utc)
+                        incident.resolved_by = analyst_id
+                
+                await session.commit()
+                logger.info("incident_feedback_updated", 
+                           incident_id=incident_id, 
+                           is_tp=is_true_positive,
+                           analyst=analyst_id)
+                return True
+                
+            except Exception as e:
+                logger.error("update_incident_feedback_error", incident_id=incident_id, error=str(e))
                 await session.rollback()
                 return False
     

@@ -15,7 +15,7 @@ Usage:
 
 import asyncio
 import aiohttp
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
@@ -61,6 +61,31 @@ class PriceFeed:
             "0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9": "AAVE",  # AAVE
             "0xae7ab96520de3a18e5e111b5eaab095312d7fe84": "stETH", # stETH
             "0xbe9895146f7af43049ca1c1ae358b0541ea49704": "cbETH", # cbETH
+            # Additional common tokens
+            "0x4d224452801aced8b2f0aebe155379bb5d594381": "APE",   # ApeCoin
+            "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce": "SHIB",  # Shiba Inu
+            "0x6982508145454ce325ddbe47a25d4ec3d2311933": "PEPE",  # Pepe
+            "0x5a98fcbea516cf06857215779fd812ca3bef1b32": "LDO",   # Lido DAO
+            "0xd533a949740bb3306d119cc777fa900ba034cd52": "CRV",   # Curve DAO
+            "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b": "CVX",   # Convex
+            "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2": "MKR",   # Maker
+            "0xc00e94cb662c3520282e6f5717214004a7f26888": "COMP",  # Compound
+            "0xba100000625a3754423978a60c9317c58a424e3d": "BAL",   # Balancer
+            "0x111111111117dc0aa78b770fa6a738034120c302": "1INCH", # 1inch
+            "0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e": "YFI",   # Yearn
+            "0x6810e776880c02933d47db1b9fc05908e5386b96": "GNO",   # Gnosis
+            "0x853d955acef822db058eb8505911ed77f175b99e": "FRAX",  # Frax
+            "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0": "FXS",   # Frax Share
+            "0x5f98805a4e8be255a32880fdec7f6728c6568ba0": "LUSD",  # Liquity USD
+            "0x6dea81c8171d0ba574754ef6f8b412f2ed88c54d": "LQTY",  # Liquity
+            "0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f": "SNX",   # Synthetix
+            "0x4691937a7508860f876c9c0a2a617e7d9e945d4b": "WOO",   # WOO Network
+            "0x0d8775f648430679a709e98d2b0cb6250d2887ef": "BAT",   # Basic Attention
+            "0x0f5d2fb29fb7d3cfee444a200298f468908cc942": "MANA",  # Decentraland
+            "0x3845badade8e6dff049820680d1f14bd3903a5d0": "SAND",  # Sandbox
+            "0xbb0e17ef65f82ab018d8edd776e8dd940327b28b": "AXS",   # Axie Infinity
+            "0x4c19596f5aaff459fa38b0f7ed92f11ae6543784": "TRU",   # TrueFi
+            "0x090185f2135308bad17527004364ebcc2d37e5f6": "SPELL", # Spell Token
         },
         # Polygon
         "polygon": {
@@ -126,7 +151,70 @@ class PriceFeed:
         "AVAX": 35.0,
         "WETH.e": 3200.0,
         "DAI.e": 1.0,
+        # Additional tokens
+        "APE": 1.50,
+        "SHIB": 0.000025,
+        "PEPE": 0.000015,
+        "LDO": 2.50,
+        "CRV": 0.80,
+        "CVX": 4.50,
+        "MKR": 2000.0,
+        "COMP": 80.0,
+        "BAL": 4.0,
+        "1INCH": 0.50,
+        "YFI": 8000.0,
+        "GNO": 300.0,
+        "FRAX": 1.0,
+        "FXS": 5.0,
+        "LUSD": 1.0,
+        "LQTY": 1.50,
+        "SNX": 3.0,
+        "WOO": 0.25,
+        "BAT": 0.25,
+        "MANA": 0.50,
+        "SAND": 0.60,
+        "AXS": 8.0,
+        "TRU": 0.10,
+        "SPELL": 0.001,
+        # BSC tokens
+        "BNB": 600.0,
+        "WBNB": 600.0,
+        "CAKE": 2.50,
+        "BUSD": 1.0,
     }
+    
+    # Token decimals mapping (most tokens use 18, but stablecoins often use 6)
+    TOKEN_DECIMALS: Dict[str, int] = {
+        # 6 decimal tokens (stablecoins)
+        "USDC": 6,
+        "USDT": 6,
+        "BUSD": 6,  # Some versions
+        # 8 decimal tokens
+        "WBTC": 8,
+        "renBTC": 8,
+        # 18 decimal tokens (default for most ERC20)
+        "WETH": 18,
+        "ETH": 18,
+        "DAI": 18,
+        "LINK": 18,
+        "UNI": 18,
+        "AAVE": 18,
+        "stETH": 18,
+        "cbETH": 18,
+        "WMATIC": 18,
+        "MATIC": 18,
+        "ARB": 18,
+        "OP": 18,
+        "WAVAX": 18,
+        "AVAX": 18,
+        "BNB": 18,
+        "WBNB": 18,
+        "FRAX": 18,
+        "LUSD": 18,
+    }
+    
+    # Default decimals for unknown tokens
+    DEFAULT_DECIMALS = 18
     
     # CoinGecko ID mapping
     COINGECKO_IDS: Dict[str, str] = {
@@ -196,7 +284,7 @@ class PriceFeed:
         # Check cache
         if use_cache and cache_key in self._cache:
             cached = self._cache[cache_key]
-            if datetime.utcnow() - cached.timestamp < timedelta(seconds=self.CACHE_TTL):
+            if datetime.now(timezone.utc) - cached.timestamp < timedelta(seconds=self.CACHE_TTL):
                 return cached.price_usd
         
         # Get token symbol
@@ -209,10 +297,12 @@ class PriceFeed:
                 self._cache[cache_key] = TokenPrice(
                     price_usd=price,
                     symbol="UNKNOWN",
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     source="defillama"
                 )
+                logger.debug("unknown_token_price_found", chain=chain, address=token_address[:10], price=price)
                 return price
+            # For unknown tokens with no price, return 0 but don't spam logs
             return 0.0
         
         # Try DeFiLlama first
@@ -221,7 +311,7 @@ class PriceFeed:
             self._cache[cache_key] = TokenPrice(
                 price_usd=price,
                 symbol=symbol,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 source="defillama"
             )
             return price
@@ -232,7 +322,7 @@ class PriceFeed:
             self._cache[cache_key] = TokenPrice(
                 price_usd=price,
                 symbol=symbol,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 source="coingecko"
             )
             return price
@@ -243,7 +333,7 @@ class PriceFeed:
             self._cache[cache_key] = TokenPrice(
                 price_usd=static_price,
                 symbol=symbol,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 source="static"
             )
             logger.debug("using_static_price", symbol=symbol, price=static_price)
@@ -393,20 +483,102 @@ class PriceFeed:
                         if cg_id in data:
                             self.STATIC_PRICES[symbol] = data[cg_id].get("usd", self.STATIC_PRICES.get(symbol, 0))
                     
-                    self._last_bulk_update = datetime.utcnow()
+                    self._last_bulk_update = datetime.now(timezone.utc)
                     logger.info("static_prices_updated", count=len(data))
         except Exception as e:
             logger.warning("static_prices_update_failed", error=str(e))
     
+    def get_token_decimals(self, chain: str, token_address: str) -> int:
+        """
+        Get token decimals for proper amount conversion.
+        
+        Most ERC20 tokens use 18 decimals, but stablecoins (USDC, USDT) use 6.
+        This is critical for correct USD value calculation.
+        """
+        # First, get the symbol
+        symbol = self.get_token_symbol(chain, token_address)
+        
+        if symbol:
+            return self.TOKEN_DECIMALS.get(symbol, self.DEFAULT_DECIMALS)
+        
+        # Check if it's a known stablecoin address (6 decimals)
+        stablecoin_addresses = {
+            # Ethereum USDC/USDT
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": 6,  # USDC
+            "0xdac17f958d2ee523a2206206994597c13d831ec7": 6,  # USDT
+            # Polygon USDC/USDT
+            "0x2791bca1f2de4661ed88a30c99a7a9449aa84174": 6,  # USDC
+            "0xc2132d05d31c914a87c6611c10748aeb04b58e8f": 6,  # USDT
+            # Arbitrum USDC/USDT
+            "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8": 6,  # USDC
+            "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": 6,  # USDT
+            # Optimism USDC/USDT
+            "0x7f5c764cbc14f9669b88837ca1490cca17c31607": 6,  # USDC
+            "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58": 6,  # USDT
+            # Avalanche USDC/USDT
+            "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": 6,  # USDC
+            "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": 6,  # USDT
+            # BSC USDC/USDT/BUSD
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": 18, # USDC (18 on BSC)
+            "0x55d398326f99059ff775485246999027b3197955": 18, # USDT (18 on BSC)
+            "0xe9e7cea3dedca5984780bafc599bd69add087d56": 18, # BUSD
+        }
+        
+        if token_address:
+            decimals = stablecoin_addresses.get(token_address.lower())
+            if decimals is not None:
+                return decimals
+        
+        return self.DEFAULT_DECIMALS
+    
     def calculate_usd_value(
         self, 
         amount: Decimal, 
-        price: float
+        price: float,
+        decimals: int = 18
     ) -> Decimal:
-        """Calculate USD value from token amount and price."""
+        """
+        Calculate USD value from token amount and price.
+        
+        IMPORTANT: The 'amount' should already be in human-readable format
+        (i.e., already divided by 10^decimals). If you have raw wei amount,
+        use calculate_usd_value_from_raw() instead.
+        """
         if price <= 0:
             return Decimal("0")
-        return amount * Decimal(str(price))
+        
+        usd_value = amount * Decimal(str(price))
+        
+        # Sanity check: Cap at $100 billion (no single tx should be more)
+        MAX_USD = Decimal("100000000000")  # $100B
+        if usd_value > MAX_USD:
+            logger.warning("usd_value_capped", 
+                          original=str(usd_value)[:20], 
+                          capped=str(MAX_USD),
+                          amount=str(amount)[:20],
+                          price=price)
+            return MAX_USD
+        
+        return usd_value
+    
+    def calculate_usd_value_from_raw(
+        self,
+        raw_amount: int,
+        price: float,
+        decimals: int = 18
+    ) -> Decimal:
+        """
+        Calculate USD value from RAW token amount (in smallest units like wei).
+        
+        This handles the decimal conversion automatically.
+        """
+        if price <= 0 or raw_amount <= 0:
+            return Decimal("0")
+        
+        # Convert raw amount to human-readable
+        human_amount = Decimal(raw_amount) / Decimal(10 ** decimals)
+        
+        return self.calculate_usd_value(human_amount, price, decimals)
     
     def get_native_token_symbol(self, chain: str) -> str:
         """Get native token symbol for a chain."""

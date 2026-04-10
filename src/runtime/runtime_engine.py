@@ -8,6 +8,7 @@ Coordinates intent sources, risk router, simulator, and incident creation.
 
 import asyncio
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Dict, List, Optional, Set
 import structlog
 import hashlib
@@ -111,8 +112,14 @@ class RuntimeEngine:
             # Get pubsub instance for broadcasting
             pubsub = await get_runtime_pubsub()
             
-            # Step 2: Route and simulate
+            # Step 2: Route and simulate (deduplicate by tx_hash)
+            seen_tx_hashes: Set[str] = set()
             for pending_tx in pending_txs:
+                if pending_tx.tx_hash in seen_tx_hashes:
+                    logger.debug("skipping_duplicate_tx", tx_hash=pending_tx.tx_hash[:16])
+                    continue
+                seen_tx_hashes.add(pending_tx.tx_hash)
+
                 try:
                     # Publish intent scan
                     await pubsub.publish_intent(
@@ -270,17 +277,36 @@ class RuntimeEngine:
     ) -> List[InvariantResult]:
         """
         Evaluate invariants on simulation results.
-        
-        This creates synthetic SecurityEvents from the simulation and
+
+        Creates synthetic SecurityEvents from the simulation and
         evaluates them through the invariant engine.
         """
-        # TODO: Full implementation would:
-        # 1. Extract events from simulation logs
-        # 2. Create SecurityEvent objects
-        # 3. Pass to invariant engine
-        
-        # For now, return empty list (invariants would be evaluated elsewhere)
-        return []
+        from ..models.events import SecurityEvent, EventType, Severity as EventSeverity
+
+        # Build a synthetic SecurityEvent from the simulated transaction
+        synthetic_event = SecurityEvent(
+            chain_id=self.chain_id,
+            block_number=simulation_run.block_number,
+            tx_hash=pending_tx.tx_hash,
+            event_type=EventType.SUSPICIOUS_CALL,
+            source_address=pending_tx.from_address,
+            dest_address=pending_tx.to_address or "",
+            contract_address=pending_tx.to_address or "",
+        )
+
+        # Delegate to the invariant engine
+        try:
+            results = await self.invariant_engine.evaluate([synthetic_event])
+            if results is None:
+                return []
+            return results
+        except Exception as e:
+            logger.warning(
+                "invariant_evaluation_failed",
+                tx_hash=pending_tx.tx_hash[:16],
+                error=str(e),
+            )
+            return []
     
     async def _create_predicted_incident(
         self,

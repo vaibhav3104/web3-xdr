@@ -634,7 +634,7 @@ class CrossChainCorrelator:
         }
         
         violation = CrossChainViolation(
-            id=f"xc-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{len(self._local_violations)}",
+            id=f"xc-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{len(self._local_violations)}",
             violation_type=violation_type,
             severity=severity_map.get(violation_type, "medium"),
             bridge_id=bridge_id,

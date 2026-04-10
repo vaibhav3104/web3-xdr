@@ -12,7 +12,7 @@ REST API endpoints for:
 from fastapi import APIRouter, HTTPException, Depends, Body, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Set, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 
 from .api_keys import (
@@ -386,7 +386,7 @@ async def add_contract(customer_id: str, request: AddContractRequest):
             address=request.contract_address.lower(),
             type=request.contract_type,
             name=request.contract_name,
-            added_at=datetime.utcnow().isoformat()
+            added_at=datetime.now(timezone.utc).isoformat()
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

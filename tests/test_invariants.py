@@ -3,7 +3,7 @@ Tests for Invariant Detection Engine.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from src.models.events import SecurityEvent, EventType, Severity
@@ -36,7 +36,7 @@ class TestMintLockParityInvariant:
         # Add lock event
         lock = SecurityEvent(
             chain_id=bridge_config["source_chain"],
-            block_timestamp=datetime.utcnow() - timedelta(minutes=5),
+            block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
             event_type=EventType.LOCK,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -47,7 +47,7 @@ class TestMintLockParityInvariant:
         # Add matching mint event
         mint = SecurityEvent(
             chain_id=bridge_config["dest_chain"],
-            block_timestamp=datetime.utcnow(),
+            block_timestamp=datetime.now(timezone.utc),
             event_type=EventType.MINT,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -71,7 +71,7 @@ class TestMintLockParityInvariant:
         # Add only mint event (no lock)
         mint = SecurityEvent(
             chain_id=bridge_config["dest_chain"],
-            block_timestamp=datetime.utcnow(),
+            block_timestamp=datetime.now(timezone.utc),
             event_type=EventType.MINT,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -96,7 +96,7 @@ class TestMintLockParityInvariant:
         # Add small lock
         lock = SecurityEvent(
             chain_id=bridge_config["source_chain"],
-            block_timestamp=datetime.utcnow() - timedelta(minutes=5),
+            block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
             event_type=EventType.LOCK,
             amount=Decimal("50"),
             bridge_id=bridge_config["bridge_id"],
@@ -106,7 +106,7 @@ class TestMintLockParityInvariant:
         # Add larger mint
         mint = SecurityEvent(
             chain_id=bridge_config["dest_chain"],
-            block_timestamp=datetime.utcnow(),
+            block_timestamp=datetime.now(timezone.utc),
             event_type=EventType.MINT,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -135,7 +135,7 @@ class TestUnbackedMintInvariant:
         # Lock first
         lock = SecurityEvent(
             chain_id=bridge_config["source_chain"],
-            block_timestamp=datetime.utcnow() - timedelta(minutes=5),
+            block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
             event_type=EventType.LOCK,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -146,7 +146,7 @@ class TestUnbackedMintInvariant:
         # Then mint
         mint = SecurityEvent(
             chain_id=bridge_config["dest_chain"],
-            block_timestamp=datetime.utcnow(),
+            block_timestamp=datetime.now(timezone.utc),
             event_type=EventType.MINT,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -168,7 +168,7 @@ class TestUnbackedMintInvariant:
         """Test mint without lock fails."""
         mint = SecurityEvent(
             chain_id=bridge_config["dest_chain"],
-            block_timestamp=datetime.utcnow(),
+            block_timestamp=datetime.now(timezone.utc),
             event_type=EventType.MINT,
             amount=Decimal("100"),
             bridge_id=bridge_config["bridge_id"],
@@ -214,7 +214,7 @@ class TestInvariantContext:
         for i in range(5):
             event = SecurityEvent(
                 chain_id="ethereum" if i % 2 == 0 else "polygon",
-                block_timestamp=datetime.utcnow() - timedelta(minutes=i),
+                block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
                 event_type=EventType.LOCK if i % 2 == 0 else EventType.MINT,
                 amount=Decimal(str(i * 10)),
                 bridge_id="test_bridge",

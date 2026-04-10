@@ -15,7 +15,7 @@ import sys
 import json
 import asyncio
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -160,7 +160,7 @@ class ContinuousLearningSystem:
                     "samples": self.collected_samples[-self.config.max_training_samples:],
                     "training_data": self.training_data[-self.config.max_training_samples:],
                     "stats": asdict(self.stats),
-                    "updated_at": datetime.utcnow().isoformat()
+                    "updated_at": datetime.now(timezone.utc).isoformat()
                 }, f, indent=2, default=str)
                 
             logger.debug("data_saved", samples=len(self.collected_samples))
@@ -177,8 +177,8 @@ class ContinuousLearningSystem:
         )
         
         self.running = True
-        self.stats.started_at = datetime.utcnow()
-        self.stats.next_retrain = datetime.utcnow() + timedelta(hours=self.config.retrain_interval_hours)
+        self.stats.started_at = datetime.now(timezone.utc)
+        self.stats.next_retrain = datetime.now(timezone.utc) + timedelta(hours=self.config.retrain_interval_hours)
         
         # Start background tasks
         tasks = [
@@ -247,7 +247,7 @@ class ContinuousLearningSystem:
                 "features": list(analysis.features.values()) if analysis.features else [],
                 "risk_score": analysis.risk_score,
                 "confidence": analysis.confidence,
-                "collected_at": datetime.utcnow().isoformat(),
+                "collected_at": datetime.now(timezone.utc).isoformat(),
                 "is_threat": analysis.is_threat,
             }
             
@@ -363,7 +363,7 @@ class ContinuousLearningSystem:
         while self.running:
             try:
                 # Wait until next training time
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 
                 if self.stats.next_retrain and now >= self.stats.next_retrain:
                     # Check if we have enough new samples
@@ -411,7 +411,7 @@ class ContinuousLearningSystem:
                     logger.error("model_training_error", model=model_type, error=str(e))
                     print(f"   ❌ {model_type.upper()}: Failed - {str(e)}")
             
-            self.stats.last_retrain = datetime.utcnow()
+            self.stats.last_retrain = datetime.now(timezone.utc)
             
             # Call training callbacks
             for callback in self.training_callbacks:
@@ -560,7 +560,7 @@ class ContinuousLearningSystem:
         while self.running:
             await asyncio.sleep(300)  # Every 5 minutes
             
-            uptime = datetime.utcnow() - self.stats.started_at
+            uptime = datetime.now(timezone.utc) - self.stats.started_at
             
             print(f"\n{'─' * 60}")
             print(f"📊 STATS | Uptime: {uptime} | {datetime.now().strftime('%H:%M:%S')}")

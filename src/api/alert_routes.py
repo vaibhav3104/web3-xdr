@@ -6,7 +6,7 @@ Endpoints for managing contract threat alerts and notifications
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
 router = APIRouter(prefix="/api/alerts", tags=["Contract Alerts"])
@@ -103,7 +103,7 @@ async def update_alert_status(alert_id: str, update: AlertStatusUpdate):
     for alert in contract_threat_alerts:
         if alert.get("alert_id") == alert_id:
             alert["status"] = update.status
-            alert["status_updated_at"] = datetime.utcnow().isoformat()
+            alert["status_updated_at"] = datetime.now(timezone.utc).isoformat()
             return {"success": True, "alert": alert}
     
     raise HTTPException(status_code=404, detail="Alert not found")
@@ -173,7 +173,7 @@ async def test_notifications():
         
         test_alert = {
             "alert_id": "TEST-001",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "chain_id": "ethereum",
             "contract_address": "0x1234567890123456789012345678901234567890",
             "deployer_address": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
@@ -232,7 +232,7 @@ async def get_alert_stats():
         "by_status": by_status,
         "last_24h": len([
             a for a in alerts 
-            if a.get("timestamp", "")[:10] == datetime.utcnow().strftime("%Y-%m-%d")
+            if a.get("timestamp", "")[:10] == datetime.now(timezone.utc).strftime("%Y-%m-%d")
         ])
     }
 

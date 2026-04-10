@@ -6,7 +6,7 @@ Sends alerts to Telegram, Slack, Email, and Dashboard
 import os
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 import structlog
@@ -70,7 +70,7 @@ class AlertNotifier:
             logger.debug("duplicate_alert_skipped", alert_id=alert_id)
             return
         
-        self.sent_alerts[alert_id] = datetime.utcnow()
+        self.sent_alerts[alert_id] = datetime.now(timezone.utc)
         
         # Build message
         message = self._format_contract_threat_message(alert)
@@ -210,7 +210,7 @@ class AlertNotifier:
                         }
                     ],
                     "footer": f"Alert ID: {alert.get('alert_id', 'unknown')}",
-                    "ts": int(datetime.utcnow().timestamp())
+                    "ts": int(datetime.now(timezone.utc).timestamp())
                 }]
             }
             

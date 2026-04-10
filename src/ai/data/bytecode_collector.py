@@ -7,7 +7,7 @@ import os
 import json
 import asyncio
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -268,7 +268,7 @@ class BytecodeCollector:
             label=label,
             source=source,
             metadata=metadata or {},
-            collected_at=datetime.utcnow().isoformat(),
+            collected_at=datetime.now(timezone.utc).isoformat(),
             bytecode_hash=bytecode_hash,
             bytecode_length=len(bytecode)
         )
@@ -345,12 +345,12 @@ class BytecodeCollector:
     def save_collected_data(self) -> str:
         """Save collected bytecode to JSON file"""
         
-        output_file = self.output_dir / f"bytecode_dataset_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        output_file = self.output_dir / f"bytecode_dataset_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
         
         # Convert to serializable format
         data = {
             "metadata": {
-                "collected_at": datetime.utcnow().isoformat(),
+                "collected_at": datetime.now(timezone.utc).isoformat(),
                 "total_contracts": len(self.collected),
                 "stats": self.stats,
             },

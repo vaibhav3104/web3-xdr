@@ -3,9 +3,9 @@ API Routes for Web3 XDR Dashboard.
 Connected to real-time monitor data.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
 import structlog
 
@@ -146,17 +146,38 @@ class ChainsStatusResponse(BaseModel):
 async def list_incidents(
     severity: Optional[str] = Query(None, description="Filter by severity"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    limit: int = Query(50, le=100, description="Max results"),
+    limit: int = Query(50, le=500, description="Max results (up to 500)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    time_range: Optional[str] = Query(None, description="Time range: 1h, 6h, 24h, 7d, 30d"),
+    chain: Optional[str] = Query(None, description="Filter by chain"),
+    attack_type: Optional[str] = Query(None, description="Filter by attack type"),
 ):
     """
     List all incidents with optional filtering.
     Fetches from both in-memory state and database.
+    
+    Supports server-side filtering for better performance with large datasets.
     """
     from ..shared_state import monitor_state
     from ..database.service import DatabaseService
+    from datetime import datetime, timedelta, timezone
     
     all_incidents = []
     seen_ids = set()
+    
+    # Calculate time filter
+    time_cutoff = None
+    if time_range:
+        now = datetime.now(timezone.utc)
+        time_map = {
+            '1h': timedelta(hours=1),
+            '6h': timedelta(hours=6),
+            '24h': timedelta(hours=24),
+            '7d': timedelta(days=7),
+            '30d': timedelta(days=30),
+        }
+        if time_range in time_map:
+            time_cutoff = now - time_map[time_range]
     
     # 1. Get incidents from in-memory state (simulator, etc.)
     memory_incidents = monitor_state.get_incidents()
@@ -215,11 +236,48 @@ async def list_incidents(
     if status:
         all_incidents = [i for i in all_incidents if i.status == status.lower()]
     
-    # Sort by severity (critical first) then by created_at descending
-    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    all_incidents.sort(key=lambda i: (severity_order.get(i.severity, 4), -i.created_at.timestamp() if i.created_at else 0))
+    # Filter by time range
+    if time_cutoff:
+        def is_after_cutoff(inc):
+            if not inc.created_at:
+                return False
+            created = inc.created_at
+            # Handle both datetime objects and strings
+            if isinstance(created, str):
+                try:
+                    if created.endswith('Z'):
+                        created = datetime.fromisoformat(created.replace('Z', '+00:00'))
+                    elif '+' in created:
+                        created = datetime.fromisoformat(created)
+                    else:
+                        created = datetime.fromisoformat(created).replace(tzinfo=timezone.utc)
+                except:
+                    return False
+            # Ensure timezone-aware comparison
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            return created >= time_cutoff
+        
+        all_incidents = [i for i in all_incidents if is_after_cutoff(i)]
     
-    return all_incidents[:limit]
+    # Filter by chain
+    if chain:
+        chain_lower = chain.lower()
+        all_incidents = [i for i in all_incidents if i.affected_chains and any(c.lower() == chain_lower for c in i.affected_chains)]
+    
+    # Filter by attack type
+    if attack_type:
+        attack_lower = attack_type.lower()
+        all_incidents = [i for i in all_incidents if i.attack_type and attack_lower in i.attack_type.lower()]
+    
+    # Sort by created_at descending (most recent first)
+    all_incidents.sort(key=lambda i: i.created_at.timestamp() if i.created_at else 0, reverse=True)
+    
+    # Apply pagination
+    total_count = len(all_incidents)
+    paginated = all_incidents[offset:offset + limit]
+    
+    return paginated
 
 
 @router.get("/incidents/{incident_id}", response_model=IncidentDetail)
@@ -309,6 +367,226 @@ class IncidentStatusUpdate(BaseModel):
     status: str
 
 
+@router.get("/incidents/{incident_id}/events")
+async def get_incident_events(incident_id: str, limit: int = 50):
+    """
+    Get correlated events for an incident.
+    
+    For ML-detected incidents (no event_ids), returns contract deployment info.
+    For rule-triggered incidents, returns associated events.
+    """
+    from ..database.service import DatabaseService
+    from ..shared_state import monitor_state
+    from datetime import datetime, timedelta
+    
+    logger.info("get_incident_events_request", incident_id=incident_id)
+    
+    try:
+        # First, get the incident to find related info
+        incident = await DatabaseService.get_incident(incident_id)
+        
+        if not incident:
+            # Try from memory
+            incidents = monitor_state.get_incidents()
+            incident = next((i for i in incidents if i.id == incident_id or getattr(i, 'incident_id', '') == incident_id), None)
+            if incident:
+                # Convert to dict
+                incident = {
+                    "id": incident.id,
+                    "title": getattr(incident, 'title', ''),
+                    "attack_type": getattr(incident, 'attack_type', ''),
+                    "summary": getattr(incident, 'summary', ''),
+                    "confidence": getattr(incident, 'confidence', 0),
+                    "event_ids": getattr(incident, 'event_ids', []),
+                    "rule_ids": getattr(incident, 'rule_ids', []),
+                    "affected_contracts": getattr(incident, 'affected_contracts', []),
+                    "affected_addresses": getattr(incident, 'affected_addresses', []),
+                    "affected_chains": incident.affected_chains,
+                    "created_at": incident.created_at
+                }
+        
+        if not incident:
+            return []  # Return empty list instead of 404 for better UX
+        
+        events = []
+        
+        # Get incident properties
+        event_ids = incident.get('event_ids', []) if isinstance(incident, dict) else getattr(incident, 'event_ids', [])
+        rule_ids = incident.get('rule_ids', []) if isinstance(incident, dict) else getattr(incident, 'rule_ids', [])
+        contracts = incident.get('affected_contracts', []) if isinstance(incident, dict) else getattr(incident, 'affected_contracts', [])
+        addresses = incident.get('affected_addresses', []) if isinstance(incident, dict) else getattr(incident, 'affected_addresses', [])
+        chains = incident.get('affected_chains', []) if isinstance(incident, dict) else getattr(incident, 'affected_chains', [])
+        created_at = incident.get('created_at') if isinstance(incident, dict) else getattr(incident, 'created_at', None)
+        attack_type = incident.get('attack_type', '') if isinstance(incident, dict) else getattr(incident, 'attack_type', '')
+        confidence = incident.get('confidence', 0) if isinstance(incident, dict) else getattr(incident, 'confidence', 0)
+        summary = incident.get('summary', '') if isinstance(incident, dict) else getattr(incident, 'summary', '')
+        
+        # Parse created_at
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            except:
+                created_at = datetime.now(timezone.utc)
+        
+        # Check if this is an ML-detected incident (no event_ids, has ml_contract_scanner in rule_ids)
+        is_ml_incident = (
+            not event_ids and 
+            (
+                'ml_contract_scanner' in (rule_ids or []) or
+                'ml_threat_detector' in (rule_ids or []) or
+                incident_id.startswith('inc_ml_')
+            )
+        )
+        
+        # Method 1: Get events by event_ids stored in incident
+        if event_ids:
+            for event_id in event_ids[:limit]:
+                event = await DatabaseService.get_event_by_id(event_id)
+                if event:
+                    events.append(event)
+        
+        # Method 2: For ML incidents with no events, create synthetic "contract deployment" info
+        if not events and is_ml_incident and contracts:
+            # Extract risk score from summary if available
+            risk_score = 0
+            if 'risk score of' in summary.lower():
+                try:
+                    risk_part = summary.lower().split('risk score of')[1]
+                    risk_score = int(risk_part.split('/')[0].strip())
+                except:
+                    pass
+            
+            # Create contract deployment info entries
+            for i, contract in enumerate(contracts[:5]):
+                chain = chains[i] if i < len(chains) else (chains[0] if chains else 'unknown')
+                deployer = addresses[i] if i < len(addresses) else (addresses[0] if addresses else 'unknown')
+                
+                # Get block explorer URL
+                explorer_urls = {
+                    'ethereum': f'https://etherscan.io/address/{contract}',
+                    'polygon': f'https://polygonscan.com/address/{contract}',
+                    'bsc': f'https://bscscan.com/address/{contract}',
+                    'arbitrum': f'https://arbiscan.io/address/{contract}',
+                    'optimism': f'https://optimistic.etherscan.io/address/{contract}',
+                    'avalanche': f'https://snowtrace.io/address/{contract}',
+                    'base': f'https://basescan.org/address/{contract}',
+                }
+                explorer_url = explorer_urls.get(chain.lower(), f'https://etherscan.io/address/{contract}')
+                
+                events.append({
+                    "event_id": f"ml_detection_{contract[:10]}",
+                    "event_type": "🤖 ML Contract Analysis",
+                    "chain": chain,
+                    "contract_address": contract,
+                    "amount": 0,
+                    "amount_usd": 0,
+                    "timestamp": created_at.isoformat() if created_at else "",
+                    "tx_hash": "",
+                    "severity": "HIGH",
+                    "is_ml_detection": True,
+                    "ml_details": {
+                        "detection_type": attack_type,
+                        "confidence": f"{confidence * 100:.0f}%" if confidence else "N/A",
+                        "risk_score": risk_score,
+                        "deployer": deployer,
+                        "explorer_url": explorer_url,
+                        "analysis_summary": summary[:200] if summary else "ML model detected suspicious bytecode patterns"
+                    }
+                })
+                
+                # Also add deployer info as a separate entry
+                if deployer and deployer != 'unknown':
+                    deployer_explorer = explorer_urls.get(chain.lower(), '').replace(f'/address/{contract}', f'/address/{deployer}')
+                    events.append({
+                        "event_id": f"deployer_{deployer[:10]}",
+                        "event_type": "👤 Deployer Wallet",
+                        "chain": chain,
+                        "contract_address": deployer,
+                        "amount": 0,
+                        "amount_usd": 0,
+                        "timestamp": created_at.isoformat() if created_at else "",
+                        "tx_hash": "",
+                        "severity": "INFO",
+                        "is_ml_detection": True,
+                        "ml_details": {
+                            "role": "Contract Deployer",
+                            "explorer_url": deployer_explorer,
+                            "note": "Investigate this wallet's transaction history for suspicious patterns"
+                        }
+                    })
+        
+        # Method 3: If still no events, search by contract addresses
+        if not events and contracts:
+            for contract in contracts[:5]:
+                contract_events = await DatabaseService.get_events_by_contract(
+                    contract_address=contract,
+                    limit=limit // max(len(contracts), 1)
+                )
+                events.extend(contract_events or [])
+        
+        # Method 4: If still no events, get recent events from the chains
+        if not events and chains:
+            for chain in chains[:3]:
+                chain_events = await DatabaseService.get_events_by_chain(
+                    chain=chain,
+                    limit=limit // max(len(chains), 1)
+                )
+                events.extend(chain_events or [])
+        
+        # Format events for frontend (skip if already formatted as ML detection)
+        formatted_events = []
+        seen_ids = set()
+        
+        for event in events[:limit]:
+            if isinstance(event, dict):
+                event_id = event.get('event_id', event.get('id', ''))
+                
+                # Skip if already seen
+                if event_id in seen_ids:
+                    continue
+                seen_ids.add(event_id)
+                
+                # If it's already an ML detection entry, keep as-is
+                if event.get('is_ml_detection'):
+                    formatted_events.append(event)
+                else:
+                    formatted_events.append({
+                        "event_id": event_id,
+                        "event_type": event.get('event_type', 'unknown'),
+                        "chain": event.get('chain', 'unknown'),
+                        "contract_address": event.get('contract_address', ''),
+                        "amount": event.get('amount', 0),
+                        "amount_usd": event.get('amount_usd', 0),
+                        "timestamp": event.get('timestamp', event.get('created_at', '')),
+                        "tx_hash": event.get('tx_hash', ''),
+                        "severity": event.get('severity', 'INFO')
+                    })
+            else:
+                event_id = getattr(event, 'event_id', getattr(event, 'id', ''))
+                if event_id in seen_ids:
+                    continue
+                seen_ids.add(event_id)
+                
+                formatted_events.append({
+                    "event_id": event_id,
+                    "event_type": getattr(event, 'event_type', 'unknown'),
+                    "chain": getattr(event, 'chain', 'unknown'),
+                    "contract_address": getattr(event, 'contract_address', ''),
+                    "amount": float(getattr(event, 'amount', 0) or 0),
+                    "amount_usd": float(getattr(event, 'amount_usd', 0) or 0),
+                    "timestamp": str(getattr(event, 'timestamp', getattr(event, 'created_at', ''))),
+                    "tx_hash": getattr(event, 'tx_hash', ''),
+                    "severity": getattr(event, 'severity', 'INFO')
+                })
+        
+        logger.info("incident_events_found", incident_id=incident_id, count=len(formatted_events), is_ml=is_ml_incident)
+        return formatted_events
+        
+    except Exception as e:
+        logger.error("get_incident_events_failed", incident_id=incident_id, error=str(e), exc_info=True)
+        return []  # Return empty list on error for better UX
+
+
 @router.post("/incidents/{incident_id}/acknowledge")
 async def acknowledge_incident(incident_id: str):
     """
@@ -387,6 +665,348 @@ async def update_incident_status(incident_id: str, body: IncidentStatusUpdate):
             return {"status": new_status, "incident_id": incident_id, "source": "memory"}
     
     raise HTTPException(status_code=404, detail="Incident not found")
+
+
+# ============================================================================
+# FEEDBACK LOOP: TP/FP Marking for ML Training
+# ============================================================================
+
+class FeedbackRequest(BaseModel):
+    """Request body for incident feedback."""
+    is_true_positive: bool
+    feedback_notes: Optional[str] = None
+    analyst_id: Optional[str] = None
+
+class FeedbackResponse(BaseModel):
+    """Response for feedback submission."""
+    incident_id: str
+    is_true_positive: bool
+    feedback_recorded: bool
+    message: str
+
+
+@router.post("/incidents/{incident_id}/feedback", response_model=FeedbackResponse)
+async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
+    """
+    Submit TP/FP feedback for an incident.
+    
+    This feedback is used to:
+    1. Update the incident record
+    2. Store training data for ML model improvement
+    3. Trigger retraining if enough feedback is collected
+    
+    Args:
+        incident_id: The incident to provide feedback for
+        body: FeedbackRequest with is_true_positive flag and optional notes
+    
+    Returns:
+        FeedbackResponse with confirmation
+    """
+    from ..database.service import DatabaseService
+    from datetime import datetime, timezone
+    import json
+    
+    logger.info("feedback_submitted", 
+                incident_id=incident_id, 
+                is_tp=body.is_true_positive,
+                analyst=body.analyst_id)
+    
+    try:
+        # Get the incident first
+        incident = await DatabaseService.get_incident(incident_id)
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        
+        # Prepare feedback data
+        feedback_data = {
+            "is_true_positive": body.is_true_positive,
+            "feedback_notes": body.feedback_notes,
+            "analyst_id": body.analyst_id or "anonymous",
+            "feedback_time": datetime.now(timezone.utc).isoformat(),
+            "original_severity": incident.get("severity"),
+            "original_confidence": incident.get("confidence"),
+            "attack_type": incident.get("attack_type"),
+        }
+        
+        # Update incident with feedback
+        # Store in raw_data field
+        raw_data = incident.get("raw_data") or {}
+        if isinstance(raw_data, str):
+            try:
+                raw_data = json.loads(raw_data)
+            except:
+                raw_data = {}
+        
+        raw_data["analyst_feedback"] = feedback_data
+        
+        # Update status based on feedback
+        new_status = "RESOLVED" if body.is_true_positive else "CLOSED"
+        if not body.is_true_positive:
+            new_status = "FALSE_POSITIVE"
+        
+        # Update the incident
+        await DatabaseService.update_incident_feedback(
+            incident_id=incident_id,
+            is_true_positive=body.is_true_positive,
+            feedback_notes=body.feedback_notes,
+            analyst_id=body.analyst_id,
+            new_status=new_status
+        )
+        
+        # Store feedback for ML training
+        await _store_ml_training_feedback(incident, body.is_true_positive, body.feedback_notes)
+        
+        # Check if we should trigger retraining
+        await _check_retrain_threshold()
+        
+        return FeedbackResponse(
+            incident_id=incident_id,
+            is_true_positive=body.is_true_positive,
+            feedback_recorded=True,
+            message=f"Feedback recorded. Incident marked as {'True Positive' if body.is_true_positive else 'False Positive'}."
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("feedback_submission_failed", incident_id=incident_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to record feedback: {str(e)}")
+
+
+async def _store_ml_training_feedback(incident: dict, is_tp: bool, notes: Optional[str]):
+    """Store feedback as ML training data."""
+    import json
+    from pathlib import Path
+    
+    try:
+        # Create training data directory if needed
+        training_dir = Path("data/ml_training/feedback")
+        training_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Extract features from incident for training
+        training_sample = {
+            "incident_id": incident.get("id"),
+            "attack_type": incident.get("attack_type"),
+            "severity": incident.get("severity"),
+            "confidence": incident.get("confidence"),
+            "total_loss_usd": incident.get("total_loss_usd"),
+            "affected_chains": incident.get("affected_chains"),
+            "rule_ids": incident.get("rule_ids"),
+            "is_true_positive": is_tp,
+            "feedback_notes": notes,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        # Also extract ML prediction data if available
+        raw_data = incident.get("raw_data") or {}
+        if isinstance(raw_data, str):
+            try:
+                raw_data = json.loads(raw_data)
+            except:
+                raw_data = {}
+        
+        if "ml_prediction" in raw_data:
+            training_sample["ml_prediction"] = raw_data["ml_prediction"]
+        if "ml_analysis" in raw_data:
+            training_sample["ml_analysis"] = raw_data["ml_analysis"]
+        
+        # Append to training file
+        feedback_file = training_dir / "analyst_feedback.jsonl"
+        with open(feedback_file, "a") as f:
+            f.write(json.dumps(training_sample) + "\n")
+        
+        logger.info("ml_training_feedback_stored", 
+                    incident_id=incident.get("id"),
+                    is_tp=is_tp,
+                    file=str(feedback_file))
+        
+    except Exception as e:
+        logger.warning("ml_training_feedback_storage_failed", error=str(e))
+
+
+async def _check_retrain_threshold():
+    """Check if we have enough feedback to trigger retraining."""
+    from pathlib import Path
+    
+    try:
+        feedback_file = Path("data/ml_training/feedback/analyst_feedback.jsonl")
+        if not feedback_file.exists():
+            return
+        
+        # Count feedback entries
+        with open(feedback_file, "r") as f:
+            feedback_count = sum(1 for _ in f)
+        
+        # Trigger retraining every 50 feedback entries
+        RETRAIN_THRESHOLD = 50
+        if feedback_count > 0 and feedback_count % RETRAIN_THRESHOLD == 0:
+            logger.info("retrain_threshold_reached", 
+                        feedback_count=feedback_count,
+                        threshold=RETRAIN_THRESHOLD)
+            # TODO: Trigger async retraining job
+            # For now, just log that we should retrain
+            
+    except Exception as e:
+        logger.warning("retrain_check_failed", error=str(e))
+
+
+@router.get("/incidents/feedback/stats")
+async def get_feedback_stats():
+    """
+    Get statistics about incident feedback.
+    
+    Returns counts of TP/FP feedback and accuracy metrics.
+    """
+    from pathlib import Path
+    import json
+    
+    try:
+        feedback_file = Path("data/ml_training/feedback/analyst_feedback.jsonl")
+        
+        if not feedback_file.exists():
+            return {
+                "total_feedback": 0,
+                "true_positives": 0,
+                "false_positives": 0,
+                "accuracy": None,
+                "by_attack_type": {},
+                "by_severity": {}
+            }
+        
+        # Read all feedback
+        feedback_entries = []
+        with open(feedback_file, "r") as f:
+            for line in f:
+                try:
+                    feedback_entries.append(json.loads(line.strip()))
+                except:
+                    continue
+        
+        # Calculate stats
+        total = len(feedback_entries)
+        tp_count = sum(1 for f in feedback_entries if f.get("is_true_positive"))
+        fp_count = total - tp_count
+        
+        # By attack type
+        by_attack_type = {}
+        for f in feedback_entries:
+            at = f.get("attack_type", "unknown")
+            if at not in by_attack_type:
+                by_attack_type[at] = {"tp": 0, "fp": 0}
+            if f.get("is_true_positive"):
+                by_attack_type[at]["tp"] += 1
+            else:
+                by_attack_type[at]["fp"] += 1
+        
+        # By severity
+        by_severity = {}
+        for f in feedback_entries:
+            sev = f.get("severity", "unknown")
+            if sev not in by_severity:
+                by_severity[sev] = {"tp": 0, "fp": 0}
+            if f.get("is_true_positive"):
+                by_severity[sev]["tp"] += 1
+            else:
+                by_severity[sev]["fp"] += 1
+        
+        return {
+            "total_feedback": total,
+            "true_positives": tp_count,
+            "false_positives": fp_count,
+            "accuracy": round(tp_count / total * 100, 2) if total > 0 else None,
+            "by_attack_type": by_attack_type,
+            "by_severity": by_severity
+        }
+        
+    except Exception as e:
+        logger.error("feedback_stats_failed", error=str(e))
+        return {"error": str(e)}
+
+
+@router.post("/ml/retrain")
+async def trigger_ml_retrain(background_tasks: BackgroundTasks):
+    """
+    Manually trigger ML model retraining with analyst feedback.
+    
+    This will:
+    1. Load all analyst feedback
+    2. Combine with existing training data
+    3. Retrain the ML Alert Analyzer model
+    """
+    from datetime import datetime, timezone
+    
+    logger.info("ml_retrain_triggered_manually")
+    
+    # Add retraining to background tasks
+    background_tasks.add_task(_run_ml_retrain)
+    
+    return {
+        "status": "retraining_started",
+        "message": "ML model retraining has been started in the background",
+        "triggered_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+async def _run_ml_retrain():
+    """Background task to run ML retraining."""
+    from pathlib import Path
+    import json
+    
+    logger.info("ml_retrain_started")
+    
+    try:
+        # Load feedback data
+        feedback_file = Path("data/ml_training/feedback/analyst_feedback.jsonl")
+        if not feedback_file.exists():
+            logger.warning("no_feedback_data_for_retrain")
+            return
+        
+        feedback_entries = []
+        with open(feedback_file, "r") as f:
+            for line in f:
+                try:
+                    feedback_entries.append(json.loads(line.strip()))
+                except:
+                    continue
+        
+        if len(feedback_entries) < 10:
+            logger.warning("insufficient_feedback_for_retrain", count=len(feedback_entries))
+            return
+        
+        # Import and run the alert analyzer training
+        try:
+            from src.ml.alert_analyzer import MLAlertAnalyzer
+            
+            analyzer = MLAlertAnalyzer()
+            
+            # Convert feedback to training format
+            training_data = []
+            for f in feedback_entries:
+                sample = {
+                    "rule_id": f.get("rule_ids", ["unknown"])[0] if f.get("rule_ids") else "unknown",
+                    "severity": f.get("severity", "medium"),
+                    "confidence": f.get("confidence", 0.5),
+                    "attack_type": f.get("attack_type", "unknown"),
+                    "amount_usd": f.get("total_loss_usd", 0),
+                    "chain": f.get("affected_chains", ["unknown"])[0] if f.get("affected_chains") else "unknown",
+                    "is_true_positive": f.get("is_true_positive", True)
+                }
+                training_data.append(sample)
+            
+            # Train the model
+            result = await analyzer.train(training_data)
+            
+            logger.info("ml_retrain_completed", 
+                        samples=len(training_data),
+                        accuracy=result.get("accuracy"))
+            
+        except ImportError as e:
+            logger.warning("ml_alert_analyzer_not_available", error=str(e))
+        except Exception as e:
+            logger.error("ml_retrain_failed", error=str(e))
+            
+    except Exception as e:
+        logger.error("ml_retrain_error", error=str(e))
 
 
 @router.get("/events")
@@ -636,7 +1256,7 @@ async def debug_events():
     import traceback
     
     debug_info = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "database_connected": False,
         "total_events_in_db": 0,
         "sample_events": [],
@@ -739,7 +1359,7 @@ async def debug_incidents():
     import traceback
     
     debug_info = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "total_incidents": 0,
         "sample_incidents": [],
         "incidents_by_severity": {},
@@ -813,7 +1433,7 @@ async def debug_incident_details(incident_id: str):
     import json
     
     debug_info = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "incident_id": incident_id,
         "found": False,
         "incident": None,
@@ -990,7 +1610,7 @@ async def debug_db_connection():
     import os
     
     debug_info = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "connection_successful": False,
         "env_vars": {
             "DATABASE_URL_set": bool(os.getenv("DATABASE_URL")),
@@ -1064,7 +1684,7 @@ async def get_statistics():
     # Calculate uptime
     uptime = 0
     if memory_stats["start_time"]:
-        uptime = int((datetime.utcnow() - memory_stats["start_time"]).total_seconds())
+        uptime = int((datetime.now(timezone.utc) - memory_stats["start_time"]).total_seconds())
     
     # Initialize counters
     total_events = memory_stats.get("total_events", 0)
@@ -1665,11 +2285,15 @@ async def migrate_events_table(user_info: dict = Depends(lambda: __import__("src
             ]
             
             for col_name, col_def, needs_index in column_defs:
-                result = await session.execute(text(f"""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'events' AND column_name = '{col_name}'
-                """))
+                # Use parameterized query to prevent SQL injection
+                result = await session.execute(
+                    text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'events' AND column_name = :col_name
+                    """),
+                    {"col_name": col_name}
+                )
                 if not result.fetchone():
                     await session.execute(text(f"ALTER TABLE events ADD COLUMN {col_name} {col_def}"))
                     columns_added.append(col_name)
@@ -1684,12 +2308,15 @@ async def migrate_events_table(user_info: dict = Depends(lambda: __import__("src
             ]
             
             for index_name, create_sql in index_checks:
-                # Check if index exists
-                result = await session.execute(text(f"""
-                    SELECT indexname 
-                    FROM pg_indexes 
-                    WHERE tablename = 'events' AND indexname = '{index_name}'
-                """))
+                # Check if index exists (parameterized query)
+                result = await session.execute(
+                    text("""
+                        SELECT indexname 
+                        FROM pg_indexes 
+                        WHERE tablename = 'events' AND indexname = :index_name
+                    """),
+                    {"index_name": index_name}
+                )
                 if not result.fetchone():
                     try:
                         await session.execute(text(create_sql))

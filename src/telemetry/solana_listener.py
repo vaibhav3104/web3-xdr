@@ -2,7 +2,7 @@
 Solana Chain Listener - For Solana mainnet and devnet.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import AsyncIterator, Dict, List, Optional, Set
 import asyncio
@@ -108,7 +108,7 @@ class SolanaListener(ChainListener):
                     chain_id=self.chain_id,
                     block_number=block_number,
                     block_hash="",
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     tx_count=0,
                     events_extracted=0
                 )
@@ -139,7 +139,7 @@ class SolanaListener(ChainListener):
                 chain_id=self.chain_id,
                 block_number=block_number,
                 block_hash="",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 tx_count=0,
                 events_extracted=0
             )

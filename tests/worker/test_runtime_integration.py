@@ -137,7 +137,7 @@ class TestRuntimeIntegration:
                     violated=True,
                     severity=Severity.HIGH,
                     confidence=0.9,
-                    details={"selector": "0x8456cb59"},
+                    evidence={"selector": "0x8456cb59"},
                 )
             ]
         
@@ -259,14 +259,14 @@ class TestRuntimeIntegration:
                     violated=True,
                     severity=Severity.HIGH,
                     confidence=0.9,
-                    details={},
+                    evidence={},
                 ),
                 InvariantResult(
                     invariant_name="LARGE_VALUE",
                     violated=True,
                     severity=Severity.MEDIUM,
                     confidence=0.7,
-                    details={},
+                    evidence={},
                 ),
             ]
         

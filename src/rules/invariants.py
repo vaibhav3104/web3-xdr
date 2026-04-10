@@ -14,7 +14,7 @@ Checks protocol invariants for security violations:
 
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from decimal import Decimal
 import structlog
@@ -234,7 +234,7 @@ class InvariantEngine:
                 actual_value=f"{drain_rate:.2f}% per hour",
                 deviation=drain_rate,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "drain_amount_usd": event.get("drain_amount_usd", 0),
                     "current_tvl_usd": event.get("current_tvl_usd", 0),
@@ -258,7 +258,7 @@ class InvariantEngine:
                 actual_value=f"${price:.4f}",
                 deviation=deviation,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "token_symbol": event.get("token_symbol"),
                     "price_deviation_percent": deviation,
@@ -289,7 +289,7 @@ class InvariantEngine:
                 actual_value=f"{ratio:.4f}",
                 deviation=deviation,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "steth_eth_ratio": ratio,
                     "steth_price_usd": steth_price,
@@ -312,7 +312,7 @@ class InvariantEngine:
                 actual_value=f"{health_factor:.4f}",
                 deviation=config.threshold - health_factor,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "user": event.get("from_address"),
                     "collateral_usd": event.get("collateral_usd", 0),
@@ -350,7 +350,7 @@ class InvariantEngine:
                     actual_value=f"locked={locked}, minted={minted}",
                     deviation=deviation,
                     severity=config.severity,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     details={
                         "locked_amount": locked,
                         "minted_amount": minted,
@@ -377,7 +377,7 @@ class InvariantEngine:
                 actual_value="duplicate message",
                 deviation=100,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "message_hash": message_hash,
                     "message_hash_seen_before": True,
@@ -404,7 +404,7 @@ class InvariantEngine:
                 actual_value="executed without queue",
                 deviation=100,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "execution_delay": 0,
                     "required_delay": event.get("required_delay", 86400),
@@ -413,7 +413,7 @@ class InvariantEngine:
         
         # Check if delay was respected
         required_delay = event.get("required_delay", 86400)  # Default 24h
-        actual_delay = (datetime.utcnow() - queued_at).total_seconds()
+        actual_delay = (datetime.now(timezone.utc) - queued_at).total_seconds()
         
         if actual_delay < required_delay:
             return InvariantViolation(
@@ -424,7 +424,7 @@ class InvariantEngine:
                 actual_value=f"{actual_delay}s delay",
                 deviation=(required_delay - actual_delay) / required_delay * 100,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "execution_delay": actual_delay,
                     "required_delay": required_delay,
@@ -454,7 +454,7 @@ class InvariantEngine:
                 actual_value=f"{deviation:.2f}% deviation",
                 deviation=deviation,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "spot_price": spot_price,
                     "twap_price": twap_price,
@@ -479,7 +479,7 @@ class InvariantEngine:
                 actual_value=f"{utilization:.2f}%",
                 deviation=utilization - config.threshold,
                 severity=config.severity,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 details={
                     "utilization": utilization,
                     "total_borrows": event.get("total_borrows", 0),
@@ -491,7 +491,7 @@ class InvariantEngine:
     
     def queue_timelock(self, tx_hash: str, queued_at: Optional[datetime] = None):
         """Record a timelock queue event."""
-        self._pending_timelocks[tx_hash] = queued_at or datetime.utcnow()
+        self._pending_timelocks[tx_hash] = queued_at or datetime.now(timezone.utc)
     
     def get_violations(self, limit: int = 100) -> List[InvariantViolation]:
         """Get recent violations."""

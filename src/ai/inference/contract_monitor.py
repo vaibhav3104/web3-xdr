@@ -6,7 +6,7 @@ Real-time monitoring of new contract deployments for threat detection
 import asyncio
 import json
 from typing import Dict, List, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -189,7 +189,7 @@ class ContractDeploymentMonitor:
                 id=f"alert_{deployment.tx_hash[:16]}",
                 deployment=deployment,
                 classification=result,
-                alert_time=datetime.utcnow(),
+                alert_time=datetime.now(timezone.utc),
                 status="new"
             )
             
@@ -319,7 +319,7 @@ class SimulatedDeploymentMonitor:
             deployer_address=deployer,
             contract_address=contract_address,
             bytecode=bytecode,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             chain=chain,
             gas_used=500000,
             value_wei=0
@@ -333,7 +333,7 @@ class SimulatedDeploymentMonitor:
                 id=f"sim_alert_{len(self.alerts)}",
                 deployment=deployment,
                 classification=result,
-                alert_time=datetime.utcnow(),
+                alert_time=datetime.now(timezone.utc),
                 status="new"
             )
             self.alerts.append(alert)

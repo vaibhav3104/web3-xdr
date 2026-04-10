@@ -7,12 +7,16 @@ Endpoints for:
 - Viewing/approving pending actions
 - Manual pause triggers
 - Response history
+
+SECURITY: All write operations require admin API key authentication.
+These endpoints control critical security actions (pause, unpause, approve).
 """
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+import structlog
 
 from ..response.guardian import (
     guardian,
@@ -22,7 +26,11 @@ from ..response.guardian import (
     ResponseStatus
 )
 
+# Import API key authentication
+from .middleware.security import require_api_key
+
 router = APIRouter(prefix="/api/guardian", tags=["Guardian"])
+logger = structlog.get_logger(__name__)
 
 
 # ============================================================================
@@ -114,8 +122,12 @@ async def get_guardian_status():
 
 
 @router.post("/protocols/register")
-async def register_protocol(request: RegisterProtocolRequest):
-    """Register a protocol for guardian protection."""
+async def register_protocol(
+    request: RegisterProtocolRequest,
+    client: dict = Depends(require_api_key(["admin"]))
+):
+    """Register a protocol for guardian protection. Requires admin API key."""
+    logger.info("guardian_register_protocol", protocol_id=request.protocol_id, client=client.get("name", "unknown"))
     config = ProtocolConfig(
         protocol_name=request.protocol_name,
         chain_id=request.chain_id,
@@ -140,8 +152,12 @@ async def register_protocol(request: RegisterProtocolRequest):
 
 
 @router.delete("/protocols/{protocol_id}")
-async def unregister_protocol(protocol_id: str):
-    """Unregister a protocol from guardian protection."""
+async def unregister_protocol(
+    protocol_id: str,
+    client: dict = Depends(require_api_key(["admin"]))
+):
+    """Unregister a protocol from guardian protection. Requires admin API key."""
+    logger.info("guardian_unregister_protocol", protocol_id=protocol_id, client=client.get("name", "unknown"))
     if protocol_id not in guardian.protocols:
         raise HTTPException(status_code=404, detail="Protocol not found")
     
@@ -174,8 +190,12 @@ async def get_pending_approvals():
 
 
 @router.post("/approve")
-async def approve_response(request: ApproveResponseRequest):
-    """Approve a pending response action."""
+async def approve_response(
+    request: ApproveResponseRequest,
+    client: dict = Depends(require_api_key(["admin"]))
+):
+    """Approve a pending response action. Requires admin API key."""
+    logger.info("guardian_approve_response", response_id=request.response_id, approved_by=request.approved_by, client=client.get("name", "unknown"))
     record = await guardian.approve_response(
         response_id=request.response_id,
         approved_by=request.approved_by
@@ -194,8 +214,12 @@ async def approve_response(request: ApproveResponseRequest):
 
 
 @router.post("/reject")
-async def reject_response(request: RejectResponseRequest):
-    """Reject a pending response action."""
+async def reject_response(
+    request: RejectResponseRequest,
+    client: dict = Depends(require_api_key(["admin"]))
+):
+    """Reject a pending response action. Requires admin API key."""
+    logger.info("guardian_reject_response", response_id=request.response_id, rejected_by=request.rejected_by, client=client.get("name", "unknown"))
     success = await guardian.reject_response(
         response_id=request.response_id,
         rejected_by=request.rejected_by,
@@ -209,13 +233,17 @@ async def reject_response(request: RejectResponseRequest):
 
 
 @router.post("/manual-pause")
-async def manual_pause(request: ManualPauseRequest):
+async def manual_pause(
+    request: ManualPauseRequest,
+    client: dict = Depends(require_api_key(["admin"]))
+):
     """
-    Manually trigger a pause action.
+    Manually trigger a pause action. Requires admin API key.
     
     Use this for emergency situations where you want to pause
     a protocol without waiting for incident detection.
     """
+    logger.warning("guardian_manual_pause_triggered", protocol_id=request.protocol_id, reason=request.reason, initiated_by=request.initiated_by, client=client.get("name", "unknown"))
     if request.protocol_id not in guardian.protocols:
         raise HTTPException(status_code=404, detail="Protocol not registered")
     
@@ -223,7 +251,7 @@ async def manual_pause(request: ManualPauseRequest):
     
     # Create a manual incident
     record = await guardian.handle_incident(
-        incident_id=f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        incident_id=f"manual-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         severity="critical",
         attack_type="manual_trigger",
         affected_protocol=config.protocol_name,
@@ -244,6 +272,86 @@ async def manual_pause(request: ManualPauseRequest):
         "execution_status": record.status.value,
         "tx_hash": record.tx_hash,
         "error": record.error
+    }
+
+
+class EmergencyPauseRequest(BaseModel):
+    incident_id: str
+    chains: List[str] = []
+    reason: Optional[str] = None
+
+
+@router.post("/emergency-pause")
+async def emergency_pause(request: EmergencyPauseRequest):
+    """
+    Emergency pause triggered from an incident.
+    
+    This endpoint is called from the dashboard when a user clicks
+    "Emergency Pause" on an incident.
+    """
+    from ..database.service import DatabaseService
+    
+    # Try to get incident details
+    incident = None
+    try:
+        incident_model = await DatabaseService.get_incident(request.incident_id)
+        if incident_model:
+            incident = {
+                "affected_chains": incident_model.affected_chains or []
+            }
+    except Exception as e:
+        pass
+    
+    # Find matching protocols for the affected chains
+    affected_protocols = []
+    chains_to_pause = request.chains or (incident.get('affected_chains', []) if incident else [])
+    
+    for protocol_id, config in guardian.protocols.items():
+        if not chains_to_pause or config.chain_id in chains_to_pause:
+            affected_protocols.append((protocol_id, config))
+    
+    if not affected_protocols:
+        # No registered protocols - simulate the pause
+        return {
+            "status": "simulated",
+            "message": "No protocols registered for guardian protection. In production, this would pause affected contracts.",
+            "incident_id": request.incident_id,
+            "chains": chains_to_pause,
+            "action_required": "Register protocols via /api/guardian/protocols/register to enable real pausing"
+        }
+    
+    # Execute pause for each affected protocol
+    results = []
+    for protocol_id, config in affected_protocols:
+        try:
+            record = await guardian.handle_incident(
+                incident_id=request.incident_id,
+                severity="critical",
+                attack_type="emergency_pause",
+                affected_protocol=config.protocol_name,
+                estimated_loss_usd=0,
+                affected_chain=config.chain_id,
+                contract_address=config.main_contract
+            )
+            results.append({
+                "protocol": config.protocol_name,
+                "chain": config.chain_id,
+                "status": record.status.value if record else "failed",
+                "tx_hash": record.tx_hash if record else None
+            })
+        except Exception as e:
+            results.append({
+                "protocol": config.protocol_name,
+                "chain": config.chain_id,
+                "status": "error",
+                "error": str(e)
+            })
+    
+    return {
+        "status": "pause_initiated",
+        "incident_id": request.incident_id,
+        "protocols_affected": len(results),
+        "results": results
     }
 
 

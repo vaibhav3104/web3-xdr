@@ -4,7 +4,7 @@ Supports multiple organizations with isolated data.
 """
 
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Depends, status, Header
@@ -66,7 +66,7 @@ TENANTS = {
         name="Default Organization",
         slug="default",
         plan="enterprise",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         settings={
             "alerts_enabled": True,
             "max_incidents": 1000,
@@ -83,7 +83,7 @@ TENANTS = {
         name="ACME DeFi",
         slug="acme",
         plan="pro",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         settings={
             "alerts_enabled": True,
             "max_incidents": 500,
@@ -100,7 +100,7 @@ TENANTS = {
         name="Demo Company",
         slug="demo",
         plan="free",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         settings={
             "alerts_enabled": False,
             "max_incidents": 100,
@@ -116,14 +116,14 @@ TENANTS = {
 
 TENANT_MEMBERS = {
     "default": [
-        TenantMember(user_id="1", username="admin", role="owner", joined_at=datetime.utcnow()),
-        TenantMember(user_id="2", username="operator", role="admin", joined_at=datetime.utcnow()),
+        TenantMember(user_id="1", username="admin", role="owner", joined_at=datetime.now(timezone.utc)),
+        TenantMember(user_id="2", username="operator", role="admin", joined_at=datetime.now(timezone.utc)),
     ],
     "acme": [
-        TenantMember(user_id="3", username="acme_admin", role="owner", joined_at=datetime.utcnow()),
+        TenantMember(user_id="3", username="acme_admin", role="owner", joined_at=datetime.now(timezone.utc)),
     ],
     "demo": [
-        TenantMember(user_id="4", username="demo_user", role="member", joined_at=datetime.utcnow()),
+        TenantMember(user_id="4", username="demo_user", role="member", joined_at=datetime.now(timezone.utc)),
     ]
 }
 
@@ -181,7 +181,7 @@ async def create_tenant(
         name=request.name,
         slug=request.slug,
         plan=request.plan,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         settings=get_default_settings(request.plan),
         limits=get_plan_limits(request.plan)
     )
@@ -192,7 +192,7 @@ async def create_tenant(
             user_id=current_user.username,
             username=current_user.username,
             role="owner",
-            joined_at=datetime.utcnow()
+            joined_at=datetime.now(timezone.utc)
         )
     ]
     
@@ -289,7 +289,7 @@ async def add_tenant_member(
         user_id=str(uuid4()),
         username=username,
         role=role,
-        joined_at=datetime.utcnow()
+        joined_at=datetime.now(timezone.utc)
     )
     
     if tenant_id not in TENANT_MEMBERS:

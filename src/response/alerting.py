@@ -3,7 +3,7 @@ Alert Router - Routes alerts based on severity and configuration.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 import asyncio
 import structlog
@@ -190,7 +190,7 @@ class AlertRouter:
     
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         hour_ago = now - timedelta(hours=1)
         
         # Prune old history
@@ -211,7 +211,7 @@ class AlertRouter:
             # Check if outside dedup window
             last_sent = self._sent_alerts.get(incident.id)
             if last_sent:
-                elapsed = (datetime.utcnow() - last_sent).total_seconds() / 60
+                elapsed = (datetime.now(timezone.utc) - last_sent).total_seconds() / 60
                 if elapsed < self.config.dedup_window_minutes:
                     return False
         
@@ -220,7 +220,7 @@ class AlertRouter:
     
     def _record_alert(self, incident: Incident):
         """Record that an alert was sent."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self._alert_history.append(now)
         self._sent_alerts[incident.id] = now
         

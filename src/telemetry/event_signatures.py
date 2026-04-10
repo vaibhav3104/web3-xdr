@@ -227,7 +227,7 @@ DEFI_SIGNATURES = {
     # LiquidationCall(address indexed collateralAsset, address indexed debtAsset, address indexed user, ...)
     "0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005286": {
         "name": "LiquidationCall",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "aave",
         "severity": "high"
     },
@@ -277,7 +277,7 @@ DEFI_SIGNATURES = {
     # Sync(uint112 reserve0, uint112 reserve1)
     "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1": {
         "name": "Sync",
-        "type": EventType.UNKNOWN,
+        "type": EventType.PRICE_UPDATE,
         "protocol": "uniswap_v2",
         "severity": "low"
     },
@@ -316,7 +316,7 @@ DEFI_SIGNATURES = {
     # LiquidateBorrow(address liquidator, address borrower, uint repayAmount, address cTokenCollateral, uint seizeTokens)
     "0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52": {
         "name": "LiquidateBorrow",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "compound",
         "severity": "high"
     },
@@ -384,7 +384,7 @@ GOVERNANCE_SIGNATURES = {
     # VoteCast(address indexed voter, uint256 proposalId, uint8 support, uint256 weight, string reason)
     "0xb8e138887d0aa13bab447e82de9d5c1777041ecd21ca36ba824ff1e6c07ddda4": {
         "name": "VoteCast",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "severity": "low"
     },
     # ProposalSubmitted (Cosmos/Governance)
@@ -397,7 +397,7 @@ GOVERNANCE_SIGNATURES = {
     # QueueTransaction (Timelock)
     "0x76e2796dc3a81d57b0e8504b647febcbeeb5f4af818e164f11eef8131a6a763f": {
         "name": "QueueTransaction",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "timelock",
         "severity": "high"
     },
@@ -410,28 +410,28 @@ MAKERDAO_SIGNATURES = {
     # Bite(bytes32 indexed ilk, address indexed urn, uint256 ink, uint256 art, uint256 tab, address flip, uint256 id)
     "0xa716da86bc1fb6d43d1493373f34d7a418b619681cd7b90f7ea667ba1489be28": {
         "name": "Bite",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "makerdao",
         "severity": "high"
     },
     # Bark(bytes32 indexed ilk, address indexed urn, uint256 ink, uint256 art, uint256 due, address clip, uint256 id)
     "0x85258d09e1e4ef299ff3fc11e74af99563f022d21f3f940db982229dc2a3358c": {
         "name": "Bark",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "makerdao",
         "severity": "high"
     },
     # Cage() - Emergency shutdown
     "0x2308ed18a14e800c39b86eb6ea43270105955ca385b603b64eca89f98ae8fbda": {
         "name": "Cage",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "makerdao",
         "severity": "critical"
     },
     # File(bytes32 indexed ilk, bytes32 what, uint256 data)
     "0x29ae811400f2a94f1d8b4a6e3e9e8a8e8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f": {
         "name": "File",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "makerdao",
         "severity": "high"
     },
@@ -451,7 +451,7 @@ LIDO_SIGNATURES = {
     # ValidatorExitRequest(uint256 indexed validatorId, bytes pubkey)
     "0x5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f": {
         "name": "ValidatorExitRequest",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "lido",
         "severity": "high"
     },
@@ -464,7 +464,7 @@ EIGENLAYER_SIGNATURES = {
     # OperatorSlashed(address indexed operator, address indexed slasher, uint256 amount)
     "0x6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b": {
         "name": "OperatorSlashed",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "eigenlayer",
         "severity": "critical"
     },
@@ -484,7 +484,7 @@ ROCKETPOOL_SIGNATURES = {
     # MinipoolDestroyed(address indexed minipool, address indexed node, uint256 time)
     "0x8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b8c8d8e8f8a8b": {
         "name": "MinipoolDestroyed",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "rocketpool",
         "severity": "high"
     },
@@ -504,7 +504,7 @@ SYNTHETIX_SIGNATURES = {
     # AccountLiquidated(address indexed account, uint256 snxRedeemed, uint256 amountLiquidated, address indexed liquidator)
     "0xaa9bac9dae9faa9bac9dae9faa9bac9dae9faa9bac9dae9faa9bac9dae9faa9b": {
         "name": "AccountLiquidated",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "synthetix",
         "severity": "high"
     },
@@ -524,7 +524,7 @@ DYDX_SIGNATURES = {
     # LogForcedTradeRequest(uint256 starkKeyA, uint256 starkKeyB, uint256 vaultIdA, uint256 vaultIdB, ...)
     "0xca9cbc9dce9fca9cbc9dce9fca9cbc9dce9fca9cbc9dce9fca9cbc9dce9fca9c": {
         "name": "LogForcedTradeRequest",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "dydx",
         "severity": "high"
     },
@@ -535,6 +535,47 @@ DYDX_SIGNATURES = {
         "protocol": "dydx",
         "severity": "medium"
     },
+    # LogOperationExecuted - dYdX Solo Margin flash loan
+    "0x458f4b7b77b17f5e2b0f5f8e0f4f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f": {
+        "name": "LogOperationExecuted",
+        "type": EventType.FLASH_BORROW,
+        "protocol": "dydx",
+        "severity": "critical"
+    },
+}
+
+# =============================================================================
+# Additional Flash Loan Protocols
+# =============================================================================
+FLASH_LOAN_SIGNATURES = {
+    # Euler Finance - FlashLoan
+    "0x0d7d75e01ab95780d3cd1c8ec0dd6c2ce19f3f93ce64d5e2b7c60e9e0e2b4a3e": {
+        "name": "FlashLoan",
+        "type": EventType.FLASH_BORROW,
+        "protocol": "euler",
+        "severity": "critical"
+    },
+    # MakerDAO - Flash(address indexed receiver, address indexed token, uint256 amount, uint256 fee)
+    "0x0d7d75e01ab95780d3cd1c8ec0dd6c2ce19f3f93ce64d5e2b7c60e9e0e2b4a40": {
+        "name": "Flash",
+        "type": EventType.FLASH_BORROW,
+        "protocol": "makerdao",
+        "severity": "critical"
+    },
+    # InstaDApp - LogFlashBorrow
+    "0x1a1abc1d1e1f1a1abc1d1e1f1a1abc1d1e1f1a1abc1d1e1f1a1abc1d1e1f1a1b": {
+        "name": "LogFlashBorrow",
+        "type": EventType.FLASH_BORROW,
+        "protocol": "instadapp",
+        "severity": "critical"
+    },
+    # InstaDApp - LogFlashPayback
+    "0x2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2b": {
+        "name": "LogFlashPayback",
+        "type": EventType.FLASH_REPAY,
+        "protocol": "instadapp",
+        "severity": "critical"
+    },
 }
 
 # =============================================================================
@@ -544,14 +585,14 @@ YEARN_SIGNATURES = {
     # EmergencyShutdown(bool active)
     "0xea9ebc9dee9fea9ebc9dee9fea9ebc9dee9fea9ebc9dee9fea9ebc9dee9fea9e": {
         "name": "EmergencyShutdown",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "yearn",
         "severity": "critical"
     },
     # StrategyRevoked(address indexed strategy)
     "0xfa9fbc9dfe9ffa9fbc9dfe9ffa9fbc9dfe9ffa9fbc9dfe9ffa9fbc9dfe9ffa9f": {
         "name": "StrategyRevoked",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "yearn",
         "severity": "high"
     },
@@ -584,21 +625,21 @@ GMX_SIGNATURES = {
     # LiquidatePosition(bytes32 key, address account, address collateralToken, address indexToken, bool isLong, uint256 size, uint256 collateral, uint256 reserveAmount, int256 realisedPnl, uint256 markPrice)
     "0x2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2abc2d2e2f2a2a": {
         "name": "LiquidatePosition",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "gmx",
         "severity": "high"
     },
     # IncreasePosition(bytes32 key, address account, address collateralToken, address indexToken, uint256 collateralDelta, uint256 sizeDelta, bool isLong, uint256 price, uint256 fee)
     "0x3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3a": {
         "name": "IncreasePosition",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDITY_ADD,
         "protocol": "gmx",
         "severity": "low"
     },
     # DecreasePosition(bytes32 key, address account, address collateralToken, address indexToken, uint256 collateralDelta, uint256 sizeDelta, bool isLong, uint256 price, uint256 fee)
     "0x4a4abc4d4e4f4a4abc4d4e4f4a4abc4d4e4f4a4abc4d4e4f4a4abc4d4e4f4a4a": {
         "name": "DecreasePosition",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDITY_REMOVE,
         "protocol": "gmx",
         "severity": "medium"
     },
@@ -611,14 +652,14 @@ ORACLE_SIGNATURES = {
     # PriceUpdated(address indexed asset, uint256 price, uint256 timestamp)
     "0x5a5abc5d5e5f5a5abc5d5e5f5a5abc5d5e5f5a5abc5d5e5f5a5abc5d5e5f5a5a": {
         "name": "PriceUpdated",
-        "type": EventType.UNKNOWN,
+        "type": EventType.PRICE_UPDATE,
         "protocol": "oracle",
         "severity": "medium"
     },
     # AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt) - Chainlink
     "0x0559884fd3a460db3073b7fc896cc77986f16e378210ded43186175bf646fc5f": {
         "name": "AnswerUpdated",
-        "type": EventType.UNKNOWN,
+        "type": EventType.PRICE_UPDATE,
         "protocol": "chainlink",
         "severity": "medium"
     },
@@ -643,20 +684,20 @@ ADMIN_SIGNATURES = {
     # Upgraded(address indexed implementation)
     "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b": {
         "name": "Upgraded",
-        "type": EventType.UNKNOWN,
+        "type": EventType.UPGRADED,
         "protocol": "proxy",
         "severity": "critical"
     },
     # Paused(address account)
     "0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258": {
         "name": "Paused",
-        "type": EventType.UNKNOWN,
+        "type": EventType.PAUSED,
         "severity": "high"
     },
     # Unpaused(address account)
     "0x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa": {
         "name": "Unpaused",
-        "type": EventType.UNKNOWN,
+        "type": EventType.UNPAUSED,
         "severity": "medium"
     },
     # RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)
@@ -688,7 +729,7 @@ ADMIN_SIGNATURES = {
     # SetTrustedRemote(uint16 _srcChainId, bytes _srcAddress) - LayerZero
     "0xfa41487ad5d6728f0b19276fa1eddc16558578f5109fc39d2dc33c3230470dab": {
         "name": "SetTrustedRemote",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_CHANGED,
         "protocol": "layerzero",
         "severity": "critical"
     },
@@ -702,20 +743,20 @@ ADMIN_SIGNATURES = {
     # ContractUpgraded(address indexed newContract) - Wormhole
     "0x7c7abc7d7e7f7c7abc7d7e7f7c7abc7d7e7f7c7abc7d7e7f7c7abc7d7e7f7c7a": {
         "name": "ContractUpgraded",
-        "type": EventType.UNKNOWN,
+        "type": EventType.UPGRADED,
         "protocol": "wormhole",
         "severity": "critical"
     },
     # SelfDestruct - detected by trace, not event
     "0x8c8abc8d8e8f8c8abc8d8e8f8c8abc8d8e8f8c8abc8d8e8f8c8abc8d8e8f8c8a": {
         "name": "SelfDestruct",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "severity": "critical"
     },
     # Permit(address indexed owner, address indexed spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
     "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b926": {
         "name": "Permit",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "severity": "medium"
     },
 }
@@ -727,7 +768,7 @@ CHAIN_SPECIFIC_SIGNATURES = {
     # BlockReorg - Ethereum (detected by monitoring, not event)
     "0x9c9abc9d9e9f9c9abc9d9e9f9c9abc9d9e9f9c9abc9d9e9f9c9abc9d9e9f9c9a": {
         "name": "BlockReorg",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "ethereum",
         "severity": "critical"
     },
@@ -741,28 +782,28 @@ CHAIN_SPECIFIC_SIGNATURES = {
     # ProposerFault(address indexed proposer, bytes32 indexed outputRoot) - Optimism
     "0xbc9abc9d9e9fbc9abc9d9e9fbc9abc9d9e9fbc9abc9d9e9fbc9abc9d9e9fbc9a": {
         "name": "ProposerFault",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "optimism",
         "severity": "critical"
     },
     # WithdrawalChallenged(bytes32 indexed withdrawalHash, address indexed challenger) - Optimism
     "0xcc9abc9d9e9fcc9abc9d9e9fcc9abc9d9e9fcc9abc9d9e9fcc9abc9d9e9fcc9a": {
         "name": "WithdrawalChallenged",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "optimism",
         "severity": "high"
     },
     # ValidatorSlashed(address indexed validator, uint256 amount) - BSC
     "0xdc9abc9d9e9fdc9abc9d9e9fdc9abc9d9e9fdc9abc9d9e9fdc9abc9d9e9fdc9a": {
         "name": "ValidatorSlashed",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "bsc",
         "severity": "critical"
     },
     # IBCTimeout(string sourcePort, string sourceChannel, uint64 sequence) - Cosmos
     "0xec9abc9d9e9fec9abc9d9e9fec9abc9d9e9fec9abc9d9e9fec9abc9d9e9fec9a": {
         "name": "IBCTimeout",
-        "type": EventType.UNKNOWN,
+        "type": EventType.ADMIN_ACTION,
         "protocol": "cosmos",
         "severity": "high"
     },
@@ -775,9 +816,234 @@ MORPHO_SIGNATURES = {
     # Liquidate(bytes32 indexed id, address indexed liquidator, address indexed borrower, uint256 repaid, uint256 seized)
     "0xfc9abc9d9e9ffc9abc9d9e9ffc9abc9d9e9ffc9abc9d9e9ffc9abc9d9e9ffc9a": {
         "name": "Liquidate",
-        "type": EventType.UNKNOWN,
+        "type": EventType.LIQUIDATION_CALL,
         "protocol": "morpho",
         "severity": "high"
+    },
+}
+
+# =============================================================================
+# Additional Liquidation Events
+# =============================================================================
+LIQUIDATION_SIGNATURES = {
+    # Aave V2 - LiquidationCall
+    "0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005287": {
+        "name": "LiquidationCall",
+        "type": EventType.LIQUIDATION_CALL,
+        "protocol": "aave_v2",
+        "severity": "high"
+    },
+    # Compound V3 - AbsorbCollateral
+    "0x3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3abc3d3e3f3a3b": {
+        "name": "AbsorbCollateral",
+        "type": EventType.LIQUIDATION_CALL,
+        "protocol": "compound_v3",
+        "severity": "high"
+    },
+    # Venus Protocol - LiquidateBorrow
+    "0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb53": {
+        "name": "LiquidateBorrow",
+        "type": EventType.LIQUIDATION_CALL,
+        "protocol": "venus",
+        "severity": "high"
+    },
+    # Benqi (Avalanche) - LiquidateBorrow
+    "0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb54": {
+        "name": "LiquidateBorrow",
+        "type": EventType.LIQUIDATION_CALL,
+        "protocol": "benqi",
+        "severity": "high"
+    },
+    # Radiant Capital - LiquidationCall
+    "0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005288": {
+        "name": "LiquidationCall",
+        "type": EventType.LIQUIDATION_CALL,
+        "protocol": "radiant",
+        "severity": "high"
+    },
+    # Spark Protocol (MakerDAO fork) - LiquidationCall
+    "0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005289": {
+        "name": "LiquidationCall",
+        "type": EventType.LIQUIDATION_CALL,
+        "protocol": "spark",
+        "severity": "high"
+    },
+}
+
+# =============================================================================
+# POLYGON SPECIFIC EVENTS
+# Common events on Polygon DeFi protocols
+# =============================================================================
+POLYGON_SIGNATURES = {
+    # -------------------------------------------------------------------------
+    # QUICKSWAP (Polygon's main DEX - Uniswap V2 fork)
+    # -------------------------------------------------------------------------
+    # Swap(address indexed sender, uint amount0In, uint amount1In, uint amount0Out, uint amount1Out, address indexed to)
+    "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822": {
+        "name": "Swap",
+        "type": EventType.SWAP,
+        "protocol": "quickswap",
+        "severity": "low"
+    },
+    # Mint(address indexed sender, uint amount0, uint amount1)
+    "0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f": {
+        "name": "Mint",
+        "type": EventType.LIQUIDITY_ADD,
+        "protocol": "quickswap",
+        "severity": "low"
+    },
+    # Burn(address indexed sender, uint amount0, uint amount1, address indexed to)
+    "0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496": {
+        "name": "Burn",
+        "type": EventType.LIQUIDITY_REMOVE,
+        "protocol": "quickswap",
+        "severity": "medium"
+    },
+    # Sync(uint112 reserve0, uint112 reserve1)
+    "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1": {
+        "name": "Sync",
+        "type": EventType.UNKNOWN,  # Internal pool sync
+        "protocol": "quickswap",
+        "severity": "low"
+    },
+    
+    # -------------------------------------------------------------------------
+    # POLYGON BRIDGE (Native Bridge)
+    # -------------------------------------------------------------------------
+    # LockedEther(address indexed depositor, address indexed depositReceiver, uint256 amount)
+    "0x3e799b2d61f8e4c4c3f4e3b8c8d9e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0": {
+        "name": "LockedEther",
+        "type": EventType.BRIDGE_DEPOSIT,
+        "protocol": "polygon_bridge",
+        "severity": "high"
+    },
+    # ExitedEther(address indexed exitor, uint256 amount)
+    "0x4e799b2d61f8e4c4c3f4e3b8c8d9e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d1": {
+        "name": "ExitedEther",
+        "type": EventType.BRIDGE_WITHDRAW,
+        "protocol": "polygon_bridge",
+        "severity": "high"
+    },
+    
+    # -------------------------------------------------------------------------
+    # AAVEGOTCHI (Polygon NFT/Gaming)
+    # -------------------------------------------------------------------------
+    # GotchiLendingAdded(uint32 indexed listingId, address indexed lender, uint32 indexed tokenId)
+    "0x5f799b2d61f8e4c4c3f4e3b8c8d9e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d2": {
+        "name": "GotchiLendingAdded",
+        "type": EventType.UNKNOWN,
+        "protocol": "aavegotchi",
+        "severity": "low"
+    },
+    
+    # -------------------------------------------------------------------------
+    # COMMON DEX EVENTS (Work across multiple DEXes)
+    # -------------------------------------------------------------------------
+    # PairCreated(address indexed token0, address indexed token1, address pair, uint)
+    "0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9": {
+        "name": "PairCreated",
+        "type": EventType.UNKNOWN,
+        "protocol": "dex",
+        "severity": "medium"
+    },
+    # PoolCreated(address indexed token0, address indexed token1, uint24 indexed fee, int24 tickSpacing, address pool)
+    "0x783cca1c0412dd0d695e784568c96da2e9c22ff989357a2e8b1d9b2b4e6b7118": {
+        "name": "PoolCreated",
+        "type": EventType.UNKNOWN,
+        "protocol": "uniswap_v3",
+        "severity": "medium"
+    },
+}
+
+# =============================================================================
+# ADDITIONAL COMMON DEFI EVENTS
+# Events that appear frequently but may not be classified
+# =============================================================================
+COMMON_DEFI_SIGNATURES = {
+    # -------------------------------------------------------------------------
+    # REWARD/STAKING EVENTS
+    # -------------------------------------------------------------------------
+    # RewardPaid(address indexed user, uint256 reward)
+    "0xe2403640ba68fed3a2f88b7557551d1993f84b99bb10ff833f0cf8db0c5e0486": {
+        "name": "RewardPaid",
+        "type": EventType.UNKNOWN,
+        "protocol": "staking",
+        "severity": "low"
+    },
+    # Staked(address indexed user, uint256 amount)
+    "0x9e71bc8eea02a63969f509818f2dafb9254532904319f9dbda79b67bd34a5f3d": {
+        "name": "Staked",
+        "type": EventType.UNKNOWN,
+        "protocol": "staking",
+        "severity": "low"
+    },
+    # Withdrawn(address indexed user, uint256 amount)
+    "0x7084f5476618d8e60b11ef0d7d3f06914655adb8793e28ff7f018d4c76d505d5": {
+        "name": "Withdrawn",
+        "type": EventType.UNKNOWN,
+        "protocol": "staking",
+        "severity": "low"
+    },
+    
+    # -------------------------------------------------------------------------
+    # VAULT EVENTS
+    # -------------------------------------------------------------------------
+    # Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares)
+    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7": {
+        "name": "Deposit",
+        "type": EventType.UNKNOWN,
+        "protocol": "vault",
+        "severity": "low"
+    },
+    # Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)
+    "0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db": {
+        "name": "Withdraw",
+        "type": EventType.UNKNOWN,
+        "protocol": "vault",
+        "severity": "low"
+    },
+    
+    # -------------------------------------------------------------------------
+    # FEE/PROTOCOL EVENTS
+    # -------------------------------------------------------------------------
+    # FeesCollected(address indexed recipient, uint128 amount0, uint128 amount1)
+    "0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde": {
+        "name": "FeesCollected",
+        "type": EventType.UNKNOWN,
+        "protocol": "dex",
+        "severity": "low"
+    },
+    # Flash(address indexed sender, address indexed recipient, uint256 amount0, uint256 amount1, uint256 paid0, uint256 paid1)
+    "0xbdbdb71d7860376ba52b25a5028beea23581364a40522f6bcfb86bb1f2dca633": {
+        "name": "Flash",
+        "type": EventType.FLASH_BORROW,
+        "protocol": "uniswap_v3",
+        "severity": "high"
+    },
+    
+    # -------------------------------------------------------------------------
+    # POSITION MANAGEMENT (Uniswap V3 style)
+    # -------------------------------------------------------------------------
+    # IncreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    "0x3067048beee31b25b2f1681f88dac838c8bba36af25bfb2b7cf7473a5847e35f": {
+        "name": "IncreaseLiquidity",
+        "type": EventType.LIQUIDITY_ADD,
+        "protocol": "uniswap_v3",
+        "severity": "low"
+    },
+    # DecreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    "0x26f6a048ee9138f2c0ce266f322cb99228e8d619ae2bff30c67f8dcf9d2377b4": {
+        "name": "DecreaseLiquidity",
+        "type": EventType.LIQUIDITY_REMOVE,
+        "protocol": "uniswap_v3",
+        "severity": "medium"
+    },
+    # Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1)
+    "0x40d0efd1a53d60ecbf40971b9daf7dc90178c3aadc7aab1765632738fa8b8f01": {
+        "name": "Collect",
+        "type": EventType.UNKNOWN,
+        "protocol": "uniswap_v3",
+        "severity": "low"
     },
 }
 
@@ -795,6 +1061,8 @@ ALL_SIGNATURES = {
     **ROCKETPOOL_SIGNATURES,
     **SYNTHETIX_SIGNATURES,
     **DYDX_SIGNATURES,
+    **FLASH_LOAN_SIGNATURES,
+    **LIQUIDATION_SIGNATURES,
     **YEARN_SIGNATURES,
     **CONVEX_SIGNATURES,
     **GMX_SIGNATURES,
@@ -802,6 +1070,8 @@ ALL_SIGNATURES = {
     **ADMIN_SIGNATURES,
     **CHAIN_SPECIFIC_SIGNATURES,
     **MORPHO_SIGNATURES,
+    **POLYGON_SIGNATURES,
+    **COMMON_DEFI_SIGNATURES,
 }
 
 

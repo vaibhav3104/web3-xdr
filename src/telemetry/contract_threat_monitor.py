@@ -5,7 +5,7 @@ Automatically detects new contract deployments and analyzes them for threats
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, asdict
 from decimal import Decimal
@@ -164,7 +164,7 @@ class ContractThreatMonitor:
             self.analyzed_contracts[contract_address] = {
                 "bytecode_hash": hash(bytecode_hex),
                 "analysis": result.to_dict() if hasattr(result, 'to_dict') else str(result),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
             # Check if threat detected
@@ -175,8 +175,8 @@ class ContractThreatMonitor:
                 
                 # Create alert
                 alert = ContractThreatAlert(
-                    alert_id=f"CTM-{self.chain_id}-{tx_hash[:8]}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
-                    timestamp=datetime.utcnow(),
+                    alert_id=f"CTM-{self.chain_id}-{tx_hash[:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                    timestamp=datetime.now(timezone.utc),
                     chain_id=self.chain_id,
                     contract_address=contract_address,
                     deployer_address=deployer,

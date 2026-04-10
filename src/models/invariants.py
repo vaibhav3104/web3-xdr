@@ -3,7 +3,7 @@ Invariant Models - Results from invariant checks.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -29,7 +29,7 @@ class InvariantResult:
     
     # Identity
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     # Invariant info
     invariant_name: str = ""
@@ -98,7 +98,7 @@ class InvariantState:
     # Tracking
     last_lock_block: int = 0
     last_mint_block: int = 0
-    last_check: datetime = field(default_factory=datetime.utcnow)
+    last_check: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     # Per-chain breakdown
     chain_locks: Dict[str, Decimal] = field(default_factory=dict)

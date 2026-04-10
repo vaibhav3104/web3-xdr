@@ -8,7 +8,7 @@ Features:
 - Contract deployment detection with ML analysis
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import AsyncIterator, Dict, List, Optional, Tuple, Union
 import asyncio
@@ -215,7 +215,7 @@ class EVMListener(ChainListener):
                 chain_id=self.chain_id,
                 block_number=block_number,
                 block_hash="",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 tx_count=0,
                 events_extracted=0
             )
@@ -613,6 +613,7 @@ class EVMListener(ChainListener):
             # Extract addresses from topics if available
             source_address = ""
             dest_address = ""
+            token_address = contract_address  # Default to contract address
             
             if len(log.topics) >= 2:
                 source_address = "0x" + log.topics[1].hex()[-40:] if hasattr(log.topics[1], 'hex') else ""
@@ -631,6 +632,19 @@ class EVMListener(ChainListener):
                 except:
                     pass
             
+            # Calculate USD value
+            amount_usd = Decimal("0")
+            try:
+                price = await self._price_feed.get_price(self.chain_id, token_address)
+                if price > 0 and amount > 0:
+                    amount_usd = self._price_feed.calculate_usd_value(amount, price)
+            except Exception as price_err:
+                logger.debug("price_fetch_error_known_event", token=token_address[:10], error=str(price_err))
+            
+            # Update severity based on USD value
+            if amount_usd > 0:
+                severity = self._calculate_severity(amount, token_address, amount_usd)
+            
             return SecurityEvent(
                 chain_id=self.chain_id,
                 block_number=log.blockNumber,
@@ -643,12 +657,14 @@ class EVMListener(ChainListener):
                 dest_address=dest_address,
                 contract_address=contract_address,
                 amount=amount,
+                amount_usd=amount_usd,
                 bridge_id=protocol if protocol != "unknown" else None,
                 raw_event={
                     "event_name": event_name,
                     "protocol": protocol,
                     "topics": [t.hex() if hasattr(t, 'hex') else str(t) for t in log.topics],
-                    "data": log.data.hex() if hasattr(log.data, 'hex') else str(log.data)
+                    "data": log.data.hex() if hasattr(log.data, 'hex') else str(log.data),
+                    "amount_usd": str(amount_usd)
                 }
             )
         except Exception as e:
@@ -669,6 +685,27 @@ class EVMListener(ChainListener):
             contract_address = log.address.lower() if hasattr(log.address, 'lower') else str(log.address).lower()
             tx_hash = log.transactionHash.hex() if hasattr(log.transactionHash, 'hex') else str(log.transactionHash)
             
+            # Try to extract amount from data
+            amount = Decimal("0")
+            if log.data and len(log.data) >= 32:
+                try:
+                    data_hex = log.data.hex() if hasattr(log.data, 'hex') else str(log.data)
+                    if data_hex.startswith("0x"):
+                        data_hex = data_hex[2:]
+                    if len(data_hex) >= 64:
+                        amount = Decimal(int(data_hex[:64], 16)) / Decimal(10**18)
+                except:
+                    pass
+            
+            # Calculate USD value
+            amount_usd = Decimal("0")
+            try:
+                price = await self._price_feed.get_price(self.chain_id, contract_address)
+                if price > 0 and amount > 0:
+                    amount_usd = self._price_feed.calculate_usd_value(amount, price)
+            except Exception as price_err:
+                logger.debug("price_fetch_error_defi_event", token=contract_address[:10], error=str(price_err))
+            
             return SecurityEvent(
                 chain_id=self.chain_id,
                 block_number=log.blockNumber,
@@ -678,11 +715,14 @@ class EVMListener(ChainListener):
                 event_type=EventType.UNKNOWN,
                 severity=Severity.LOW,
                 contract_address=contract_address,
+                amount=amount,
+                amount_usd=amount_usd,
                 raw_event={
                     "event_name": event_name,
                     "protocol": protocol,
                     "type": "defi_event",
-                    "topics": [t.hex() if hasattr(t, 'hex') else str(t) for t in log.topics]
+                    "topics": [t.hex() if hasattr(t, 'hex') else str(t) for t in log.topics],
+                    "amount_usd": str(amount_usd)
                 }
             )
         except Exception as e:
@@ -717,6 +757,16 @@ class EVMListener(ChainListener):
                 price = await self._price_feed.get_price(self.chain_id, token_address)
                 if price > 0:
                     amount_usd = self._price_feed.calculate_usd_value(amount, price)
+                    # Log high value transfers for debugging
+                    if amount_usd > 1000:
+                        logger.info(
+                            "high_value_transfer",
+                            chain=self.chain_id,
+                            token=token_address[:10],
+                            amount=str(amount),
+                            price=price,
+                            amount_usd=str(amount_usd)
+                        )
             except Exception as price_err:
                 logger.debug("price_fetch_error", token=token_address[:10], error=str(price_err))
             
