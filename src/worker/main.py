@@ -24,7 +24,7 @@ import sys
 import yaml
 import uuid
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, TYPE_CHECKING
 import structlog
 
@@ -286,6 +286,14 @@ class RateLimitHandler:
         return False
 
 
+def max_severity(sev1: str, sev2: str) -> str:
+    """Return the higher severity level."""
+    severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
+    s1 = severity_order.get(sev1.upper(), 0)
+    s2 = severity_order.get(sev2.upper(), 0)
+    return sev1.upper() if s1 >= s2 else sev2.upper()
+
+
 class Sentinel3Worker:
     """
     Sentinel3 Worker - Handles chain ingestion and event processing.
@@ -313,7 +321,15 @@ class Sentinel3Worker:
         # YAML Rule Engine (initialized in initialize())
         self.rule_engine = None
         
-        logger.info("worker_initialized", runtime_enabled=self.runtime_enabled)
+        # Security Graph components (Wiz-for-Web3)
+        self.graph_builder = None
+        self.graph_enabled = os.getenv("GRAPH_ENABLED", "true").lower() == "true"
+        
+        # ML Threat Detector (initialized in initialize())
+        self.ml_threat_detector = None
+        self.ml_enabled = os.getenv("ML_DETECTION_ENABLED", "true").lower() == "true"
+        
+        logger.info("worker_initialized", runtime_enabled=self.runtime_enabled, graph_enabled=self.graph_enabled, ml_enabled=self.ml_enabled)
     
     def _load_config(self) -> dict:
         """Load chains configuration."""
@@ -326,7 +342,8 @@ class Sentinel3Worker:
         # Initialize database (required for runtime engine and checkpointing)
         from src.database.connection import DatabaseManager
         await DatabaseManager.initialize()
-        
+        await DatabaseManager.create_tables()
+
         # Run database migrations to ensure schema is up to date
         from src.database.migrations import run_migrations
         try:
@@ -352,6 +369,50 @@ class Sentinel3Worker:
         rules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "rules")
         rules_loaded = self.rule_engine.load_rules_from_directory(rules_dir)
         logger.info("yaml_rules_loaded_for_ingestion", count=rules_loaded, stats=self.rule_engine.stats())
+        
+        # Initialize Security Graph (Wiz-for-Web3)
+        if self.graph_enabled:
+            try:
+                from src.graph.connection import get_neo4j_connection
+                from src.graph.builder import GraphBuilder
+                
+                neo4j_uri = os.getenv("NEO4J_URI")
+                if neo4j_uri:
+                    conn = get_neo4j_connection(use_mock=False)
+                    await conn.connect()
+                    self.graph_builder = GraphBuilder(conn)
+                    await self.graph_builder.initialize()
+                    logger.info("security_graph_initialized", uri=neo4j_uri.split("@")[-1] if "@" in neo4j_uri else "configured")
+                else:
+                    # Use mock connection for development
+                    conn = get_neo4j_connection(use_mock=True)
+                    await conn.connect()
+                    self.graph_builder = GraphBuilder(conn)
+                    logger.info("security_graph_initialized_mock", message="Using mock graph (set NEO4J_URI for production)")
+            except Exception as e:
+                logger.warning("security_graph_init_failed", error=str(e), message="Continuing without graph")
+                self.graph_enabled = False
+        
+        # Initialize ML Threat Detector
+        if self.ml_enabled:
+            try:
+                from src.ml.threat_detector import ThreatDetector
+                from src.ml.feature_extractor import FeatureExtractor
+                
+                model_path = os.getenv("ML_MODEL_PATH", "data/models/threat_detector.pt")
+                vertex_endpoint = os.getenv("VERTEX_AI_ENDPOINT")
+                
+                self.ml_feature_extractor = FeatureExtractor()
+                self.ml_threat_detector = ThreatDetector(
+                    model_path=model_path if os.path.exists(model_path) else None,
+                    vertex_endpoint=vertex_endpoint
+                )
+                logger.info("ml_threat_detector_initialized", 
+                           has_local_model=os.path.exists(model_path),
+                           has_vertex=bool(vertex_endpoint))
+            except Exception as e:
+                logger.warning("ml_threat_detector_init_failed", error=str(e), message="Continuing without ML")
+                self.ml_enabled = False
         
         # Initialize RPC providers and listeners for EVM chains
         for chain_config in self.config.get("chains", []):
@@ -568,9 +629,21 @@ class Sentinel3Worker:
                                     self.rate_limiter.record_rate_limit(chain_id, Exception("get_logs timeout"))
                                     continue
                                 
-                                # Process logs into SecurityEvents
+                                # Process logs into SecurityEvents with full parsing
                                 for log in logs:
-                                    event = self._log_to_security_event(chain_id, log, head_block)
+                                    # Get block timestamp for the event
+                                    block_ts = datetime.now(timezone.utc)  # Default to now
+                                    try:
+                                        log_block = log.get("blockNumber", head_block)
+                                        if hasattr(log_block, 'hex'):
+                                            log_block = int(log_block.hex(), 16) if log_block else head_block
+                                        elif isinstance(log_block, str) and log_block.startswith("0x"):
+                                            log_block = int(log_block, 16)
+                                    except:
+                                        log_block = head_block
+                                    
+                                    # Full parsing with amount, addresses, and USD calculation
+                                    event = await self._log_to_security_event(chain_id, log, log_block, block_ts)
                                     if event:
                                         # Check if confirmed
                                         if self.finality_manager.is_block_confirmed(chain_id, event.block_number):
@@ -614,6 +687,16 @@ class Sentinel3Worker:
                                             
                                             # Get event type string
                                             event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+                                            
+                                            # ========================================
+                                            # FILTER: Skip unknown events to reduce noise
+                                            # Only store events we can classify
+                                            # ========================================
+                                            if event_type_str.lower() == 'unknown':
+                                                logger.debug("skipping_unknown_event", 
+                                                            chain=chain_id, 
+                                                            tx_hash=event.tx_hash[:16] if event.tx_hash else "N/A")
+                                                continue  # Skip to next event
                                             
                                             db_event = {
                                                 "event_id": event_id,
@@ -1064,6 +1147,10 @@ class Sentinel3Worker:
             # Serialize raw_data to handle HexBytes
             raw_data = self._serialize_raw_data(event.raw_event if hasattr(event, 'raw_event') else {})
             
+            # Extract amount and amount_usd from event
+            amount_val = getattr(event, 'amount', None)
+            amount_usd_val = getattr(event, 'amount_usd', None)
+
             db_event = {
                 "event_id": event_id,
                 "chain_id": chain_id,
@@ -1075,6 +1162,8 @@ class Sentinel3Worker:
                 "from_address": getattr(event, 'from_address', None) or getattr(event, 'source_address', None),
                 "to_address": getattr(event, 'to_address', None) or getattr(event, 'dest_address', None),
                 "severity": severity_str,
+                "amount": str(amount_val) if amount_val is not None else None,
+                "amount_usd": str(amount_usd_val) if amount_usd_val is not None else None,
                 "raw_data": raw_data,
             }
             
@@ -1114,27 +1203,138 @@ class Sentinel3Worker:
                                 )
                 except Exception as rule_err:
                     logger.debug("event_handler_rule_evaluation_error", error=str(rule_err))
+            
+            # ========================================
+            # SECURITY GRAPH UPDATE (Wiz-for-Web3)
+            # ========================================
+            if self.graph_enabled and self.graph_builder:
+                try:
+                    # Convert to graph-compatible format
+                    graph_event = {
+                        "chain_id": chain_id,
+                        "tx_hash": event.tx_hash,
+                        "block_number": event.block_number,
+                        "block_timestamp": event.block_timestamp,
+                        "event_type": event_type_str,
+                        "contract_address": event.contract_address,
+                        "source_address": getattr(event, 'source_address', None) or getattr(event, 'from_address', None),
+                        "dest_address": getattr(event, 'dest_address', None) or getattr(event, 'to_address', None),
+                        "amount_usd": float(getattr(event, 'amount_usd', 0) or 0),
+                        "raw_event": raw_data
+                    }
+                    
+                    # Process event into graph (non-blocking)
+                    asyncio.create_task(self.graph_builder.process_event(graph_event))
+                    
+                except Exception as graph_err:
+                    logger.debug("graph_update_error", error=str(graph_err))
+            
+            # ========================================
+            # ML THREAT DETECTION
+            # ========================================
+            if self.ml_enabled and self.ml_threat_detector:
+                try:
+                    # Extract features
+                    ml_event = {
+                        "chain_id": chain_id,
+                        "event_type": event_type_str,
+                        "amount_usd": float(getattr(event, 'amount_usd', 0) or 0),
+                        "source_address": getattr(event, 'source_address', None),
+                        "dest_address": getattr(event, 'dest_address', None),
+                        "contract_address": event.contract_address,
+                        "block_timestamp": event.block_timestamp,
+                        "severity": severity_str
+                    }
+                    
+                    features = self.ml_feature_extractor.extract_features(ml_event)
+                    prediction = await self.ml_threat_detector.predict(features.to_dict())
+                    
+                    # Create incident if ML detects threat
+                    # FINE-TUNED: Increased threshold and filter out low-confidence unknown threats
+                    should_create_incident = (
+                        prediction.is_threat and 
+                        prediction.risk_score >= 75 and  # Increased from 60 to 75
+                        prediction.confidence >= 0.70 and  # Require 70% confidence
+                        # Filter out low-confidence unknown_threat and governance_attack
+                        not (prediction.threat_type in ["unknown_threat", "governance_attack"] and prediction.confidence < 0.85)
+                    )
+                    
+                    if should_create_incident:
+                        logger.warning(
+                            "ml_threat_detected",
+                            threat_type=prediction.threat_type,
+                            risk_score=prediction.risk_score,
+                            confidence=prediction.confidence,
+                            chain=chain_id,
+                            tx_hash=event.tx_hash[:20] if event.tx_hash else ""
+                        )
+                        
+                        # Create ML-based incident
+                        await self._create_ml_incident(
+                            event=event,
+                            db_event=db_event,
+                            prediction=prediction
+                        )
+                        
+                except Exception as ml_err:
+                    logger.debug("ml_detection_error", error=str(ml_err))
                     
         except Exception as e:
             logger.error("event_handler_save_failed", error=str(e), exc_info=True)
     
-    def _log_to_security_event(self, chain_id: str, log: dict, block_number: int) -> Optional[SecurityEvent]:
-        """Convert log to SecurityEvent with event classification."""
+    async def _log_to_security_event(self, chain_id: str, log: dict, block_number: int, block_timestamp: Optional[datetime] = None) -> Optional[SecurityEvent]:
+        """
+        Convert log to SecurityEvent with FULL parsing.
+        
+        This method now does complete parsing including:
+        - Event type classification from signature database
+        - from_address and to_address extraction from topics
+        - Amount parsing from data field
+        - USD value calculation via price feed
+        """
         from src.telemetry.event_signatures import get_event_info
+        from src.telemetry.price_feed import get_price_feed
+        from decimal import Decimal
+        
+        # Standard ERC20 Transfer topic
+        TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
         
         try:
-            # Get topic0 for event classification
+            # Get topics
             topics = log.get("topics", [])
+            if not topics:
+                return None
+            
+            # Extract topic0 for event classification
             topic0 = topics[0] if topics else ""
             if hasattr(topic0, 'hex'):
                 topic0 = topic0.hex()
             if topic0 and not topic0.startswith("0x"):
                 topic0 = "0x" + topic0
             
+            # Get contract address
+            contract_address = log.get("address", "")
+            if hasattr(contract_address, 'lower'):
+                contract_address = contract_address.lower()
+            
+            # Get tx_hash
+            tx_hash = log.get("transactionHash", "")
+            if hasattr(tx_hash, 'hex'):
+                tx_hash = tx_hash.hex()
+            
+            # Get log_index
+            log_index = log.get("logIndex", 0)
+            if hasattr(log_index, 'hex'):
+                log_index = int(log_index.hex(), 16) if log_index else 0
+            elif isinstance(log_index, str) and log_index.startswith("0x"):
+                log_index = int(log_index, 16)
+            
             # Look up event info from signature database
             event_info = get_event_info(topic0) if topic0 else {}
             event_type = event_info.get("type", EventType.UNKNOWN)
             event_severity = event_info.get("severity", "low")
+            event_name = event_info.get("name", "Unknown")
+            protocol = event_info.get("protocol", "unknown")
             
             # Map severity string to Severity enum
             severity_map = {
@@ -1146,19 +1346,165 @@ class Sentinel3Worker:
             }
             severity = severity_map.get(event_severity, Severity.LOW)
             
+            # ========================================
+            # EXTRACT ADDRESSES FROM TOPICS
+            # ========================================
+            from_address = None
+            to_address = None
+            
+            # For Transfer events: Transfer(from, to, value)
+            # Topics: [topic0, from (indexed), to (indexed)]
+            # Data: value (not indexed)
+            if len(topics) >= 2:
+                topic1 = topics[1]
+                if hasattr(topic1, 'hex'):
+                    topic1 = topic1.hex()
+                if topic1:
+                    # Extract last 40 chars (20 bytes = address)
+                    from_address = "0x" + topic1[-40:].lower()
+            
+            if len(topics) >= 3:
+                topic2 = topics[2]
+                if hasattr(topic2, 'hex'):
+                    topic2 = topic2.hex()
+                if topic2:
+                    to_address = "0x" + topic2[-40:].lower()
+            
+            # ========================================
+            # PARSE AMOUNT FROM DATA FIELD
+            # ========================================
+            amount = Decimal("0")
+            raw_amount = 0
+            data = log.get("data", "0x")
+            if hasattr(data, 'hex'):
+                data = data.hex()
+            
+            # Remove 0x prefix if present
+            if data and data.startswith("0x"):
+                data = data[2:]
+            
+            # Parse raw amount from data (first 32 bytes = 64 hex chars)
+            if data and len(data) >= 64:
+                try:
+                    raw_amount = int(data[:64], 16)
+                except (ValueError, TypeError):
+                    pass
+            
+            # ========================================
+            # GET TOKEN DECIMALS & CALCULATE USD VALUE
+            # ========================================
+            amount_usd = Decimal("0")
+            price = 0.0
+            decimals = 18  # Default
+            
+            # Only process if we have a raw amount and contract address
+            if raw_amount > 0 and contract_address:
+                try:
+                    price_feed = get_price_feed()
+                    
+                    # Get correct decimals for this token (critical for stablecoins!)
+                    decimals = price_feed.get_token_decimals(chain_id, contract_address)
+                    
+                    # Convert raw amount to human-readable using correct decimals
+                    amount = Decimal(raw_amount) / Decimal(10 ** decimals)
+                    
+                    # Cap amount to prevent database overflow (max 10^19)
+                    MAX_AMOUNT = Decimal("9999999999999999999")  # ~10^19
+                    if amount > MAX_AMOUNT:
+                        logger.debug("amount_capped", original=str(amount)[:20], capped=str(MAX_AMOUNT))
+                        amount = MAX_AMOUNT
+                    
+                    # Get price and calculate USD value
+                    price = await price_feed.get_price(chain_id, contract_address)
+                    if price > 0:
+                        amount_usd = price_feed.calculate_usd_value(amount, price, decimals)
+                        
+                        # Sanity check: Values over $10B are likely calculation errors
+                        # Set to 0 (unknown) rather than showing misleading $10B cap
+                        MAX_USD = Decimal("10000000000")  # $10B
+                        if amount_usd > MAX_USD:
+                            logger.warning("usd_value_unrealistic_zeroed", 
+                                          original=str(amount_usd)[:20], 
+                                          token=contract_address[:10],
+                                          decimals=decimals,
+                                          reason="likely_decimal_error")
+                            amount_usd = Decimal("0")  # Show as unknown, not misleading cap
+                        
+                        # Update severity based on USD value
+                        if amount_usd >= Decimal("10000000"):  # $10M+
+                            severity = Severity.CRITICAL
+                        elif amount_usd >= Decimal("1000000"):  # $1M+
+                            severity = Severity.HIGH
+                        elif amount_usd >= Decimal("100000"):  # $100K+
+                            severity = Severity.MEDIUM
+                            
+                except Exception as price_err:
+                    logger.debug("price_fetch_error_in_log_parse", 
+                                token=contract_address[:10] if contract_address else "N/A", 
+                                error=str(price_err))
+                    # Fallback: use 18 decimals if we couldn't get proper decimals
+                    if raw_amount > 0:
+                        amount = Decimal(raw_amount) / Decimal(10 ** 18)
+            
+            # ========================================
+            # GET TOKEN SYMBOL
+            # ========================================
+            token_symbol = "UNKNOWN"
+            if contract_address:
+                try:
+                    price_feed = get_price_feed()
+                    token_symbol = price_feed.get_token_symbol(chain_id, contract_address) or "UNKNOWN"
+                except:
+                    pass
+            
+            # ========================================
+            # BUILD ENRICHED RAW_EVENT
+            # ========================================
+            # Serialize the original log data
+            raw_event = {}
+            for key, value in log.items():
+                if hasattr(value, 'hex'):
+                    raw_event[key] = value.hex()
+                elif isinstance(value, list):
+                    raw_event[key] = [v.hex() if hasattr(v, 'hex') else v for v in value]
+                else:
+                    raw_event[key] = value
+            
+            # Add enriched fields
+            raw_event["event_name"] = event_name
+            raw_event["protocol"] = protocol
+            raw_event["token_symbol"] = token_symbol
+            raw_event["amount_human"] = str(amount)
+            raw_event["amount_usd"] = str(amount_usd)
+            raw_event["token_price_usd"] = price
+            raw_event["from_address"] = from_address
+            raw_event["to_address"] = to_address
+            
+            # ========================================
+            # CREATE SECURITY EVENT
+            # ========================================
             event = SecurityEvent(
                 chain_id=chain_id,
-                tx_hash=log.get("transactionHash", ""),
+                tx_hash=tx_hash,
                 block_number=block_number,
-                log_index=log.get("logIndex", 0),
-                contract_address=log.get("address", ""),
+                block_timestamp=block_timestamp or datetime.now(timezone.utc),
+                log_index=log_index,
+                contract_address=contract_address,
                 event_type=event_type,
                 severity=severity,
-                raw_event=log
+                source_address=from_address or "",
+                dest_address=to_address or "",
+                amount=amount,
+                amount_usd=amount_usd,
+                asset_type=token_symbol,
+                asset_address=contract_address,
+                raw_event=raw_event
             )
+            
             return event
+            
         except Exception as e:
-            logger.error("log_conversion_failed", error=str(e))
+            logger.error("log_conversion_failed", error=str(e), exc_info=True)
             return None
     
     async def _create_incident_from_rule(
@@ -1168,17 +1514,189 @@ class Sentinel3Worker:
         db_event: Dict,
         match_details: Dict
     ):
-        """Create an incident when a HIGH/CRITICAL/MEDIUM rule is triggered."""
+        """
+        Create an incident when a YAML rule is triggered.
+        
+        Uses ML Alert Analyzer to filter false positives before creating incidents.
+        Only creates incidents if ML analysis confirms it's likely a true positive.
+        """
         from src.database.service import DatabaseService
         
         try:
             # Generate unique incident ID based on rule and event
             chain_id = event_data.get("chain_id", "unknown")
-            tx_hash = event_data.get("tx_hash", "")[:16]
-            incident_id = f"inc_rule_{rule.id}_{chain_id}_{tx_hash}_{int(datetime.now(timezone.utc).timestamp())}"
+            contract_addr = (event_data.get("contract_address") or "")[:10]
             
-            # Get category safely (may not exist on AlertRule)
-            category = getattr(rule, 'category', None) or "RULE_TRIGGERED"
+            # ========================================
+            # DEDUPLICATION: Use EVENT (chain+contract+block) as key
+            # This prevents multiple rules from creating duplicate incidents for the same event
+            # ========================================
+            event_block = db_event.get("block_number", "")
+            tx_hash = db_event.get("tx_hash", "")[:16] if db_event.get("tx_hash") else ""
+            
+            # Event-level dedup key (same event = same incident, regardless of which rule triggered)
+            event_dedupe_key = f"{chain_id}_{contract_addr}_{event_block}_{tx_hash}" if contract_addr else f"{chain_id}_{event_block}_{tx_hash}"
+            
+            # Rule-level dedup key (same rule+contract = don't re-alert within window)
+            rule_dedupe_key = f"{rule.id[:15]}_{chain_id}_{contract_addr}" if contract_addr else f"{rule.id[:15]}_{chain_id}"
+            
+            # Check if we've already created an incident for this EVENT
+            if not hasattr(self, '_event_incident_cache'):
+                self._event_incident_cache = {}
+            if not hasattr(self, '_rule_incident_cache'):
+                self._rule_incident_cache = {}
+            
+            now = datetime.now(timezone.utc)
+            
+            # First check: Has ANY rule already created an incident for this event?
+            if event_dedupe_key in self._event_incident_cache:
+                last_created = self._event_incident_cache[event_dedupe_key]
+                if (now - last_created).total_seconds() < 300:  # 5 min window for same event
+                    logger.debug("incident_deduplicated_same_event", 
+                                event_key=event_dedupe_key[:30], 
+                                rule=rule.id,
+                                reason="Another rule already created incident for this event")
+                    return
+            
+            # Second check: Has THIS rule already alerted on this contract recently?
+            if rule_dedupe_key in self._rule_incident_cache:
+                last_created = self._rule_incident_cache[rule_dedupe_key]
+                if (now - last_created).total_seconds() < 1800:  # 30 min window for same rule+contract
+                    logger.debug("incident_deduplicated_same_rule", 
+                                rule_key=rule_dedupe_key[:30],
+                                reason="Same rule already alerted on this contract")
+                    return
+            
+            # ========================================
+            # ML ALERT ANALYZER - Filter False Positives
+            # ========================================
+            try:
+                from src.ml.alert_analyzer import analyze_yaml_alert, AlertVerdict
+                
+                # Analyze the alert with ML
+                analysis_result = await analyze_yaml_alert(
+                    rule_id=rule.id,
+                    rule_name=rule.name,
+                    severity=rule.severity,
+                    chain_id=chain_id,
+                    event=event_data
+                )
+                
+                # Log the analysis
+                logger.info(
+                    "yaml_alert_analyzed",
+                    rule_id=rule.id,
+                    rule_name=rule.name,
+                    verdict=analysis_result.verdict.value,
+                    tp_probability=round(analysis_result.tp_probability, 2),
+                    should_create=analysis_result.should_create_incident
+                )
+                
+                # Skip incident creation if ML says it's a false positive
+                if not analysis_result.should_create_incident:
+                    logger.info(
+                        "yaml_alert_filtered_as_fp",
+                        rule_id=rule.id,
+                        rule_name=rule.name,
+                        tp_probability=round(analysis_result.tp_probability, 2),
+                        reasoning=analysis_result.reasoning[:2]  # First 2 reasons
+                    )
+                    return
+                
+                # Use ML-adjusted severity
+                adjusted_severity = analysis_result.adjusted_severity.upper()
+                ml_confidence = analysis_result.tp_probability
+                ml_reasoning = analysis_result.reasoning
+                
+            except ImportError:
+                # ML analyzer not available, proceed without filtering
+                adjusted_severity = rule.severity.upper()
+                ml_confidence = None
+                ml_reasoning = None
+            except Exception as ml_err:
+                logger.warning("ml_alert_analysis_failed", error=str(ml_err))
+                adjusted_severity = rule.severity.upper()
+                ml_confidence = None
+                ml_reasoning = None
+            
+            incident_id = f"inc_rule_{rule_dedupe_key}_{int(now.timestamp())}"
+            
+            # ========================================
+            # Map rule ID to specific attack type
+            # ========================================
+            rule_id_lower = rule.id.lower()
+            
+            # Map rule patterns to attack types (expanded for better coverage)
+            attack_type_mapping = {
+                # Attack types
+                "flash": "FLASH_LOAN_ATTACK",
+                "reentrancy": "REENTRANCY_ATTACK",
+                "mint": "UNBACKED_MINT",
+                "bridge": "BRIDGE_EXPLOIT",
+                "oracle": "ORACLE_MANIPULATION",
+                "price": "PRICE_MANIPULATION",
+                "governance": "GOVERNANCE_ATTACK",
+                "rug": "RUG_PULL",
+                "honeypot": "HONEYPOT",
+                "drain": "FUND_DRAIN",
+                "liquidation": "LIQUIDATION_RISK",
+                "sandwich": "SANDWICH_ATTACK",
+                "frontrun": "FRONT_RUNNING",
+                "mev": "MEV_ATTACK",
+                "mempool": "MEV_ATTACK",
+                "exploit": "EXPLOIT",
+                # Activity types
+                "swap": "LARGE_SWAP",
+                "transfer": "LARGE_TRANSFER",
+                "velocity": "VELOCITY_ANOMALY",
+                "spike": "VELOCITY_ANOMALY",
+                "whale": "WHALE_ACTIVITY",
+                "large": "LARGE_TRANSACTION",
+                # L2/Chain specific
+                "arbitrum": "L2_ANOMALY",
+                "optimism": "L2_ANOMALY",
+                "base": "L2_ANOMALY",
+                "sequencer": "SEQUENCER_ISSUE",
+                "delayed-inbox": "L2_ANOMALY",
+                # Protocol specific
+                "uniswap": "DEX_ANOMALY",
+                "pancakeswap": "DEX_ANOMALY",
+                "sushiswap": "DEX_ANOMALY",
+                "curve": "DEX_ANOMALY",
+                "stargate": "BRIDGE_ACTIVITY",
+                "aave": "LENDING_ANOMALY",
+                "compound": "LENDING_ANOMALY",
+                "maker": "LENDING_ANOMALY",
+                # NFT
+                "nft": "NFT_ANOMALY",
+                "wash": "NFT_WASH_TRADING",
+                # Other
+                "hft": "HFT_PATTERN",
+                "failed": "FAILED_TX_SPIKE",
+                "liquidity": "LIQUIDITY_CHANGE",
+                "removal": "LIQUIDITY_REMOVAL",
+            }
+            
+            # Find matching attack type (check multiple patterns)
+            category = "RULE_TRIGGERED"
+            for pattern, attack_type in attack_type_mapping.items():
+                if pattern in rule_id_lower or pattern in rule.name.lower():
+                    category = attack_type
+                    break
+            
+            # Fallback: Try to infer from rule name if still generic
+            if category == "RULE_TRIGGERED":
+                rule_name_lower = rule.name.lower()
+                if "swap" in rule_name_lower:
+                    category = "LARGE_SWAP"
+                elif "transfer" in rule_name_lower:
+                    category = "LARGE_TRANSFER"
+                elif "bridge" in rule_name_lower:
+                    category = "BRIDGE_ACTIVITY"
+                elif "trading" in rule_name_lower:
+                    category = "TRADING_ANOMALY"
+                elif "pattern" in rule_name_lower:
+                    category = "PATTERN_DETECTED"
             
             # Get recommended_actions safely (may not exist on AlertRule)
             recommended_actions = getattr(rule, 'recommended_actions', None) or [
@@ -1187,39 +1705,247 @@ class Sentinel3Worker:
                 "Investigate the involved addresses"
             ]
             
-            # Get confidence safely
-            confidence = getattr(rule, 'confidence', 0.8) or 0.8
+            # Get confidence - use ML confidence if available
+            base_confidence = getattr(rule, 'confidence', 0.8) or 0.8
+            confidence = ml_confidence if ml_confidence is not None else base_confidence
+            
+            # ========================================
+            # SEVERITY ADJUSTMENT: Based on confidence and loss amount
+            # This reduces false positives by downgrading low-confidence alerts
+            # ========================================
+            amount_usd = float(event_data.get("amount_usd", 0) or 0)
+            
+            # Cap unrealistic values
+            if amount_usd > 10_000_000_000:  # > $10B is unrealistic
+                amount_usd = 0  # Treat as unknown rather than misleading
+            
+            # Downgrade severity for low confidence
+            if confidence < 0.5:
+                if adjusted_severity == "CRITICAL":
+                    adjusted_severity = "HIGH"
+                    logger.debug("severity_downgraded", reason="low_confidence", original="CRITICAL", new="HIGH", confidence=confidence)
+                elif adjusted_severity == "HIGH":
+                    adjusted_severity = "MEDIUM"
+                    logger.debug("severity_downgraded", reason="low_confidence", original="HIGH", new="MEDIUM", confidence=confidence)
+            
+            # Downgrade severity for $0 loss (unless it's a detection-only rule)
+            if amount_usd == 0 and adjusted_severity == "CRITICAL":
+                # Activity rules without monetary loss shouldn't be CRITICAL
+                if category not in {"REENTRANCY_ATTACK", "FLASH_LOAN_ATTACK", "BRIDGE_EXPLOIT", "RUG_PULL"}:
+                    adjusted_severity = "HIGH"
+                    logger.debug("severity_downgraded", reason="zero_loss", original="CRITICAL", new="HIGH", category=category)
+            
+            # Upgrade severity for very high confirmed losses
+            if amount_usd >= 1_000_000 and confidence >= 0.8 and adjusted_severity in {"MEDIUM", "HIGH"}:
+                adjusted_severity = "CRITICAL"
+                logger.debug("severity_upgraded", reason="high_loss", amount_usd=amount_usd, confidence=confidence)
+            
+            # ========================================
+            # Extract contract and address information
+            # ========================================
+            contract_address = event_data.get("contract_address") or ""
+            from_address = event_data.get("from_address") or event_data.get("source_address") or ""
+            to_address = event_data.get("to_address") or event_data.get("dest_address") or ""
+            
+            # Build affected_contracts list
+            affected_contracts = []
+            if contract_address:
+                affected_contracts.append(contract_address)
+            
+            # Build affected_addresses list (unique addresses involved)
+            affected_addresses = []
+            if from_address and from_address not in affected_addresses:
+                affected_addresses.append(from_address)
+            if to_address and to_address not in affected_addresses:
+                affected_addresses.append(to_address)
             
             # Build incident data
             incident_data = {
                 "incident_id": incident_id,
-                "title": f"[{rule.severity.upper()}] {rule.name}",
+                "title": f"[{adjusted_severity}] {rule.name}",
                 "summary": rule.description or f"Rule {rule.name} triggered on {chain_id}",
-                "severity": rule.severity.upper(),
+                "severity": adjusted_severity,
                 "status": "OPEN_PENDING",
                 "attack_type": category,
                 "confidence": confidence,
-                "total_loss_usd": float(event_data.get("amount_usd", 0) or 0),
+                # Use the already-capped amount_usd value
+                "total_loss_usd": amount_usd,
                 "affected_chains": [chain_id],
+                "affected_contracts": affected_contracts,
+                "affected_addresses": affected_addresses,
                 "event_ids": [db_event.get("event_id", "")],
                 "rule_ids": [rule.id],
                 "recommended_actions": recommended_actions,
                 "cluster_key": f"{rule.id}_{chain_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
             }
             
+            # Add ML analysis to raw_data if available
+            if ml_reasoning:
+                incident_data["raw_data"] = {
+                    "ml_analysis": {
+                        "tp_probability": ml_confidence,
+                        "reasoning": ml_reasoning,
+                        "original_severity": rule.severity.upper(),
+                        "adjusted_severity": adjusted_severity
+                    }
+                }
+            
             # Save to database
             saved_id = await DatabaseService.save_incident(incident_data)
             if saved_id:
+                # Record in BOTH caches to prevent duplicates
+                self._event_incident_cache[event_dedupe_key] = now
+                self._rule_incident_cache[rule_dedupe_key] = now
+                
+                # Clean old cache entries (older than 1 hour)
+                cutoff = now - timedelta(hours=1)
+                self._event_incident_cache = {
+                    k: v for k, v in self._event_incident_cache.items() 
+                    if v > cutoff
+                }
+                self._rule_incident_cache = {
+                    k: v for k, v in self._rule_incident_cache.items() 
+                    if v > cutoff
+                }
+                
                 logger.info(
                     "incident_created_from_rule",
                     incident_id=saved_id,
                     rule_id=rule.id,
                     rule_name=rule.name,
-                    severity=rule.severity,
-                    chain=chain_id
+                    severity=adjusted_severity,
+                    chain=chain_id,
+                    ml_filtered=ml_confidence is not None,
+                    tp_probability=round(ml_confidence, 2) if ml_confidence else None
                 )
         except Exception as e:
             logger.error("incident_creation_failed", error=str(e), rule_id=rule.id, exc_info=True)
+    
+    async def _create_ml_incident(
+        self,
+        event: SecurityEvent,
+        db_event: Dict,
+        prediction
+    ):
+        """Create an incident from ML threat detection."""
+        from src.database.service import DatabaseService
+        
+        try:
+            chain_id = event.chain_id
+            tx_hash = event.tx_hash[:16] if event.tx_hash else ""
+            contract_addr = event.contract_address[:10] if event.contract_address else "unknown"
+            
+            # ========================================
+            # DEDUPLICATION: Use contract+threat_type as key (not timestamp)
+            # ========================================
+            dedupe_key = f"ml_{prediction.threat_type}_{chain_id}_{contract_addr}"
+            
+            # Check if we've already created an incident for this contract+threat in the last hour
+            if not hasattr(self, '_ml_incident_cache'):
+                self._ml_incident_cache = {}
+            
+            cache_key = dedupe_key
+            now = datetime.now(timezone.utc)
+            if cache_key in self._ml_incident_cache:
+                last_created = self._ml_incident_cache[cache_key]
+                if (now - last_created).total_seconds() < 3600:  # 1 hour dedup window
+                    logger.debug("ml_incident_deduplicated", dedupe_key=cache_key)
+                    return
+            
+            # Use dedupe_key as incident_id for consistency
+            incident_id = f"inc_{dedupe_key}_{int(now.timestamp())}"
+            
+            # ========================================
+            # SEVERITY GRADATION: Based on risk score + confidence
+            # Risk score is the PRIMARY factor, threat type is a secondary modifier
+            # ========================================
+            # Known dangerous threat types (can bump severity UP if risk is high)
+            critical_threats = {"flash_loan_exploit", "reentrancy_exploit", "bridge_exploit"}
+            high_threats = {"oracle_manipulation", "rug_pull"}
+            
+            # PRIMARY: Severity based on RISK SCORE (most important factor)
+            # This ensures low risk scores NEVER get CRITICAL severity
+            if prediction.risk_score >= 80 and prediction.confidence >= 0.85:
+                severity = "CRITICAL"
+            elif prediction.risk_score >= 60 and prediction.confidence >= 0.70:
+                severity = "HIGH"
+            elif prediction.risk_score >= 40 and prediction.confidence >= 0.50:
+                severity = "MEDIUM"
+            else:
+                severity = "LOW"
+            
+            # SECONDARY: Bump severity for known dangerous threat types (only if confidence is high)
+            # But ONLY bump - never let threat type alone make something CRITICAL
+            if prediction.confidence >= 0.85 and prediction.risk_score >= 50:
+                if prediction.threat_type in critical_threats and severity == "HIGH":
+                    severity = "CRITICAL"  # Bump HIGH → CRITICAL for dangerous threats
+                elif prediction.threat_type in high_threats and severity == "MEDIUM":
+                    severity = "HIGH"  # Bump MEDIUM → HIGH for dangerous threats
+            
+            # IMPORTANT: Risk score 35 with confidence 78% should be MEDIUM at most
+            # The above logic already handles this correctly:
+            # - risk_score=35 < 40 → severity = "LOW" (or MEDIUM if confidence >= 0.50)
+            logger.debug("ml_severity_calculated",
+                        risk_score=prediction.risk_score,
+                        confidence=prediction.confidence,
+                        threat_type=prediction.threat_type,
+                        final_severity=severity)
+            
+            # Build incident data
+            incident_data = {
+                "incident_id": incident_id,
+                "title": f"[ML-{severity}] {prediction.threat_type.replace('_', ' ').title()} Detected",
+                "summary": f"ML model detected potential {prediction.threat_type} with {prediction.confidence:.0%} confidence. Risk score: {prediction.risk_score}/100",
+                "severity": severity,
+                "status": "OPEN_PENDING",
+                "attack_type": prediction.threat_type,
+                "confidence": prediction.confidence,
+                # Set unrealistic values (>$10B) to 0 (unknown) rather than misleading cap
+                "total_loss_usd": 0.0 if float(getattr(event, 'amount_usd', 0) or 0) > 10_000_000_000 else float(getattr(event, 'amount_usd', 0) or 0),
+                "affected_chains": [chain_id],
+                "event_ids": [db_event.get("event_id", "")],
+                "rule_ids": ["ml_threat_detector"],
+                "recommended_actions": [
+                    f"Investigate {prediction.threat_type} indicators",
+                    "Review transaction details and involved addresses",
+                    "Check for related transactions in the same block",
+                    "Verify if this is a known pattern"
+                ],
+                "cluster_key": f"ml_{prediction.threat_type}_{chain_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
+                "raw_data": {
+                    "ml_prediction": {
+                        "threat_type": prediction.threat_type,
+                        "risk_score": prediction.risk_score,
+                        "confidence": prediction.confidence,
+                        "top_factors": prediction.top_factors,
+                        "model_version": prediction.model_version
+                    }
+                }
+            }
+            
+            # Save to database
+            saved_id = await DatabaseService.save_incident(incident_data)
+            if saved_id:
+                # Record in cache to prevent duplicates
+                self._ml_incident_cache[cache_key] = now
+                
+                # Clean old cache entries (older than 2 hours)
+                cutoff = now - timedelta(hours=2)
+                self._ml_incident_cache = {
+                    k: v for k, v in self._ml_incident_cache.items() 
+                    if v > cutoff
+                }
+                
+                logger.info(
+                    "ml_incident_created",
+                    incident_id=saved_id,
+                    threat_type=prediction.threat_type,
+                    risk_score=prediction.risk_score,
+                    severity=severity,
+                    chain=chain_id
+                )
+        except Exception as e:
+            logger.error("ml_incident_creation_failed", error=str(e), exc_info=True)
     
     async def detection_loop(self):
         """Loop B: Consume events from bus and process."""
@@ -1439,64 +2165,123 @@ class Sentinel3Worker:
                         logger.info("continuous_learning_contract_saved", chain=contract.chain, address=contract.address[:20], is_threat=analysis.is_threat)
                         
                         # AUTO-CREATE INCIDENT FOR THREATS
-                        if analysis.is_threat and severity.value >= Severity.MEDIUM.value:
-                            try:
-                                # Generate unique incident ID
-                                incident_id = f"inc_ml_{contract.chain}_{contract.address[:10]}_{int(datetime.now(timezone.utc).timestamp())}"
-                                
-                                # Map threat category to attack type
-                                threat_to_attack = {
-                                    "reentrancy_exploit": "Reentrancy Attack",
-                                    "flash_loan_exploit": "Flash Loan Attack",
-                                    "rug_pull": "Rug Pull",
-                                    "honeypot": "Honeypot Contract",
-                                    "phishing": "Phishing Contract",
-                                    "price_manipulation": "Price Manipulation",
-                                    "access_control": "Access Control Vulnerability",
-                                    "integer_overflow": "Integer Overflow",
-                                }
-                                attack_type = threat_to_attack.get(analysis.threat_category, f"Malicious Contract ({analysis.threat_category})")
-                                
-                                # Build incident data
-                                incident_data = {
-                                    "incident_id": incident_id,
-                                    "title": f"[{severity.name}] {attack_type} Detected on {contract.chain.title()}",
-                                    "summary": f"ML Contract Scanner detected a potentially malicious contract deployment. "
-                                               f"Contract {contract.address} deployed by {contract.deployer or 'unknown'} "
-                                               f"has been classified as '{analysis.threat_category}' with {analysis.confidence:.1%} confidence "
-                                               f"and risk score of {analysis.risk_score:.0f}/100.",
-                                    "severity": severity.name,
-                                    "status": "OPEN_PENDING",  # Matches database model expectation
-                                    "attack_type": attack_type,
-                                    "confidence": analysis.confidence,
-                                    "total_loss_usd": 0.0,  # Unknown at detection time
-                                    "affected_chains": [contract.chain],
-                                    "event_ids": [event_id],
-                                    "rule_ids": ["ml_contract_scanner"],
-                                    "created_at": datetime.now(timezone.utc),
-                                    "recommended_actions": [
-                                        f"Review contract code at {contract.address}",
-                                        "Check deployer wallet history for suspicious patterns",
-                                        "Monitor for interactions with known DeFi protocols",
-                                        "Consider adding contract to blocklist if confirmed malicious",
-                                    ],
-                                    "affected_contracts": [contract.address],
-                                    "affected_addresses": [contract.deployer] if contract.deployer else [],
-                                }
-                                
-                                saved_incident_id = await DatabaseService.save_incident(incident_data)
-                                if saved_incident_id:
-                                    logger.info(
-                                        "threat_incident_created",
-                                        incident_id=saved_incident_id,
-                                        severity=severity.name,
-                                        threat_category=analysis.threat_category,
-                                        chain=contract.chain,
-                                        contract=contract.address[:20],
-                                        confidence=f"{analysis.confidence:.1%}"
-                                    )
-                            except Exception as inc_error:
-                                logger.error("threat_incident_creation_failed", error=str(inc_error), exc_info=True)
+                        # Apply ML-based TP filtering to reduce false positives
+                        
+                        # Confidence thresholds for incident creation
+                        MIN_CONFIDENCE_FOR_INCIDENT = 0.25  # 25% minimum
+                        MIN_CONFIDENCE_FOR_CRITICAL = 0.50  # 50% for CRITICAL
+                        MIN_CONFIDENCE_FOR_HIGH = 0.35      # 35% for HIGH
+                        
+                        # Only process threats
+                        if not analysis.is_threat:
+                            return  # Not a threat, skip incident creation
+                        
+                        # Filter out low-confidence detections
+                        if analysis.confidence < MIN_CONFIDENCE_FOR_INCIDENT:
+                            logger.info(
+                                "ml_threat_filtered_low_confidence",
+                                chain=contract.chain,
+                                contract=contract.address[:20],
+                                confidence=f"{analysis.confidence:.1%}",
+                                threat_category=analysis.threat_category,
+                                reason="Below minimum confidence threshold"
+                            )
+                            return  # Skip incident creation
+                        
+                        # Filter out 'unknown_threat' with low confidence (likely FP)
+                        if analysis.threat_category == "unknown_threat" and analysis.confidence < 0.40:
+                            logger.info(
+                                "ml_threat_filtered_unknown",
+                                chain=contract.chain,
+                                contract=contract.address[:20],
+                                confidence=f"{analysis.confidence:.1%}",
+                                reason="Unknown threat with low confidence"
+                            )
+                            return  # Skip incident creation
+                        
+                        # Adjust severity based on confidence AND risk score (0-100 scale)
+                        # Risk score is the PRIMARY factor for severity
+                        # Risk score 15 with confidence 50% should be LOW, not CRITICAL
+                        if analysis.risk_score >= 80 and analysis.confidence >= 0.85:
+                            severity = Severity.CRITICAL
+                        elif analysis.risk_score >= 60 and analysis.confidence >= 0.70:
+                            severity = Severity.HIGH
+                        elif analysis.risk_score >= 40 and analysis.confidence >= 0.50:
+                            severity = Severity.MEDIUM
+                        else:
+                            severity = Severity.LOW
+                        
+                        # Only create incidents for MEDIUM+ severity
+                        if severity.value < Severity.MEDIUM.value:
+                            logger.info(
+                                "ml_threat_filtered_low_severity",
+                                chain=contract.chain,
+                                contract=contract.address[:20],
+                                severity=severity.name,
+                                confidence=f"{analysis.confidence:.1%}"
+                            )
+                            return  # Skip incident creation
+                        
+                        # Passed all filters - create incident
+                        try:
+                            # Generate unique incident ID
+                            incident_id = f"inc_ml_{contract.chain}_{contract.address[:10]}_{int(datetime.now(timezone.utc).timestamp())}"
+                            
+                            # Map threat category to attack type
+                            threat_to_attack = {
+                                "reentrancy_exploit": "Reentrancy Attack",
+                                "flash_loan_exploit": "Flash Loan Attack",
+                                "rug_pull": "Rug Pull",
+                                "honeypot": "Honeypot Contract",
+                                "phishing": "Phishing Contract",
+                                "price_manipulation": "Price Manipulation",
+                                "access_control": "Access Control Vulnerability",
+                                "integer_overflow": "Integer Overflow",
+                                "governance_attack": "Governance Attack",
+                                "bridge_exploit": "Bridge Exploit",
+                            }
+                            attack_type = threat_to_attack.get(analysis.threat_category, f"Malicious Contract ({analysis.threat_category})")
+                            
+                            # Build incident data
+                            incident_data = {
+                                "incident_id": incident_id,
+                                "title": f"[{severity.name}] {attack_type} Detected on {contract.chain.title()}",
+                                "summary": f"ML Contract Scanner detected a potentially malicious contract deployment. "
+                                           f"Contract {contract.address} deployed by {contract.deployer or 'unknown'} "
+                                           f"has been classified as '{analysis.threat_category}' with {analysis.confidence:.1%} confidence "
+                                           f"and risk score of {analysis.risk_score:.0f}/100.",
+                                "severity": severity.name,
+                                "status": "OPEN_PENDING",  # Matches database model expectation
+                                "attack_type": attack_type,
+                                "confidence": analysis.confidence,
+                                "total_loss_usd": 0.0,  # Unknown at detection time
+                                "affected_chains": [contract.chain],
+                                "event_ids": [event_id],
+                                "rule_ids": ["ml_contract_scanner"],
+                                "created_at": datetime.now(timezone.utc),
+                                "recommended_actions": [
+                                    f"Review contract code at {contract.address}",
+                                    "Check deployer wallet history for suspicious patterns",
+                                    "Monitor for interactions with known DeFi protocols",
+                                    "Consider adding contract to blocklist if confirmed malicious",
+                                ],
+                                "affected_contracts": [contract.address],
+                                "affected_addresses": [contract.deployer] if contract.deployer else [],
+                            }
+                            
+                            saved_incident_id = await DatabaseService.save_incident(incident_data)
+                            if saved_incident_id:
+                                logger.info(
+                                    "threat_incident_created",
+                                    incident_id=saved_incident_id,
+                                    severity=severity.name,
+                                    threat_category=analysis.threat_category,
+                                    chain=contract.chain,
+                                    contract=contract.address[:20],
+                                    confidence=f"{analysis.confidence:.1%}"
+                                )
+                        except Exception as inc_error:
+                            logger.error("threat_incident_creation_failed", error=str(inc_error), exc_info=True)
                         
                     except Exception as e:
                         logger.error("continuous_learning_save_error", error=str(e), exc_info=True)

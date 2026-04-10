@@ -18,14 +18,14 @@ chains:
   - chain_id: "ethereum"
     chain_name: "Ethereum Mainnet"
     # Using free public RPCs (no API key needed)
-    rpc_url: "https://eth.llamarpc.com"
+    rpc_url: "https://ethereum-rpc.publicnode.com"
     # Fallback RPCs (uncomment if primary fails):
     # rpc_url: "https://rpc.ankr.com/eth"
     # rpc_url: "https://ethereum.publicnode.com"
     # rpc_url: "https://1rpc.io/eth"
     # Infura (if you have API key):
     # rpc_url: "https://mainnet.infura.io/v3/YOUR_API_KEY"
-    ws_url: "wss://ethereum.publicnode.com"
+    ws_url: "wss://ethereum-rpc.publicnode.com"
     
     # All monitored bridge contracts on Ethereum
     bridge_contracts:
@@ -108,7 +108,7 @@ chains:
   - chain_id: "polygon"
     chain_name: "Polygon Mainnet"
     # Using free public RPCs
-    rpc_url: "https://polygon-rpc.com"
+    rpc_url: "https://polygon-bor-rpc.publicnode.com"
     # Fallback RPCs:
     # rpc_url: "https://rpc.ankr.com/polygon"
     # rpc_url: "https://polygon.llamarpc.com"
@@ -294,6 +294,7 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "cosmos"
     chain_name: "Cosmos Hub"
+    chain_type: "cosmos"
     rpc_url: "https://cosmos-rpc.polkachu.com"
     ws_url: "wss://cosmos-rpc.polkachu.com/websocket"
     bridge_contracts:
@@ -312,6 +313,7 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "osmosis"
     chain_name: "Osmosis"
+    chain_type: "cosmos"
     rpc_url: "https://osmosis-rpc.polkachu.com"
     ws_url: "wss://osmosis-rpc.polkachu.com/websocket"
     bridge_contracts:
@@ -325,6 +327,7 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "injective"
     chain_name: "Injective"
+    chain_type: "cosmos"
     rpc_url: "https://injective-rpc.polkachu.com"
     ws_url: "wss://injective-rpc.polkachu.com/websocket"
     bridge_contracts:
@@ -338,6 +341,7 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "aptos"
     chain_name: "Aptos Mainnet"
+    chain_type: "aptos"
     rpc_url: "https://fullnode.mainnet.aptoslabs.com/v1"
     bridge_contracts:
       - "0x54ad3d30af77b60d939ae356e6606de9a4da67583f02b962d2d3f2e481484e90"
@@ -352,6 +356,7 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "sui"
     chain_name: "Sui Mainnet"
+    chain_type: "sui"
     rpc_url: "https://fullnode.mainnet.sui.io:443"
     bridge_contracts:
       - "0x26efee2b51c911237888e5dc6702868abca3c7ac12c53f76ef8eba0697695e3d"
@@ -365,6 +370,7 @@ chains:
   # -------------------------------------------------------------------------
   - chain_id: "near"
     chain_name: "Near Protocol"
+    chain_type: "near"
     rpc_url: "https://rpc.mainnet.near.org"
     bridge_contracts:
       - "factory.bridge.near"

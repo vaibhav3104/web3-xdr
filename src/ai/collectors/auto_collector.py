@@ -36,15 +36,28 @@ class NewContract:
     
 @dataclass
 class ContractAnalysis:
-    """Analysis result for a contract"""
+    """
+    Analysis result for a contract
+    
+    Combines results from:
+    - ML Classifier (threat category prediction)
+    - Vulnerability Scanner (specific CVE detection)
+    - Source Scanner (if contract is verified)
+    """
     contract: NewContract
-    risk_score: float
-    threat_category: str
-    confidence: float
+    risk_score: float  # Combined risk score (0-1)
+    threat_category: str  # ML-predicted threat category
+    confidence: float  # Combined confidence score
     features: Dict = field(default_factory=dict)
     is_threat: bool = False
     alerts: List[str] = field(default_factory=list)
     analyzed_at: datetime = field(default_factory=datetime.utcnow)
+    
+    # Scanner-specific fields
+    scanner_vulnerabilities: List[Dict] = field(default_factory=list)
+    scanner_risk_score: float = 0.0
+    source_verified: bool = False
+    ml_risk_score: float = 0.0
 
 
 class AutoContractCollector:
@@ -53,9 +66,9 @@ class AutoContractCollector:
     """
     
     RPC_ENDPOINTS = {
-        "ethereum": os.getenv("ETH_RPC_URL", "https://eth.llamarpc.com"),
-        "arbitrum": os.getenv("ARB_RPC_URL", "https://arb1.arbitrum.io/rpc"),
-        "polygon": os.getenv("POLYGON_RPC_URL", "https://polygon-rpc.com"),
+        "ethereum": os.getenv("ETHEREUM_RPC_URL", os.getenv("ETH_RPC_URL", "https://ethereum-rpc.publicnode.com")),
+        "arbitrum": os.getenv("ARBITRUM_RPC_URL", os.getenv("ARB_RPC_URL", "https://arb1.arbitrum.io/rpc")),
+        "polygon": os.getenv("POLYGON_RPC_URL", "https://polygon-bor-rpc.publicnode.com"),
         "bsc": os.getenv("BSC_RPC_URL", "https://bsc-dataseed.binance.org"),
         "optimism": os.getenv("OP_RPC_URL", "https://mainnet.optimism.io"),
         "base": os.getenv("BASE_RPC_URL", "https://mainnet.base.org"),
@@ -184,8 +197,8 @@ class AutoContractCollector:
                             requested_model=model_type,
                             fallback="random_forest"
                         )
-                        from ..models.contract_classifier import ContractThreatClassifier
-                        self._classifier = ContractThreatClassifier()
+                from ..models.contract_classifier import ContractThreatClassifier
+                self._classifier = ContractThreatClassifier()
                         
             except Exception as e:
                 logger.warning("deep_classifier_load_failed", error=str(e), model_type=model_type)
@@ -196,7 +209,7 @@ class AutoContractCollector:
                     logger.info("fallback_to_random_forest_classifier")
                 except Exception as e2:
                     logger.error("all_classifiers_failed", error=str(e2))
-                    self._classifier = None
+                self._classifier = None
         return self._classifier
     
     async def start(self):
@@ -517,7 +530,15 @@ class AutoContractCollector:
                 logger.error("analysis_worker_error", error=str(e))
     
     async def _analyze_contract(self, contract: NewContract) -> Optional[ContractAnalysis]:
-        """Analyze a contract for threats"""
+        """
+        Analyze a contract for threats using multiple detection methods:
+        
+        1. ML Classifier (Transformer/Ensemble) - Threat category prediction
+        2. Vulnerability Scanner - Specific CVE detection (integer overflow, reentrancy, etc.)
+        3. Optional Source Scanner - If contract is verified on Etherscan
+        
+        Results are combined for comprehensive risk scoring.
+        """
         
         if not contract.bytecode:
             return None
@@ -527,7 +548,9 @@ class AutoContractCollector:
             features = self.extractor.extract_features(contract.bytecode)
             feature_vector = self.extractor.features_to_vector(features)
             
-            # Use ML classifier if available
+            # ================================================================
+            # LAYER 1: ML Classifier (Threat Category)
+            # ================================================================
             if self.classifier:
                 result = self.classifier.classify(contract.bytecode)
                 
@@ -540,33 +563,162 @@ class AutoContractCollector:
                     cat = "unknown_threat"
                 
                 threat_category = cat.value if hasattr(cat, 'value') else str(cat)
-                risk_score = result.risk_score
-                confidence = result.confidence
-                is_threat = threat_category != "safe" and risk_score > 0.5
+                ml_risk_score = result.risk_score
+                ml_confidence = result.confidence
             else:
                 # Fallback to rule-based analysis
-                risk_score = features.get("risk_score", 0.0)
+                ml_risk_score = features.get("risk_score", 0.0)
                 
                 if features.get("has_flash_loan_callback") and features.get("has_reentrancy_pattern"):
                     threat_category = "flash_loan_exploit"
-                    risk_score = max(risk_score, 0.8)
+                    ml_risk_score = max(ml_risk_score, 0.8)
                 elif features.get("has_reentrancy_pattern"):
                     threat_category = "reentrancy_exploit"
-                    risk_score = max(risk_score, 0.7)
+                    ml_risk_score = max(ml_risk_score, 0.7)
                 elif features.get("has_selfdestruct") and features.get("has_admin_functions"):
                     threat_category = "rug_pull"
-                    risk_score = max(risk_score, 0.75)
+                    ml_risk_score = max(ml_risk_score, 0.75)
                 elif features.get("has_delegatecall_pattern") and features.get("delegatecall_count", 0) > 3:
                     threat_category = "unknown_threat"
-                    risk_score = max(risk_score, 0.6)
+                    ml_risk_score = max(ml_risk_score, 0.6)
                 else:
                     threat_category = "safe"
                 
-                confidence = 0.6  # Lower confidence for rule-based
-                is_threat = threat_category != "safe" and risk_score > 0.5
+                ml_confidence = 0.6  # Lower confidence for rule-based
             
-            # Generate alerts
+            # ================================================================
+            # LAYER 2: Vulnerability Scanner (Specific CVEs)
+            # ================================================================
+            scanner_risk_score = 0.0
+            scanner_alerts = []
+            scanner_vulnerabilities = []
+            
+            try:
+                from src.scanner.vulnerability_scanner import get_vulnerability_scanner
+                
+                scanner = get_vulnerability_scanner()
+                scan_result = await scanner.scan_contract(
+                    address=contract.address,
+                    chain=contract.chain,
+                    bytecode=contract.bytecode
+                )
+                
+                if scan_result:
+                    # Normalize scanner risk score (0-100 to 0-1)
+                    scanner_risk_score = scan_result.risk_score / 100.0
+                    
+                    # Add scanner findings to alerts
+                    for vuln in scan_result.vulnerabilities:
+                        severity = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+                        scanner_alerts.append(f"[{severity.upper()}] {vuln.title}")
+                        scanner_vulnerabilities.append({
+                            "type": vuln.vuln_type.value if hasattr(vuln.vuln_type, 'value') else str(vuln.vuln_type),
+                            "severity": severity,
+                            "title": vuln.title,
+                            "confidence": vuln.confidence,
+                            "description": vuln.description[:200] if vuln.description else ""
+                        })
+                    
+                    # Upgrade threat category if scanner finds critical issues
+                    if scan_result.critical_count > 0:
+                        # Map scanner findings to threat categories
+                        for vuln in scan_result.vulnerabilities:
+                            vuln_type = vuln.vuln_type.value if hasattr(vuln.vuln_type, 'value') else str(vuln.vuln_type)
+                            if "overflow" in vuln_type or "underflow" in vuln_type:
+                                if threat_category == "safe":
+                                    threat_category = "integer_overflow_exploit"
+                            elif "reentrancy" in vuln_type:
+                                if threat_category == "safe":
+                                    threat_category = "reentrancy_exploit"
+                            elif "flash_loan" in vuln_type or "oracle" in vuln_type:
+                                if threat_category == "safe":
+                                    threat_category = "flash_loan_exploit"
+                    
+                    logger.info(
+                        "vulnerability_scanner_completed",
+                        address=contract.address[:16],
+                        risk_score=f"{scanner_risk_score:.2f}",
+                        critical=scan_result.critical_count,
+                        high=scan_result.high_count,
+                        total=len(scan_result.vulnerabilities)
+                    )
+                    
+            except ImportError:
+                logger.debug("vulnerability_scanner_not_available")
+            except Exception as e:
+                logger.warning("vulnerability_scanner_error", error=str(e))
+            
+            # ================================================================
+            # LAYER 3: Source Code Scanner (If Verified - Optional)
+            # ================================================================
+            source_alerts = []
+            source_available = False
+            
+            try:
+                from src.scanner.source_fetcher import get_source_fetcher
+                from src.scanner.source_analyzer import get_source_analyzer
+                
+                fetcher = get_source_fetcher()
+                source = await fetcher.fetch_source(contract.address, contract.chain)
+                
+                if source and source.is_verified and source.source_code:
+                    source_available = True
+                    analyzer = get_source_analyzer()
+                    source_vulns = analyzer.analyze(source.source_code, source.contract_name or "contract.sol")
+                    
+                    for vuln in source_vulns:
+                        severity = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+                        source_alerts.append(f"[SOURCE:{severity.upper()}] Line {vuln.line}: {vuln.title}")
+                    
+                    if source_vulns:
+                        logger.info(
+                            "source_scanner_completed",
+                            address=contract.address[:16],
+                            contract_name=source.contract_name,
+                            vulnerabilities=len(source_vulns)
+                        )
+                        
+                await fetcher.close()
+                
+            except ImportError:
+                logger.debug("source_scanner_not_available")
+            except Exception as e:
+                logger.debug("source_scanner_skipped", reason=str(e)[:50])
+            
+            # ================================================================
+            # COMBINE RESULTS
+            # ================================================================
+            
+            # Weighted risk score combination
+            # ML: 50%, Scanner: 40%, Source: 10% (if available)
+            if source_available:
+                combined_risk_score = (ml_risk_score * 0.45) + (scanner_risk_score * 0.45) + (0.1 if source_alerts else 0)
+            else:
+                combined_risk_score = (ml_risk_score * 0.55) + (scanner_risk_score * 0.45)
+            
+            # Ensure risk score is capped at 1.0
+            combined_risk_score = min(1.0, combined_risk_score)
+            
+            # Adjust confidence based on scanner agreement
+            if scanner_risk_score > 0.5 and ml_risk_score > 0.5:
+                # Both agree it's risky - higher confidence
+                combined_confidence = min(0.95, ml_confidence + 0.1)
+            elif scanner_risk_score > 0.5 or ml_risk_score > 0.5:
+                # One thinks it's risky - moderate confidence
+                combined_confidence = ml_confidence
+            else:
+                # Both think it's safe - high confidence in safety
+                combined_confidence = min(0.9, ml_confidence + 0.05)
+            
+            # Determine if threat
+            is_threat = threat_category != "safe" and combined_risk_score > 0.4
+            
+            # ================================================================
+            # GENERATE ALERTS
+            # ================================================================
             alerts = []
+            
+            # ML-based alerts
             if features.get("has_flash_loan_callback"):
                 alerts.append("Contains flash loan callback function")
             if features.get("has_reentrancy_pattern"):
@@ -578,11 +730,23 @@ class AutoContractCollector:
             if features.get("has_mint_function"):
                 alerts.append("Contains mint functionality")
             
+            # Add scanner alerts
+            alerts.extend(scanner_alerts)
+            
+            # Add source alerts (if any)
+            alerts.extend(source_alerts)
+            
+            # Store scanner findings in features for training
+            features["scanner_vulnerabilities"] = scanner_vulnerabilities
+            features["scanner_risk_score"] = scanner_risk_score
+            features["source_verified"] = source_available
+            features["combined_risk_score"] = combined_risk_score
+            
             return ContractAnalysis(
                 contract=contract,
-                risk_score=risk_score,
+                risk_score=combined_risk_score,
                 threat_category=threat_category,
-                confidence=confidence,
+                confidence=combined_confidence,
                 features=features,
                 is_threat=is_threat,
                 alerts=alerts,

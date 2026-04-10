@@ -81,6 +81,7 @@ services:
       # App settings
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql://xdr:xdr_password@postgres:5432/web3_xdr
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,15 +137,21 @@ services:
       dockerfile: Dockerfile
     container_name: sentinel3-worker
     ports:
-      - "9090:9090"
+      - "9091:9090"
     environment:
       # Process type
       - PROC_TYPE=worker
       - HEALTH_PORT=9090
       # Redis for shared state (REQUIRED for production)
       - REDIS_URL=redis://redis:6379/0
-      # Database (optional for workers)
-      - POSTGRES_ENABLED=false
+      # Database
+      - POSTGRES_ENABLED=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-xdr}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-xdr_password}
+      - POSTGRES_DB=${POSTGRES_DB:-web3_xdr}
+      - DATABASE_URL=postgresql://xdr:xdr_password@postgres:5432/web3_xdr
       # Worker settings
       - WORKER_HEALTH_PORT=9090
       - POLL_INTERVAL_SECONDS=2.0
@@ -161,6 +168,8 @@ services:
     volumes:
       - ./config:/app/config:ro
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped

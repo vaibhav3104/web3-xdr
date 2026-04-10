@@ -82,6 +82,40 @@ except ImportError:
     ML_ROUTES_AVAILABLE = False
     ml_router = None
 
+# Security Graph routes (Wiz-for-Web3)
+try:
+    from .graph_routes import router as graph_router, initialize_graph
+    GRAPH_ROUTES_AVAILABLE = True
+except ImportError:
+    GRAPH_ROUTES_AVAILABLE = False
+    graph_router = None
+    initialize_graph = None
+
+# ML Threat Detection routes
+try:
+    from .ml_threat_routes import router as ml_threat_router, initialize_ml_components
+    ML_THREAT_ROUTES_AVAILABLE = True
+except ImportError:
+    ML_THREAT_ROUTES_AVAILABLE = False
+    ml_threat_router = None
+
+# Vulnerability Scanner routes
+try:
+    from .scanner_routes import router as scanner_router
+    SCANNER_ROUTES_AVAILABLE = True
+except ImportError:
+    SCANNER_ROUTES_AVAILABLE = False
+    scanner_router = None
+    initialize_ml_components = None
+
+# Verification routes (exploit tracking)
+try:
+    from .verification_routes import router as verification_router
+    VERIFICATION_ROUTES_AVAILABLE = True
+except ImportError:
+    VERIFICATION_ROUTES_AVAILABLE = False
+    verification_router = None
+
 logger = structlog.get_logger()
 
 # Get frontend directory path
@@ -121,12 +155,35 @@ def create_app(
         except Exception as e:
             logger.error("database_initialization_failed", error=str(e))
     
-    # CORS middleware
+    # CORS middleware - Restricted to allowed origins only
+    # Security: Only allow requests from our own frontend and local development
+    default_cors_origins = [
+        # Production frontend (Cloud Run)
+        "https://web3-xdr-production-api-1003459948096.us-central1.run.app",
+        # GPU service
+        "https://sentinel3-gpu-1003459948096.us-central1.run.app",
+        # Local development
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8080",
+    ]
+    
+    # Allow override via environment variable (comma-separated)
+    env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    if env_cors:
+        default_cors_origins.extend([origin.strip() for origin in env_cors.split(",") if origin.strip()])
+    
+    allowed_origins = cors_origins or default_cors_origins
+    logger.info("cors_configured", allowed_origins=allowed_origins)
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins or ["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
     )
     
@@ -199,6 +256,16 @@ def create_app(
     if CROSS_CHAIN_ROUTES_AVAILABLE and cross_chain_router:
         app.include_router(cross_chain_router, prefix="/api")
     
+    # Include Security Graph routes (Wiz-for-Web3)
+    if GRAPH_ROUTES_AVAILABLE and graph_router:
+        app.include_router(graph_router)
+        logger.info("security_graph_routes_enabled")
+    
+    # Include ML Threat Detection routes
+    if ML_THREAT_ROUTES_AVAILABLE and ml_threat_router:
+        app.include_router(ml_threat_router)
+        logger.info("ml_threat_detection_routes_enabled")
+    
     # Include Runtime Security Plane routes
     if RUNTIME_ROUTES_AVAILABLE and runtime_router:
         app.include_router(runtime_router)
@@ -224,17 +291,41 @@ def create_app(
         app.include_router(websocket_router)
         logger.info("websocket_routes_registered")
     
+    # Include Verification routes (exploit tracking)
+    if VERIFICATION_ROUTES_AVAILABLE and verification_router:
+        app.include_router(verification_router)
+        logger.info("verification_routes_registered")
+    
+    # Include Vulnerability Scanner routes
+    if SCANNER_ROUTES_AVAILABLE and scanner_router:
+        app.include_router(scanner_router, prefix="/api")
+        logger.info("vulnerability_scanner_routes_registered")
+    
     # Health check
     @app.get("/health")
     async def health_check():
         return {"status": "healthy", "service": "sentinel3"}
     
-    # Serve analytics dashboard
-    @app.get("/frontend/dashboard.html")
-    async def serve_dashboard():
-        return FileResponse(os.path.join(FRONTEND_DIR, "dashboard.html"))
-    
-    # Mount static files (for CSS, JS, etc.)
+    # Serve frontend dashboard at root
+    @app.get("/")
+    async def serve_index():
+        index_path = os.path.join(FRONTEND_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"status": "healthy", "service": "sentinel3", "dashboard": "frontend not found"}
+
+    # Serve any .html file from frontend directory at root level
+    @app.get("/{page}.html")
+    async def serve_frontend_page(page: str):
+        # Sanitize: only allow alphanumeric and hyphens
+        if not all(c.isalnum() or c == '-' for c in page):
+            raise HTTPException(status_code=404)
+        file_path = os.path.join(FRONTEND_DIR, f"{page}.html")
+        if os.path.exists(file_path):
+            return FileResponse(file_path)
+        raise HTTPException(status_code=404, detail=f"Page not found: {page}.html")
+
+    # Mount frontend directory for static assets (JS, CSS, images)
     if os.path.exists(FRONTEND_DIR):
         app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
     
