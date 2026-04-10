@@ -92,10 +92,19 @@ class MintLockParityInvariant(Invariant):
         
         if violated:
             self.record_violation()
-            
-            # Calculate USD value (simplified)
-            imbalance_usd = float(imbalance) * 1.0  # TODO: Use price oracle
-            
+
+            # Calculate USD value via price feed
+            all_events = mints + locks
+            asset_address = next(
+                (e.asset_address for e in all_events if e.asset_address), ""
+            )
+            asset_symbol = next(
+                (e.asset_type for e in all_events if e.asset_type), ""
+            )
+            imbalance_usd = await context.get_usd_value(
+                self.dest_chain, asset_address, imbalance, asset_symbol
+            )
+
             return InvariantResult(
                 violated=True,
                 invariant_name=self.name,
@@ -208,9 +217,18 @@ class UnbackedMintInvariant(Invariant):
         
         if unbacked_mints:
             self.record_violation()
-            
+
             total_unbacked = sum(m.amount for m in unbacked_mints)
-            
+            asset_address = next(
+                (m.asset_address for m in unbacked_mints if m.asset_address), ""
+            )
+            asset_symbol = next(
+                (m.asset_type for m in unbacked_mints if m.asset_type), ""
+            )
+            unbacked_usd = await context.get_usd_value(
+                self.dest_chain, asset_address, total_unbacked, asset_symbol
+            )
+
             return InvariantResult(
                 violated=True,
                 invariant_name=self.name,
@@ -218,7 +236,7 @@ class UnbackedMintInvariant(Invariant):
                 severity=self.severity,
                 confidence=0.90,
                 violation_amount=total_unbacked,
-                violation_amount_usd=float(total_unbacked),  # TODO: Price oracle
+                violation_amount_usd=unbacked_usd,
                 chain_id=self.dest_chain,
                 bridge_id=self.bridge_id,
                 evidence={

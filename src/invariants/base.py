@@ -25,10 +25,13 @@ class InvariantContext:
     - Cross-chain data
     """
     
-    def __init__(self):
+    def __init__(self, price_feed=None):
+        # Price feed for USD conversion (optional, falls back to amount * 1.0)
+        self.price_feed = price_feed
+
         # Event storage by chain and type
         self._events: Dict[str, List[SecurityEvent]] = {}
-        
+
         # Bridge state tracking
         self._bridge_state: Dict[str, Dict[str, Decimal]] = {}  # bridge_id -> {locked, minted, ...}
         
@@ -99,7 +102,40 @@ class InvariantContext:
                 e for e in self._events[key]
                 if e.block_timestamp > cutoff
             ]
-    
+
+    async def get_usd_value(
+        self,
+        chain_id: str,
+        asset_address: str,
+        amount: Decimal,
+        asset_symbol: str = "",
+    ) -> float:
+        """
+        Convert a token amount to USD using the price feed.
+
+        Lookup order:
+        1. DeFiLlama / CoinGecko via chain + address
+        2. Static price table via token symbol
+        3. Fallback: raw amount (assumes token ≈ $1, e.g. stablecoins)
+        """
+        if not self.price_feed:
+            return float(amount)
+        try:
+            # Try by chain + address first
+            if asset_address:
+                price = await self.price_feed.get_price(chain_id, asset_address)
+                if price > 0:
+                    return float(amount) * price
+
+            # Fallback: look up static price by symbol
+            if asset_symbol:
+                static = self.price_feed.STATIC_PRICES.get(asset_symbol, 0.0)
+                if static > 0:
+                    return float(amount) * static
+        except Exception as e:
+            logger.debug("price_lookup_failed", chain=chain_id, asset=asset_address[:16], error=str(e))
+        return float(amount)
+
     async def get_events(
         self,
         chain: Optional[str] = None,

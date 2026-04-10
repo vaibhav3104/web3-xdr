@@ -26,8 +26,8 @@ class InvariantEngine:
     - Handler callbacks
     """
     
-    def __init__(self, context: Optional[InvariantContext] = None):
-        self.context = context or InvariantContext()
+    def __init__(self, context: Optional[InvariantContext] = None, price_feed=None):
+        self.context = context or InvariantContext(price_feed=price_feed)
         self.invariants: List[Invariant] = []
         self.result_handlers: List[Callable[[InvariantResult], Awaitable[Any]]] = []
         
@@ -212,7 +212,10 @@ def create_default_engine(config: dict) -> InvariantEngine:
     """
     Factory function to create an engine with standard invariants.
     """
-    engine = InvariantEngine()
+    from ..telemetry.price_feed import get_price_feed
+
+    price_feed = get_price_feed()
+    engine = InvariantEngine(price_feed=price_feed)
     
     # Add invariants based on config
     bridges = config.get("bridges", [])
