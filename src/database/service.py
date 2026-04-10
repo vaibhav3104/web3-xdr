@@ -100,22 +100,23 @@ class DatabaseService:
                     raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
-                        block_timestamp, contract_address, severity, amount, amount_usd,
+                        block_timestamp, contract_address, severity, status, amount, amount_usd,
                         from_address, to_address, raw_data, created_at
                     ) VALUES (
-                        gen_random_uuid(), 
-                        :event_id, 
-                        :chain_id, 
-                        :event_type, 
-                        :tx_hash, 
+                        gen_random_uuid(),
+                        :event_id,
+                        :chain_id,
+                        :event_type,
+                        :tx_hash,
                         :block_number,
-                        CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE), 
-                        :contract_address, 
-                        COALESCE(:severity, 'LOW'), 
+                        CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE),
+                        :contract_address,
+                        COALESCE(:severity, 'LOW'),
+                        'PENDING',
                         CAST(:amount AS NUMERIC(38, 18)),
                         CAST(:amount_usd AS NUMERIC(20, 2)),
-                        :from_address, 
-                        :to_address, 
+                        :from_address,
+                        :to_address,
                         CAST(:raw_data AS JSONB),
                         NOW()
                     )

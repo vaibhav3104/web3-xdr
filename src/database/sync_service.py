@@ -298,20 +298,20 @@ def save_events_batch_sync(events: List[Dict[str, Any]]) -> int:
         # Prepare data for insert
         insert_sql = """
             INSERT INTO events (
-                id, event_id, chain_id, event_type, tx_hash, block_number, 
-                block_timestamp, contract_address, severity, amount, amount_usd,
+                id, event_id, chain_id, event_type, tx_hash, block_number,
+                block_timestamp, contract_address, severity, status, amount, amount_usd,
                 from_address, to_address, raw_data
             ) VALUES %s
             ON CONFLICT (event_id) DO NOTHING
         """
-        
+
         values = []
         for e in events:
             # Properly serialize raw_data as JSON
             raw_data = e.get("raw_data")
             if raw_data:
                 raw_data = Json(raw_data)
-            
+
             values.append((
                 str(uuid.uuid4()),  # Generate UUID for id column
                 e.get("event_id"),
@@ -322,6 +322,7 @@ def save_events_batch_sync(events: List[Dict[str, Any]]) -> int:
                 e.get("block_timestamp"),
                 e.get("contract_address"),
                 e.get("severity", "LOW"),
+                "PENDING",
                 e.get("amount"),
                 e.get("amount_usd"),
                 e.get("from_address"),

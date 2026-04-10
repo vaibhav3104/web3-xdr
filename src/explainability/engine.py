@@ -125,6 +125,81 @@ class Explanation:
             "severity": self.severity
         }
 
+    def to_markdown(self) -> str:
+        """Render explanation as a Markdown report."""
+        lines = [
+            f"# {self.severity} Security Incident",
+            "",
+            f"**Summary:** {self.summary}",
+            f"**Confidence:** {self.confidence:.0%}",
+            f"**Recommended Action:** {self.recommended_action.value}",
+            "",
+        ]
+
+        if self.technical_context.bridge_id:
+            lines.append(f"**Bridge:** {self.technical_context.bridge_id}")
+        if self.technical_context.detected_pattern:
+            lines.append(f"**Pattern:** {self.technical_context.detected_pattern}")
+        if self.technical_context.contract_address:
+            lines.append(f"**Contract:** `{self.technical_context.contract_address}`")
+        lines.append("")
+
+        if self.timeline:
+            lines.append("## Timeline")
+            lines.append("")
+            for entry in self.timeline:
+                ts = entry.timestamp.strftime("%H:%M:%S UTC")
+                lines.append(f"- **{ts}** [{entry.chain}] {entry.description}")
+                lines.append(f"  tx: `{entry.tx_hash}`")
+            lines.append("")
+
+        if self.evidence:
+            lines.append("## Evidence")
+            lines.append("")
+            for i, ev in enumerate(self.evidence, 1):
+                lines.append(f"### Evidence #{i} (confidence: {ev.confidence:.0%})")
+                if ev.source_amount is not None:
+                    lines.append(f"- Source amount: {ev.source_amount}")
+                if ev.dest_amount is not None:
+                    lines.append(f"- Dest amount: {ev.dest_amount}")
+                if ev.source_msg_id:
+                    lines.append(f"- Source msg: `{ev.source_msg_id}`")
+                if ev.dest_msg_id:
+                    lines.append(f"- Dest msg: `{ev.dest_msg_id}`")
+                lines.append(f"- Cross-chain matched: {'YES' if ev.matched else 'NO'}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def to_telegram(self) -> str:
+        """Render explanation as a compact Telegram alert."""
+        action_emoji = {
+            RecommendedAction.PAUSE: "🛑",
+            RecommendedAction.INVESTIGATE: "🔍",
+            RecommendedAction.CONTACT_TEAM: "📞",
+            RecommendedAction.MONITOR: "👁",
+            RecommendedAction.IGNORE: "✅",
+        }
+        emoji = action_emoji.get(self.recommended_action, "⚠️")
+
+        lines = [
+            f"🚨 <b>{self.severity} ALERT</b>",
+            "",
+            self.summary,
+            "",
+            f"Confidence: {self.confidence:.0%}",
+        ]
+
+        if self.technical_context.bridge_id:
+            lines.append(f"Bridge: {self.technical_context.bridge_id}")
+        if self.technical_context.detected_pattern:
+            lines.append(f"Pattern: {self.technical_context.detected_pattern}")
+
+        lines.append("")
+        lines.append(f"{emoji} <b>Action: {self.recommended_action.value}</b>")
+
+        return "\n".join(lines)
+
 
 class ExplainabilityEngine:
     """

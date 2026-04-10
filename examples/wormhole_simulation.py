@@ -19,7 +19,7 @@ HOW OUR SYSTEM DETECTS IT:
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import structlog
 
@@ -28,13 +28,14 @@ import sys
 sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
 
 from src.models.events import SecurityEvent, EventType, Severity
-from src.models.incidents import Incident, AttackType
 from src.models.invariants import InvariantResult, InvariantType
 from src.invariants.base import InvariantContext
 from src.invariants.economic import MintLockParityInvariant, UnbackedMintInvariant
 from src.correlation.correlator import XDRCorrelator
 from src.correlation.entity_graph import EntityGraphBuilder
+from src.correlation.incident_builder import Incident
 from src.explainability.engine import ExplainabilityEngine
+from src.telemetry.price_feed import get_price_feed
 
 logger = structlog.get_logger()
 
@@ -61,7 +62,8 @@ Timeline:
 """)
     
     # Initialize components
-    context = InvariantContext()
+    price_feed = get_price_feed()
+    context = InvariantContext(price_feed=price_feed)
     correlator = XDRCorrelator()
     explainability = ExplainabilityEngine()
     entity_builder = EntityGraphBuilder()
@@ -79,7 +81,7 @@ Timeline:
     
     async def on_incident(incident: Incident):
         detected_incidents.append(incident)
-        print(f"\n🚨 INCIDENT DETECTED: {incident.title}")
+        print(f"\n🚨 INCIDENT DETECTED: {incident.violation_type} on {incident.protocol_id}")
     
     correlator.add_incident_handler(on_incident)
     
@@ -108,7 +110,7 @@ Timeline:
     normal_lock = SecurityEvent(
         chain_id=SOURCE_CHAIN,
         block_number=1000,
-        block_timestamp=datetime.utcnow() - timedelta(minutes=30),
+        block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
         tx_hash="0xnormal_lock_tx_hash_123456789",
         event_type=EventType.LOCK,
         severity=Severity.INFO,
@@ -130,14 +132,14 @@ Timeline:
     normal_mint = SecurityEvent(
         chain_id=DEST_CHAIN,
         block_number=50000,
-        block_timestamp=datetime.utcnow() - timedelta(minutes=25),
+        block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=25),
         tx_hash="solana_normal_mint_signature_123456",
         event_type=EventType.MINT,
         severity=Severity.INFO,
         source_address=BRIDGE_CONTRACT_SOL,
         dest_address="SolanaUserAddress123456789012345678901234567890",
         contract_address=BRIDGE_CONTRACT_SOL,
-        asset_type="wETH",
+        asset_type="WETH",
         amount=Decimal("100"),
         amount_usd=Decimal("180000"),
         bridge_id=BRIDGE_ID,
@@ -170,7 +172,7 @@ Timeline:
     attack_mint = SecurityEvent(
         chain_id=DEST_CHAIN,
         block_number=50010,
-        block_timestamp=datetime.utcnow() - timedelta(minutes=2),
+        block_timestamp=datetime.now(timezone.utc) - timedelta(minutes=2),
         tx_hash="solana_ATTACK_mint_signature_EXPLOIT",
         log_index=0,
         event_type=EventType.MINT,
@@ -178,7 +180,7 @@ Timeline:
         source_address=BRIDGE_CONTRACT_SOL,
         dest_address=ATTACKER,
         contract_address=BRIDGE_CONTRACT_SOL,
-        asset_type="wETH",
+        asset_type="WETH",
         amount=Decimal("120000"),  # 120,000 wETH!
         amount_usd=Decimal("216000000"),  # $216M at $1800/ETH
         bridge_id=BRIDGE_ID,
@@ -241,33 +243,36 @@ Timeline:
     
     if detected_incidents:
         incident = detected_incidents[0]
-        
+
         print(f"\n🎯 INCIDENT CREATED")
-        print(f"   ID: {incident.id}")
-        print(f"   Type: {incident.attack_type.value}")
+        print(f"   ID: {incident.incident_id}")
+        print(f"   Type: {incident.attack_type}")
         print(f"   Severity: {incident.severity.name}")
         print(f"   Confidence: {incident.confidence:.0%}")
-        print(f"   Total Loss: ${incident.total_loss_usd:,.0f}")
-        print(f"   Chains: {', '.join(incident.affected_chains)}")
-        
+        print(f"   Total Value at Risk: ${incident.total_value_at_risk_usd:,.0f}")
+        print(f"   Source Chain: {incident.source_chain}")
+        if incident.target_chain:
+            print(f"   Target Chain: {incident.target_chain}")
+
         # Generate explanation
-        explanation = explainability.explain(
+        violations_list = [result1, result2] if result2.violated else [result1]
+        explanation = explainability.explain_incident(
             incident,
-            violations=[result1, result2] if result2.violated else [result1],
+            violations=violations_list,
             events=[normal_lock, normal_mint, attack_mint]
         )
-        
+
         print("\n" + "="*60)
         print("📝 GENERATED EXPLANATION")
         print("="*60)
         print(explanation.to_markdown())
-        
+
         # Show what would be sent to Slack/Telegram
         print("\n" + "="*60)
         print("📱 TELEGRAM ALERT (Preview)")
         print("="*60)
         print(explanation.to_telegram())
-        
+
     else:
         print("❌ No incident detected - check configuration")
     
@@ -288,7 +293,7 @@ ATTACK TIMELINE:
 
 DETECTION METRICS:
 - Time to detect: ~1 minute (3 blocks on Solana)
-- Confidence: {incident.confidence:.0%}
+- Confidence: {detected_incidents[0].confidence:.0%}
 - False positive: NO (deterministic invariant)
 
 KEY INSIGHT:
@@ -305,7 +310,7 @@ event on Ethereum that our telemetry would observe.
 This is how we detect attacks that contracts themselves approve.
 """)
     
-    return incident if detected_incidents else None
+    return detected_incidents[0] if detected_incidents else None
 
 
 async def run_mini_demo():

@@ -8,11 +8,10 @@ import asyncio
 import structlog
 
 from ..models.events import SecurityEvent
-from ..models.incidents import Incident, IncidentStatus
 from ..models.invariants import InvariantResult
 from .entity_graph import EntityGraph, EntityGraphBuilder
 from .pattern_matcher import AttackPatternMatcher, PatternMatch
-from .incident_builder import IncidentBuilder
+from .incident_builder import IncidentBuilder, Incident, IncidentStatus
 
 logger = structlog.get_logger()
 
@@ -33,9 +32,7 @@ class XDRCorrelator:
         # Components
         self.entity_graph_builder = EntityGraphBuilder()
         self.pattern_matcher = AttackPatternMatcher()
-        self.incident_builder = IncidentBuilder(
-            entity_graph=self.entity_graph_builder.get_graph()
-        )
+        self.incident_builder = IncidentBuilder()
         
         # Incident management
         self.active_incidents: Dict[str, Incident] = {}
@@ -218,25 +215,25 @@ class XDRCorrelator:
         Find an existing incident that matches these violations.
         """
         cutoff = datetime.now(timezone.utc) - self.incident_merge_window
-        
+
         # Get bridges from violations
         bridge_ids = {v.bridge_id for v in violations if v.bridge_id}
-        
+
         for incident in self.active_incidents.values():
             # Skip closed incidents
             if incident.status in (IncidentStatus.RESOLVED, IncidentStatus.FALSE_POSITIVE):
                 continue
-            
-            # Check if same bridge
-            if not bridge_ids.intersection(set(incident.affected_bridges)):
+
+            # Check if same protocol
+            if incident.protocol_id not in bridge_ids:
                 continue
-            
+
             # Check time window
             if incident.created_at < cutoff:
                 continue
-            
+
             return incident
-        
+
         return None
     
     async def _create_incident(
@@ -246,28 +243,45 @@ class XDRCorrelator:
         events: List[SecurityEvent]
     ):
         """
-        Create a new incident.
+        Create a new incident via IncidentBuilder.upsert_incident().
         """
-        incident = self.incident_builder.build_incident(
-            violations=violations,
-            pattern_matches=pattern_matches,
-            events=events
-        )
-        
+        incident = None
+        for violation in violations:
+            # Find the most relevant event for this violation
+            event = self._find_event_for_violation(violation, events)
+            if event:
+                incident = self.incident_builder.upsert_incident(violation, event)
+
+        if not incident:
+            return
+
         # Store incident
-        self.active_incidents[incident.id] = incident
+        self.active_incidents[incident.incident_id] = incident
         self._stats["incidents_created"] += 1
-        
+
         # Notify handlers
         await self._notify_handlers(incident)
-        
+
         logger.warning(
             "incident_created",
-            incident_id=incident.id,
-            attack_type=incident.attack_type.value,
+            incident_id=incident.incident_id,
+            attack_type=incident.attack_type,
             severity=incident.severity.name,
-            total_loss=incident.total_loss_usd
+            total_loss=str(incident.total_value_at_risk_usd)
         )
+
+    def _find_event_for_violation(
+        self,
+        violation: InvariantResult,
+        events: List[SecurityEvent]
+    ) -> Optional[SecurityEvent]:
+        """Find the most relevant event for a violation."""
+        # Try matching by event IDs in the violation
+        for event in events:
+            if event.event_id in violation.related_event_ids:
+                return event
+        # Fall back to first event
+        return events[0] if events else None
     
     async def _update_incident(
         self,
@@ -279,32 +293,19 @@ class XDRCorrelator:
         """
         Update an existing incident with new information.
         """
-        # Add violations
         for violation in violations:
-            incident.add_violation(violation.id)
-        
-        # Add events
-        for event in events:
-            incident.add_event(event.event_id)
-        
-        # Update loss estimate
-        for violation in violations:
-            if violation.violation_amount_usd > incident.total_loss_usd:
-                incident.total_loss_usd = violation.violation_amount_usd
-        
-        # Escalate severity if needed
-        for violation in violations:
-            if violation.severity.value > incident.severity.value:
-                incident.severity = violation.severity
-        
+            event = self._find_event_for_violation(violation, events)
+            if event:
+                incident.add_violation(violation, event)
+
         incident.updated_at = datetime.now(timezone.utc)
-        
+
         logger.info(
             "incident_updated",
-            incident_id=incident.id,
+            incident_id=incident.incident_id,
             new_violations=len(violations)
         )
-        
+
         # Notify handlers of update
         await self._notify_handlers(incident)
     
@@ -323,17 +324,18 @@ class XDRCorrelator:
         """Get all active incidents."""
         return [
             i for i in self.active_incidents.values()
-            if i.is_active()
+            if i.status in (IncidentStatus.OPEN_PENDING, IncidentStatus.OPEN_CONFIRMED)
         ]
-    
+
     def acknowledge_incident(self, incident_id: str, user: str) -> bool:
         """Acknowledge an incident."""
         incident = self.active_incidents.get(incident_id)
         if incident:
-            incident.acknowledge(user)
+            incident.status = IncidentStatus.OPEN_CONFIRMED
+            incident.updated_at = datetime.now(timezone.utc)
             return True
         return False
-    
+
     def resolve_incident(
         self,
         incident_id: str,

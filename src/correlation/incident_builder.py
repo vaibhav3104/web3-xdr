@@ -98,10 +98,10 @@ class Incident:
         # Update scope
         if event.contract_address:
             self.affected_contracts.add(event.contract_address)
-        if event.from_address:
-            self.affected_addresses.add(event.from_address)
-        if event.to_address:
-            self.affected_addresses.add(event.to_address)
+        if event.source_address:
+            self.affected_addresses.add(event.source_address)
+        if event.dest_address:
+            self.affected_addresses.add(event.dest_address)
         
         # Update value at risk
         if violation.violation_amount_usd > 0:

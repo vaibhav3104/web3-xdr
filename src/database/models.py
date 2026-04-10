@@ -96,7 +96,7 @@ class EventModel(Base):
         Index("ix_events_chain_timestamp", "chain_id", "block_timestamp"),
         Index("ix_events_contract_type", "contract_address", "event_type"),
         Index("ix_events_severity_timestamp", "severity", "block_timestamp"),
-        Index("ix_events_status", "status", "chain_id"),  # For finality tracking
+        Index("ix_events_status_chain", "status", "chain_id"),  # For finality tracking
         Index("ix_events_unique_key", "chain_id", "tx_hash", "log_index", unique=True),  # Deduplication
         Index("ix_events_timestamp_id", "block_timestamp", "id"),  # For cursor pagination
     )
@@ -152,7 +152,7 @@ class EventProcessingModel(Base):
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     
     __table_args__ = (
-        Index("ix_event_processing_status", "status", "first_seen_at"),
+        Index("ix_event_processing_status_first_seen", "status", "first_seen_at"),
         Index("ix_event_processing_processed", "processed_at"),
     )
     
@@ -234,7 +234,7 @@ class IncidentModel(Base):
     __table_args__ = (
         Index("ix_incidents_severity_status", "severity", "status"),
         Index("ix_incidents_attack_type_created", "attack_type", "created_at"),
-        Index("ix_incidents_cluster_key", "cluster_key"),  # Phase 4: For deduplication lookups
+        # cluster_key already indexed via column-level index=True
     )
     
     def __repr__(self):
@@ -514,8 +514,8 @@ class SimulationRunModel(Base):
     
     __table_args__ = (
         Index("ix_simulation_runs_chain_block", "chain_id", "block_number"),
-        Index("ix_simulation_runs_tx_hash", "tx_hash"),
-        Index("ix_simulation_runs_status", "status", "created_at"),
+        # tx_hash already indexed via column-level index=True
+        Index("ix_simulation_runs_status_created", "status", "created_at"),
     )
     
     def __repr__(self):
@@ -597,9 +597,9 @@ class PredictedIncidentModel(Base):
     
     __table_args__ = (
         Index("ix_predicted_incidents_chain_status", "chain_id", "status", "created_at"),
-        Index("ix_predicted_incidents_dedupe_key", "dedupe_key"),
+        # dedupe_key already indexed via column-level index=True
         Index("ix_predicted_incidents_severity_status", "severity", "status"),
-        Index("ix_predicted_incidents_tx_hash", "tx_hash"),
+        # tx_hash already indexed via column-level index=True
     )
     
     def __repr__(self):
