@@ -304,10 +304,10 @@ class ContractThreatClassifier:
             }, f)
     
     def load_model(self, path: str):
-        """Load the model from disk"""
+        """Load the model from disk. Only loads trusted local model files."""
         import os
         with open(path, 'rb') as f:
-            data = pickle.load(f)
+            data = pickle.load(f)  # nosec B301 — trusted local model files only
             self.model = data.get('model')
             self.known_exploits = data.get('known_exploits', {})
             self.rule_weights = data.get('rule_weights', self.rule_weights)

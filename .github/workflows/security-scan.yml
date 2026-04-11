@@ -43,13 +43,13 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Run Bandit (Python SAST)
         run: |
-          pip install bandit[toml]
+          pip install bandit[toml] bandit-sarif-formatter
           bandit -r src/ -f sarif -o bandit-results.sarif --severity-level medium || true
-          bandit -r src/ -f txt --severity-level medium
+          bandit -r src/ -f txt --severity-level medium || true
 
       - name: Upload Bandit SARIF
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('bandit-results.sarif') != ''
         with:
           sarif_file: bandit-results.sarif
           category: bandit

@@ -437,7 +437,7 @@ class DeepContractClassifier:
     def _load_weights(self):
         """Load model weights from file"""
         try:
-            state_dict = torch.load(self.model_path, map_location=self.device)
+            state_dict = torch.load(self.model_path, map_location=self.device, weights_only=True)  # nosec B614
             self.model.load_state_dict(state_dict)
             logger.info("model_weights_loaded", path=self.model_path)
         except Exception as e:
