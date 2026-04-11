@@ -801,32 +801,8 @@ async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
         if not incident:
             raise HTTPException(status_code=404, detail="Incident not found")
         
-        # Prepare feedback data
-        feedback_data = {
-            "is_true_positive": body.is_true_positive,
-            "feedback_notes": body.feedback_notes,
-            "analyst_id": body.analyst_id or "anonymous",
-            "feedback_time": datetime.now(timezone.utc).isoformat(),
-            "original_severity": incident.get("severity"),
-            "original_confidence": incident.get("confidence"),
-            "attack_type": incident.get("attack_type"),
-        }
-        
-        # Update incident with feedback
-        # Store in raw_data field
-        raw_data = incident.get("raw_data") or {}
-        if isinstance(raw_data, str):
-            try:
-                raw_data = json.loads(raw_data)
-            except:
-                raw_data = {}
-        
-        raw_data["analyst_feedback"] = feedback_data
-        
         # Update status based on feedback
-        new_status = "RESOLVED" if body.is_true_positive else "CLOSED"
-        if not body.is_true_positive:
-            new_status = "FALSE_POSITIVE"
+        new_status = "RESOLVED" if body.is_true_positive else "FALSE_POSITIVE"
         
         # Update the incident
         await DatabaseService.update_incident_feedback(
@@ -844,7 +820,7 @@ async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
         try:
             from src.rules.feedback_loop import get_feedback_loop
             fl = get_feedback_loop()
-            for rule_id in (incident.get("rule_ids") or []):
+            for rule_id in (getattr(incident, "rule_ids", None) or []):
                 fl.record_feedback(rule_id, is_tp=body.is_true_positive)
         except Exception:
             pass  # Feedback loop is best-effort
@@ -866,53 +842,47 @@ async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
         raise HTTPException(status_code=500, detail=f"Failed to record feedback: {str(e)}")
 
 
-async def _store_ml_training_feedback(incident: dict, is_tp: bool, notes: Optional[str]):
-    """Store feedback as ML training data."""
+async def _store_ml_training_feedback(incident, is_tp: bool, notes: Optional[str]):
+    """Store feedback as ML training data. Accepts ORM IncidentModel or dict."""
     import json
     from pathlib import Path
-    
+
     try:
-        # Create training data directory if needed
         training_dir = Path("data/ml_training/feedback")
         training_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Extract features from incident for training
+
         training_sample = {
-            "incident_id": incident.get("id"),
-            "attack_type": incident.get("attack_type"),
-            "severity": incident.get("severity"),
-            "confidence": incident.get("confidence"),
-            "total_loss_usd": incident.get("total_loss_usd"),
-            "affected_chains": incident.get("affected_chains"),
-            "rule_ids": incident.get("rule_ids"),
+            "incident_id": getattr(incident, "incident_id", None),
+            "attack_type": getattr(incident, "attack_type", None),
+            "severity": getattr(incident, "severity", None),
+            "confidence": getattr(incident, "confidence", None),
+            "total_loss_usd": float(getattr(incident, "total_loss_usd", 0) or 0),
+            "affected_chains": getattr(incident, "affected_chains", []),
+            "rule_ids": getattr(incident, "rule_ids", []),
             "is_true_positive": is_tp,
             "feedback_notes": notes,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        
-        # Also extract ML prediction data if available
-        raw_data = incident.get("raw_data") or {}
-        if isinstance(raw_data, str):
+
+        # Extract ML prediction data from explanation_json if available
+        explanation = getattr(incident, "explanation_json", None) or {}
+        if isinstance(explanation, str):
             try:
-                raw_data = json.loads(raw_data)
-            except:
-                raw_data = {}
-        
-        if "ml_prediction" in raw_data:
-            training_sample["ml_prediction"] = raw_data["ml_prediction"]
-        if "ml_analysis" in raw_data:
-            training_sample["ml_analysis"] = raw_data["ml_analysis"]
-        
-        # Append to training file
+                explanation = json.loads(explanation)
+            except Exception:
+                explanation = {}
+        if "ml_prediction" in explanation:
+            training_sample["ml_prediction"] = explanation["ml_prediction"]
+
         feedback_file = training_dir / "analyst_feedback.jsonl"
         with open(feedback_file, "a") as f:
             f.write(json.dumps(training_sample) + "\n")
-        
-        logger.info("ml_training_feedback_stored", 
-                    incident_id=incident.get("id"),
+
+        logger.info("ml_training_feedback_stored",
+                    incident_id=training_sample["incident_id"],
                     is_tp=is_tp,
                     file=str(feedback_file))
-        
+
     except Exception as e:
         logger.warning("ml_training_feedback_storage_failed", error=str(e))
 

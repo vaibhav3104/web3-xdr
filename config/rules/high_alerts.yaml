@@ -26,18 +26,23 @@ rules:
       chain: any
     
     thresholds:
-      min_amount_usd: 1000000  # $1M+
+      min_amount_usd: 10000000  # $10M+ (raised from $1M — whale activity below $10M is routine)
 
-    # Known institutional bridge pairs — suppress repeat noise
+    # Known high-volume contracts and addresses — suppress false positives
     exclusions:
+      contracts:
+        - "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"  # Lido stETH — routine staking
+        - "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"  # Lido wstETH — routine wrapping
+        - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"  # WETH — routine wraps/unwraps
+        - "0x4200000000000000000000000000000000000006"  # Optimism native WETH bridge
+        - "0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4"  # Staking contract (generated $1.1B FP)
       addresses:
         - "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59"  # Recurring Base bridge pair (4x repeat)
         - "0x787fd1dc3b533171781e4ae1a563c1ac7b4435e4"  # Recurring Base bridge counterparty
         - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet (routine exchange deposits)
 
-    # Rate limiting tightened from 10 to 5/hr — large bridge transfers are routine at this threshold
     rate_limit:
-      max_alerts: 5
+      max_alerts: 3
       period: 1h
 
     actions:
