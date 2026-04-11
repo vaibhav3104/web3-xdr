@@ -6,6 +6,8 @@ REST API endpoints for the Security Graph, Attack Path Analysis,
 and Risk Scoring - the core of Wiz-for-Web3.
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Dict, List, Any, Optional
@@ -205,7 +207,14 @@ async def calculate_entity_risk(request: EntityRiskRequest):
             chain_id=request.chain_id,
             include_details=True
         )
-        
+
+        # Propagate risk through graph after each calculation so connected
+        # entities inherit risk from newly scored high-risk nodes.
+        if risk_score.total_score >= 80:
+            asyncio.ensure_future(
+                _risk_scorer.propagate_risk(chain_id=request.chain_id, max_hops=3)
+            )
+
         return RiskScoreResponse(
             address=risk_score.address,
             chain_id=risk_score.chain_id,

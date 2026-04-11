@@ -447,7 +447,20 @@ class DeepContractClassifier:
         """Save model weights to file"""
         os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
         torch.save(self.model.state_dict(), self.model_path)
+        self._model_mtime = os.path.getmtime(self.model_path)
         logger.info("model_weights_saved", path=self.model_path)
+
+    def reload_if_updated(self) -> bool:
+        """Hot-reload model weights if file on disk is newer."""
+        if not os.path.exists(self.model_path):
+            return False
+        current_mtime = os.path.getmtime(self.model_path)
+        if not hasattr(self, '_model_mtime') or self._model_mtime is None or current_mtime > self._model_mtime:
+            self._load_weights()
+            self._model_mtime = current_mtime
+            self.model.eval()
+            return True
+        return False
     
     def classify(self, bytecode: str) -> DeepClassificationResult:
         """

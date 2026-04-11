@@ -438,12 +438,9 @@ async def get_incident_events(incident_id: str, limit: int = 50):
             )
         )
         
-        # Method 1: Get events by event_ids stored in incident
+        # Method 1: Get events by event_ids stored in incident (batch query)
         if event_ids:
-            for event_id in event_ids[:limit]:
-                event = await DatabaseService.get_event_by_id(event_id)
-                if event:
-                    events.append(event)
+            events = await DatabaseService.get_events_by_ids(event_ids, limit=limit)
         
         # Method 2: For ML incidents with no events, create synthetic "contract deployment" info
         if not events and is_ml_incident and contracts:
@@ -607,6 +604,13 @@ async def acknowledge_incident(incident_id: str):
             status="ACKNOWLEDGED"
         )
         if updated:
+            await DatabaseService.write_audit_log(
+                incident_id=incident_id,
+                action="ACKNOWLEDGE",
+                previous_status="OPEN_PENDING",
+                new_status="ACKNOWLEDGED",
+                analyst_id="api_user",
+            )
             logger.info("incident_acknowledged_in_db", incident_id=incident_id)
             return {"status": "acknowledged", "incident_id": incident_id, "source": "database"}
     except Exception as e:
@@ -620,6 +624,59 @@ async def acknowledge_incident(incident_id: str):
             logger.info("incident_acknowledged_in_memory", incident_id=incident_id)
             return {"status": "acknowledged", "incident_id": incident_id, "source": "memory"}
     
+    raise HTTPException(status_code=404, detail="Incident not found")
+
+
+@router.post("/incidents/{incident_id}/resolve")
+async def resolve_incident(incident_id: str):
+    """
+    Resolve an incident.
+
+    Marks the incident as resolved, indicating that the threat
+    has been mitigated or determined to be non-actionable.
+    """
+    from ..shared_state import monitor_state
+    from ..database.service import DatabaseService
+
+    logger.info("resolve_incident_request", incident_id=incident_id)
+
+    # Try to update in database first
+    try:
+        updated = await DatabaseService.update_incident_status(
+            incident_id=incident_id,
+            status="RESOLVED"
+        )
+        if updated:
+            await DatabaseService.write_audit_log(
+                incident_id=incident_id,
+                action="RESOLVE",
+                previous_status="INVESTIGATING",
+                new_status="RESOLVED",
+                analyst_id="api_user",
+            )
+            logger.info("incident_resolved_in_db", incident_id=incident_id)
+            return {
+                "status": "resolved",
+                "incident_id": incident_id,
+                "resolved_at": datetime.now(timezone.utc).isoformat(),
+                "source": "database",
+            }
+    except Exception as e:
+        logger.warning("db_resolve_failed", incident_id=incident_id, error=str(e))
+
+    # Fallback to in-memory update
+    incidents = monitor_state.get_incidents()
+    for incident in incidents:
+        if incident.id == incident_id or getattr(incident, 'incident_id', '') == incident_id:
+            incident.status = "RESOLVED"
+            logger.info("incident_resolved_in_memory", incident_id=incident_id)
+            return {
+                "status": "resolved",
+                "incident_id": incident_id,
+                "resolved_at": datetime.now(timezone.utc).isoformat(),
+                "source": "memory",
+            }
+
     raise HTTPException(status_code=404, detail="Incident not found")
 
 
@@ -651,6 +708,13 @@ async def update_incident_status(incident_id: str, body: IncidentStatusUpdate):
             status=new_status
         )
         if updated:
+            await DatabaseService.write_audit_log(
+                incident_id=incident_id,
+                action=new_status,
+                previous_status="unknown",
+                new_status=new_status,
+                analyst_id="api_user",
+            )
             logger.info("incident_status_updated_in_db", incident_id=incident_id, status=new_status)
             return {"status": new_status, "incident_id": incident_id, "source": "database"}
     except Exception as e:
@@ -683,6 +747,20 @@ class FeedbackResponse(BaseModel):
     is_true_positive: bool
     feedback_recorded: bool
     message: str
+
+
+@router.get("/incidents/{incident_id}/audit")
+async def get_incident_audit_log(incident_id: str):
+    """
+    Get the full audit trail for an incident.
+
+    Returns a chronological list of every status change,
+    including who made it and when.
+    """
+    from ..database.service import DatabaseService
+
+    entries = await DatabaseService.get_incident_audit_log(incident_id)
+    return {"incident_id": incident_id, "audit_log": entries, "count": len(entries)}
 
 
 @router.post("/incidents/{incident_id}/feedback", response_model=FeedbackResponse)
@@ -755,7 +833,16 @@ async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
         
         # Store feedback for ML training
         await _store_ml_training_feedback(incident, body.is_true_positive, body.feedback_notes)
-        
+
+        # Feed into TP/FP feedback loop for auto-suppression
+        try:
+            from src.rules.feedback_loop import get_feedback_loop
+            fl = get_feedback_loop()
+            for rule_id in (incident.get("rule_ids") or []):
+                fl.record_feedback(rule_id, is_tp=body.is_true_positive)
+        except Exception:
+            pass  # Feedback loop is best-effort
+
         # Check if we should trigger retraining
         await _check_retrain_threshold()
         
@@ -827,25 +914,35 @@ async def _store_ml_training_feedback(incident: dict, is_tp: bool, notes: Option
 async def _check_retrain_threshold():
     """Check if we have enough feedback to trigger retraining."""
     from pathlib import Path
-    
+
     try:
         feedback_file = Path("data/ml_training/feedback/analyst_feedback.jsonl")
         if not feedback_file.exists():
             return
-        
+
         # Count feedback entries
         with open(feedback_file, "r") as f:
             feedback_count = sum(1 for _ in f)
-        
+
         # Trigger retraining every 50 feedback entries
         RETRAIN_THRESHOLD = 50
         if feedback_count > 0 and feedback_count % RETRAIN_THRESHOLD == 0:
-            logger.info("retrain_threshold_reached", 
+            logger.info("retrain_threshold_reached",
                         feedback_count=feedback_count,
                         threshold=RETRAIN_THRESHOLD)
-            # TODO: Trigger async retraining job
-            # For now, just log that we should retrain
-            
+            # Trigger async retraining via the continuous learning system
+            try:
+                from src.ai.continuous_learning import get_learning_system
+                system = get_learning_system()
+                if system and system.running:
+                    import asyncio
+                    asyncio.create_task(system.force_retrain())
+                    logger.info("auto_retrain_triggered", feedback_count=feedback_count)
+                else:
+                    logger.info("auto_retrain_skipped_system_not_running")
+            except Exception as e:
+                logger.warning("auto_retrain_trigger_failed", error=str(e))
+
     except Exception as e:
         logger.warning("retrain_check_failed", error=str(e))
 
@@ -923,90 +1020,181 @@ async def get_feedback_stats():
         return {"error": str(e)}
 
 
+@router.get("/rules/health")
+async def get_rule_health():
+    """
+    Get per-rule TP/FP health from the feedback loop.
+
+    Returns FP rates, suppression status, and auto-disable state for all
+    rules with feedback data. Use this to monitor rule drift over time.
+    """
+    try:
+        from src.rules.feedback_loop import get_feedback_loop
+        fl = get_feedback_loop()
+        stats = fl.get_all_stats()
+        suppressed = [s for s in stats if s["suppressed"]]
+        return {
+            "rules_tracked": len(stats),
+            "rules_suppressed": len(suppressed),
+            "rules": stats,
+        }
+    except Exception as e:
+        logger.error("rule_health_failed", error=str(e))
+        return {"error": str(e)}
+
+
+@router.post("/rules/feedback-loop/evaluate")
+async def trigger_feedback_evaluation():
+    """
+    Manually trigger feedback loop evaluation.
+
+    Runs the suppression/unsuppression logic and returns actions taken.
+    This normally runs automatically but can be triggered for debugging.
+    """
+    try:
+        from src.rules.feedback_loop import get_feedback_loop
+        fl = get_feedback_loop()
+        actions = fl.evaluate_rules()
+        return {
+            "actions": [
+                {"rule_id": a[0], "action": a[1], "fp_rate": round(a[2], 4)}
+                for a in actions
+            ],
+            "suppressed_count": sum(1 for a in actions if a[1] in ("suppressed", "auto_disabled")),
+        }
+    except Exception as e:
+        logger.error("feedback_evaluation_failed", error=str(e))
+        return {"error": str(e)}
+
+
 @router.post("/ml/retrain")
 async def trigger_ml_retrain(background_tasks: BackgroundTasks):
     """
     Manually trigger ML model retraining with analyst feedback.
-    
+
     This will:
-    1. Load all analyst feedback
-    2. Combine with existing training data
-    3. Retrain the ML Alert Analyzer model
+    1. Load all analyst TP/FP feedback from JSONL + database incidents
+    2. Combine with existing training data and synthetic augmentation
+    3. Retrain all models (RandomForest, MLP) via the continuous learning pipeline
+    4. Verify model persistence and log retrain metadata
     """
-    from datetime import datetime, timezone
-    
     logger.info("ml_retrain_triggered_manually")
-    
+
+    # Count available feedback for the response
+    feedback_count = 0
+    try:
+        from pathlib import Path
+        feedback_file = Path("data/ml_training/feedback/analyst_feedback.jsonl")
+        if feedback_file.exists():
+            with open(feedback_file, "r") as f:
+                feedback_count = sum(1 for line in f if line.strip())
+    except Exception:
+        pass
+
     # Add retraining to background tasks
     background_tasks.add_task(_run_ml_retrain)
-    
+
     return {
         "status": "retraining_started",
-        "message": "ML model retraining has been started in the background",
+        "message": f"ML model retraining started with {feedback_count} analyst feedback entries",
+        "feedback_entries": feedback_count,
         "triggered_at": datetime.now(timezone.utc).isoformat()
     }
 
 
 async def _run_ml_retrain():
-    """Background task to run ML retraining."""
+    """Background task to run ML retraining via the continuous learning system."""
     from pathlib import Path
     import json
-    
+
     logger.info("ml_retrain_started")
-    
+
     try:
-        # Load feedback data
+        # Count available feedback
         feedback_file = Path("data/ml_training/feedback/analyst_feedback.jsonl")
-        if not feedback_file.exists():
-            logger.warning("no_feedback_data_for_retrain")
-            return
-        
-        feedback_entries = []
-        with open(feedback_file, "r") as f:
-            for line in f:
-                try:
-                    feedback_entries.append(json.loads(line.strip()))
-                except:
-                    continue
-        
-        if len(feedback_entries) < 10:
-            logger.warning("insufficient_feedback_for_retrain", count=len(feedback_entries))
-            return
-        
-        # Import and run the alert analyzer training
+        feedback_count = 0
+        if feedback_file.exists():
+            with open(feedback_file, "r") as f:
+                feedback_count = sum(1 for line in f if line.strip())
+
+        # Method 1: Use the running continuous learning system (preferred)
         try:
-            from src.ml.alert_analyzer import MLAlertAnalyzer
-            
-            analyzer = MLAlertAnalyzer()
-            
-            # Convert feedback to training format
-            training_data = []
-            for f in feedback_entries:
-                sample = {
-                    "rule_id": f.get("rule_ids", ["unknown"])[0] if f.get("rule_ids") else "unknown",
-                    "severity": f.get("severity", "medium"),
-                    "confidence": f.get("confidence", 0.5),
-                    "attack_type": f.get("attack_type", "unknown"),
-                    "amount_usd": f.get("total_loss_usd", 0),
-                    "chain": f.get("affected_chains", ["unknown"])[0] if f.get("affected_chains") else "unknown",
-                    "is_true_positive": f.get("is_true_positive", True)
-                }
-                training_data.append(sample)
-            
-            # Train the model
-            result = await analyzer.train(training_data)
-            
-            logger.info("ml_retrain_completed", 
-                        samples=len(training_data),
-                        accuracy=result.get("accuracy"))
-            
-        except ImportError as e:
-            logger.warning("ml_alert_analyzer_not_available", error=str(e))
+            from src.ai.continuous_learning import get_learning_system
+            system = get_learning_system()
+            if system and system.running:
+                await system.force_retrain()
+                logger.info("ml_retrain_completed_via_continuous_learning",
+                            feedback_entries=feedback_count)
+                return
+        except Exception as e:
+            logger.warning("continuous_learning_retrain_failed", error=str(e))
+
+        # Method 2: Standalone sklearn pipeline retrain
+        try:
+            from src.ai.training.pipeline import TrainingPipeline, TrainingConfig
+
+            config = TrainingConfig(
+                model_type="random_forest",
+                n_estimators=100,
+                output_dir="./data/models"
+            )
+            pipeline = TrainingPipeline(config)
+            pipeline.collect_training_data(use_real_bytecode=True)
+
+            # Also load analyst feedback as training samples
+            if feedback_file.exists():
+                entries = []
+                with open(feedback_file, "r") as f:
+                    for line in f:
+                        try:
+                            entries.append(json.loads(line.strip()))
+                        except json.JSONDecodeError:
+                            continue
+
+                for entry in entries:
+                    is_tp = entry.get("is_true_positive", True)
+                    attack_type = entry.get("attack_type", "unknown")
+                    label = "safe" if not is_tp else _map_attack_to_label(attack_type)
+
+                    # Approximate feature vector from metadata
+                    features = [0.0] * 20
+                    features[0] = 0.3
+                    severity = (entry.get("severity") or "medium").upper()
+                    sev_vals = {"CRITICAL": 0.5, "HIGH": 0.4, "MEDIUM": 0.3, "LOW": 0.2}
+                    features[2] = sev_vals.get(severity, 0.3)
+                    pipeline.training_data.append({
+                        "features": features,
+                        "label": label,
+                        "source": "analyst_feedback"
+                    })
+
+            result = pipeline.train()
+            pipeline.save_model(result)
+            logger.info("ml_retrain_completed_standalone",
+                        accuracy=f"{result.accuracy:.2%}",
+                        samples=result.training_samples,
+                        feedback_entries=feedback_count)
+
         except Exception as e:
             logger.error("ml_retrain_failed", error=str(e))
-            
+
     except Exception as e:
         logger.error("ml_retrain_error", error=str(e))
+
+
+def _map_attack_to_label(attack_type: str) -> str:
+    """Map attack type string to training label."""
+    mapping = {
+        "Flash Loan Attack": "flash_loan_exploit",
+        "Reentrancy Attack": "reentrancy_exploit",
+        "Rug Pull": "rug_pull",
+        "Honeypot Contract": "honeypot",
+        "Price Manipulation": "price_manipulation",
+        "Oracle Manipulation": "oracle_manipulation",
+        "Governance Attack": "governance_attack",
+        "Bridge Exploit": "bridge_exploit",
+    }
+    return mapping.get(attack_type, "unknown_threat")
 
 
 @router.get("/events")

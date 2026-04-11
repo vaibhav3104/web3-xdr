@@ -326,21 +326,20 @@ class GuardianSystem:
     async def _pause_contract(self, config: ProtocolConfig) -> Optional[str]:
         """
         Execute pause() on the target contract.
-        
+
+        Uses the signer abstraction (KMS in production, local in dev).
+        Falls back to raw private key if no signer is configured.
+
         Returns transaction hash if successful.
         """
         from web3 import Web3
-        
+
         w3 = self._web3_connections.get(config.chain_id)
         if not w3:
             raise Exception(f"No Web3 connection for chain {config.chain_id}")
-        
-        if not config.guardian_private_key:
-            raise Exception("Guardian private key not configured")
-        
-        # Get contract address
+
         contract_addr = config.pause_contract or config.main_contract
-        
+
         # Standard pausable ABI
         pause_abi = [
             {
@@ -358,34 +357,47 @@ class GuardianSystem:
                 "type": "function"
             }
         ]
-        
-        # Use custom ABI if provided
+
         if config.custom_abi:
             pause_abi = json.loads(config.custom_abi)
-        
+
         try:
             contract = w3.eth.contract(
                 address=Web3.to_checksum_address(contract_addr),
                 abi=pause_abi
             )
-            
-            # Build transaction
-            guardian_account = w3.eth.account.from_key(config.guardian_private_key)
-            
-            tx = contract.functions.pause().build_transaction({
-                'from': guardian_account.address,
-                'nonce': w3.eth.get_transaction_count(guardian_account.address),
-                'gas': 100000,
-                'gasPrice': w3.eth.gas_price
-            })
-            
-            # Sign and send
-            signed_tx = w3.eth.account.sign_transaction(tx, config.guardian_private_key)
-            tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-            
-            # Wait for confirmation
+
+            # Try signer abstraction first (KMS or local)
+            signer = self._get_signer(config, contract_addr)
+
+            if signer:
+                guardian_address = signer.get_address()
+                tx = contract.functions.pause().build_transaction({
+                    'from': guardian_address,
+                    'nonce': w3.eth.get_transaction_count(guardian_address),
+                    'gas': 100000,
+                    'gasPrice': w3.eth.gas_price
+                })
+                signed = signer.sign_transaction(tx, contract_addr)
+                raw_tx = bytes.fromhex(signed["rawTransaction"].replace("0x", ""))
+                tx_hash = w3.eth.send_raw_transaction(raw_tx)
+            elif config.guardian_private_key:
+                # Legacy fallback: raw private key
+                logger.warning("using_raw_private_key", contract=contract_addr)
+                guardian_account = w3.eth.account.from_key(config.guardian_private_key)
+                tx = contract.functions.pause().build_transaction({
+                    'from': guardian_account.address,
+                    'nonce': w3.eth.get_transaction_count(guardian_account.address),
+                    'gas': 100000,
+                    'gasPrice': w3.eth.gas_price
+                })
+                signed_tx = w3.eth.account.sign_transaction(tx, config.guardian_private_key)
+                tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            else:
+                raise Exception("No signer or private key configured for guardian")
+
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            
+
             if receipt['status'] == 1:
                 logger.info(
                     "contract_paused",
@@ -396,7 +408,7 @@ class GuardianSystem:
                 return tx_hash.hex()
             else:
                 raise Exception("Transaction reverted")
-                
+
         except Exception as e:
             logger.error(
                 "pause_failed",
@@ -404,6 +416,28 @@ class GuardianSystem:
                 error=str(e)
             )
             raise
+
+    def _get_signer(self, config: ProtocolConfig, contract_addr: str):
+        """Get appropriate signer for the protocol, or None if unavailable."""
+        import os
+        try:
+            from .signer import create_signer
+            signer_type = os.getenv("SIGNER_TYPE", "local")
+            if signer_type == "kms" and os.getenv("KMS_KEY_ID"):
+                return create_signer(
+                    allowed_contracts=[contract_addr],
+                    chain_id=int(config.chain_id) if config.chain_id.isdigit() else 1,
+                    signer_type="kms"
+                )
+            elif config.guardian_private_key or os.getenv("GUARDIAN_PRIVATE_KEY"):
+                return create_signer(
+                    allowed_contracts=[contract_addr],
+                    chain_id=int(config.chain_id) if config.chain_id.isdigit() else 1,
+                    signer_type="local"
+                )
+        except Exception as e:
+            logger.debug("signer_init_failed_using_fallback", error=str(e))
+        return None
     
     async def _notify_multisig(self, config: ProtocolConfig, record: ResponseRecord):
         """
@@ -477,6 +511,108 @@ class GuardianSystem:
         }
         return rpc_urls.get(chain_id)
     
+    async def simulate_pause(self, protocol_id: str) -> Dict[str, Any]:
+        """
+        Dry-run a pause: build the transaction and simulate via eth_call.
+
+        Returns a dict with success/failure, estimated gas, and any revert reason.
+        No transaction is broadcast.
+        """
+        config = self.protocols.get(protocol_id)
+        if not config:
+            return {"success": False, "error": f"Protocol '{protocol_id}' not registered"}
+
+        from web3 import Web3
+
+        w3 = self._web3_connections.get(config.chain_id)
+        if not w3:
+            return {"success": False, "error": f"No Web3 connection for chain {config.chain_id}"}
+
+        contract_addr = config.pause_contract or config.main_contract
+
+        pause_abi = [
+            {
+                "inputs": [],
+                "name": "pause",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ]
+        if config.custom_abi:
+            pause_abi = json.loads(config.custom_abi)
+
+        try:
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(contract_addr),
+                abi=pause_abi
+            )
+
+            # Determine caller address (guardian wallet)
+            caller = config.guardian_address
+            if not caller:
+                signer = self._get_signer(config, contract_addr)
+                if signer:
+                    caller = signer.get_address()
+
+            if not caller:
+                return {"success": False, "error": "No guardian address configured for simulation"}
+
+            # Simulate via eth_call — reverts surface as exceptions
+            call_data = contract.functions.pause().build_transaction({
+                'from': caller,
+                'gas': 200000,
+                'gasPrice': 0,  # Simulation, no real cost
+            })
+
+            result = w3.eth.call({
+                'from': caller,
+                'to': call_data['to'],
+                'data': call_data['data'],
+                'gas': 200000,
+            })
+
+            # Estimate gas for the real tx
+            estimated_gas = w3.eth.estimate_gas({
+                'from': caller,
+                'to': call_data['to'],
+                'data': call_data['data'],
+            })
+
+            logger.info(
+                "pause_simulation_success",
+                protocol=protocol_id,
+                contract=contract_addr,
+                estimated_gas=estimated_gas,
+            )
+
+            return {
+                "success": True,
+                "protocol_id": protocol_id,
+                "contract": contract_addr,
+                "chain": config.chain_id,
+                "estimated_gas": estimated_gas,
+                "guardian_address": caller,
+                "message": "Pause transaction would succeed",
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.warning(
+                "pause_simulation_failed",
+                protocol=protocol_id,
+                contract=contract_addr,
+                error=error_msg,
+            )
+            return {
+                "success": False,
+                "protocol_id": protocol_id,
+                "contract": contract_addr,
+                "chain": config.chain_id,
+                "error": error_msg,
+                "message": "Pause transaction would revert",
+            }
+
     def get_response_history(
         self,
         limit: int = 100,

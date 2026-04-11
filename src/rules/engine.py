@@ -46,6 +46,14 @@ except ImportError:
     ENRICHMENT_AVAILABLE = False
     get_enricher = None
 
+# Import feedback loop for auto-suppression
+try:
+    from src.rules.feedback_loop import get_feedback_loop
+    FEEDBACK_LOOP_AVAILABLE = True
+except ImportError:
+    FEEDBACK_LOOP_AVAILABLE = False
+    get_feedback_loop = None
+
 
 @dataclass
 class AlertRule:
@@ -114,20 +122,116 @@ class AlertMatch:
         }
 
 
+import structlog as _structlog
+
+_spike_logger = _structlog.get_logger("alert_spike_guard")
+
+
+class AlertSpikeGuard:
+    """
+    Detects abnormal alert-rate spikes and triggers guardian auto-pause.
+
+    Keeps a sliding window of critical/high alert timestamps per protocol.
+    When the rate exceeds the configured threshold, fires a guardian pause
+    for the affected protocol and enters a cooldown to prevent re-triggering.
+
+    Config (env vars):
+      SPIKE_WINDOW_SECONDS   – sliding window size (default 300 = 5 min)
+      SPIKE_THRESHOLD        – critical+high alerts in window to trigger (default 20)
+      SPIKE_COOLDOWN_SECONDS – seconds to suppress after triggering (default 900)
+    """
+
+    def __init__(self):
+        self._window = int(os.getenv("SPIKE_WINDOW_SECONDS", "300"))
+        self._threshold = int(os.getenv("SPIKE_THRESHOLD", "20"))
+        self._cooldown = int(os.getenv("SPIKE_COOLDOWN_SECONDS", "900"))
+        # protocol -> list of timestamps
+        self._timestamps: Dict[str, List[datetime]] = {}
+        # protocol -> last trigger time
+        self._last_triggered: Dict[str, datetime] = {}
+
+    def record_matches(self, matches: List["AlertMatch"]):
+        """Record alert matches and check for spikes."""
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=self._window)
+
+        for match in matches:
+            if match.rule.severity not in ("critical", "high"):
+                continue
+
+            # Determine protocol key from event
+            protocol = (
+                match.event.get("protocol")
+                or match.event.get("affected_protocol")
+                or match.event.get("contract_address", "unknown")
+            )
+
+            if protocol not in self._timestamps:
+                self._timestamps[protocol] = []
+
+            self._timestamps[protocol].append(now)
+
+            # Prune old entries
+            self._timestamps[protocol] = [
+                t for t in self._timestamps[protocol] if t > cutoff
+            ]
+
+            # Check if spike threshold exceeded
+            count = len(self._timestamps[protocol])
+            if count >= self._threshold:
+                self._maybe_trigger_pause(protocol, count, now)
+
+    def _maybe_trigger_pause(self, protocol: str, count: int, now: datetime):
+        """Trigger guardian pause if not in cooldown."""
+        last = self._last_triggered.get(protocol)
+        if last and (now - last).total_seconds() < self._cooldown:
+            return  # Still in cooldown
+
+        self._last_triggered[protocol] = now
+
+        _spike_logger.critical(
+            "alert_spike_detected",
+            protocol=protocol,
+            alert_count=count,
+            window_seconds=self._window,
+            threshold=self._threshold,
+            action="triggering_guardian_auto_pause",
+        )
+
+        # Fire guardian pause asynchronously (best-effort)
+        try:
+            import asyncio
+            from src.response.guardian import auto_respond_to_incident
+
+            asyncio.ensure_future(
+                auto_respond_to_incident(
+                    incident_id=f"spike-{protocol}-{now.strftime('%Y%m%d%H%M%S')}",
+                    severity="critical",
+                    attack_type="alert_rate_spike",
+                    protocol=protocol,
+                    estimated_loss_usd=0,
+                    chain="unknown",
+                    contract=protocol,
+                )
+            )
+        except Exception as e:
+            _spike_logger.error("spike_auto_pause_failed", error=str(e))
+
+
 class RuleEngine:
     """
     Loads and evaluates YAML-based alert rules.
-    
+
     Supports:
     - Event-based rules (simple field matching)
     - Invariant-based rules (protocol state checks)
     - Pattern-based rules (multi-event sequences)
     - Aggregation rules (time-windowed counts)
-    
+
     Usage:
         engine = RuleEngine()
         engine.load_rules_from_directory("config/rules/")
-        
+
         matches = engine.evaluate(event)
         for match in matches:
             print(f"Rule {match.rule.name} triggered!")
@@ -137,7 +241,13 @@ class RuleEngine:
         self.rules: List[AlertRule] = []
         self._rule_index: Dict[str, AlertRule] = {}
         self._alert_history: Dict[str, List[datetime]] = {}  # For rate limiting
-        
+
+        # Anomaly spike auto-guard
+        self._spike_guard = AlertSpikeGuard()
+
+        # Feedback loop for TP/FP auto-suppression
+        self._feedback_loop = get_feedback_loop() if FEEDBACK_LOOP_AVAILABLE and get_feedback_loop else None
+
         # Initialize advanced engines if available
         self._invariant_engine = get_invariant_engine() if ADVANCED_ENGINES_AVAILABLE and get_invariant_engine else None
         self._pattern_matcher = get_pattern_matcher() if ADVANCED_ENGINES_AVAILABLE and get_pattern_matcher else None
@@ -183,6 +293,10 @@ class RuleEngine:
     
     def _parse_rule(self, data: Dict) -> AlertRule:
         """Parse a rule dictionary into an AlertRule object."""
+        detection = data.get('detection', {})
+        # Promote top-level time_window into detection dict so velocity rules can access it
+        if 'time_window' in data and 'time_window' not in detection:
+            detection['time_window'] = data['time_window']
         return AlertRule(
             id=data['id'],
             name=data['name'],
@@ -190,7 +304,7 @@ class RuleEngine:
             severity=data.get('severity', 'medium'),
             confidence=float(data.get('confidence', 0.5)),
             enabled=data.get('enabled', True),
-            detection=data.get('detection', {}),
+            detection=detection,
             thresholds=data.get('thresholds', {}),
             actions=data.get('actions', []),
             rate_limit=data.get('rate_limit'),
@@ -243,7 +357,11 @@ class RuleEngine:
         for rule in self.rules:
             if not rule.enabled:
                 continue
-            
+
+            # Check feedback loop auto-suppression
+            if self._feedback_loop and self._feedback_loop.is_suppressed(rule.id):
+                continue
+
             # Check rate limiting
             if self._is_rate_limited(rule):
                 continue
@@ -259,10 +377,14 @@ class RuleEngine:
                     match_details=match_result
                 )
                 matches.append(match)
-                
+
                 # Record for rate limiting
                 self._record_alert(rule)
-        
+
+        # Feed matches into spike guard for anomaly detection
+        if matches:
+            self._spike_guard.record_matches(matches)
+
         return matches
     
     def _evaluate_rule(self, rule: AlertRule, event: Dict[str, Any]) -> Optional[Dict]:
@@ -333,26 +455,82 @@ class RuleEngine:
                 }
             return None
         
-        # Handle velocity-based rules
+        # Handle velocity-based rules — actual time-windowed counting
         if detection_type == 'velocity':
-            # ========================================
-            # FIX: Check chain BEFORE triggering velocity rules
-            # ========================================
+            # Chain filter
             if 'chain' in detection:
                 expected_chain = detection['chain']
                 if expected_chain != 'any':
                     event_chain = event.get('chain', '') or event.get('chain_id', '')
-                    # Normalize chain names
                     expected_chain_lower = expected_chain.lower()
                     event_chain_lower = str(event_chain).lower() if event_chain else ''
                     if event_chain_lower != expected_chain_lower:
-                        return None  # Chain doesn't match, skip this rule
-            
-            # Velocity rules are based on frequency, not individual events
-            # They should trigger to track velocity metrics
+                        return None
+
+            # Event type filter (if specified)
+            expected_types = detection.get('event_types') or detection.get('event_type')
+            if expected_types:
+                if isinstance(expected_types, str):
+                    expected_types = [expected_types]
+                event_type = event.get('event_type', '')
+                if not event_type_matches(event_type, expected_types):
+                    return None
+
+            # Track this event in the velocity counter (with per-event dedup)
+            velocity_key = f"velocity:{rule.id}"
+            if velocity_key not in self._alert_history:
+                self._alert_history[velocity_key] = []
+
+            # Dedup: use event_id so the same event counted via multiple paths only increments once
+            event_id = event.get('event_id', '')
+            dedup_key = f"_velocity_seen:{rule.id}"
+            if dedup_key not in self._alert_history:
+                self._alert_history[dedup_key] = set()
+            if event_id and event_id in self._alert_history[dedup_key]:
+                # Already counted this event for this rule — skip
+                pass
+            else:
+                self._alert_history[velocity_key].append(datetime.now(timezone.utc))
+                if event_id:
+                    self._alert_history[dedup_key].add(event_id)
+
+            # Parse time window from rule (default 5m)
+            window_str = getattr(rule, 'schedule', None)
+            time_window_str = detection.get('time_window') or rule.__dict__.get('time_window', '5m') if hasattr(rule, '__dict__') else '5m'
+            # Try to get time_window from the rule YAML (stored in raw data)
+            window_seconds = 300  # default 5 min
+            if isinstance(time_window_str, str):
+                if time_window_str.endswith('m'):
+                    window_seconds = int(time_window_str[:-1]) * 60
+                elif time_window_str.endswith('s'):
+                    window_seconds = int(time_window_str[:-1])
+                elif time_window_str.endswith('h'):
+                    window_seconds = int(time_window_str[:-1]) * 3600
+
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+            old_len = len(self._alert_history[velocity_key])
+            self._alert_history[velocity_key] = [
+                t for t in self._alert_history[velocity_key] if t > cutoff
+            ]
+            # If timestamps were pruned, clear the dedup set to prevent unbounded growth
+            if len(self._alert_history[velocity_key]) < old_len:
+                pruned = old_len - len(self._alert_history[velocity_key])
+                seen_set = self._alert_history.get(dedup_key, set())
+                if isinstance(seen_set, set) and len(seen_set) > 10000:
+                    self._alert_history[dedup_key] = set()
+
+            count = len(self._alert_history[velocity_key])
+            threshold = detection.get('threshold', 100)
+
+            # Only fire when threshold is actually exceeded
+            if count < threshold:
+                return None
+
             return {
                 "velocity_type": detection.get('metric', 'events_per_minute'),
-                "threshold": detection.get('threshold', 0),
+                "threshold": threshold,
+                "actual_count": count,
+                "window_seconds": window_seconds,
                 "chain": detection.get('chain', 'any'),
                 "matched_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -407,17 +585,14 @@ class RuleEngine:
             # Check USD threshold (if price is available)
             if 'min_amount_usd' in thresholds:
                 min_usd = thresholds['min_amount_usd']
-                
+
                 # If USD value is available and meets threshold, pass
                 if amount_usd >= min_usd:
                     match_details["amount_usd"] = amount_usd
-                # If USD is 0 but we have token amount, check conditions instead
-                elif amount_usd == 0 and amount > 0:
-                    # Fall through to condition checks (already passed above)
-                    match_details["amount"] = amount
-                    match_details["note"] = "USD price unavailable, matched on token amount"
                 else:
-                    # USD value below threshold
+                    # USD below threshold OR unavailable — reject.
+                    # A rule that requires min_amount_usd should not fire
+                    # when we can't confirm the value meets it.
                     return None
             
             # Check raw token amount threshold

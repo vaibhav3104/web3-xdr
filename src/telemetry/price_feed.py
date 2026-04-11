@@ -95,6 +95,8 @@ class PriceFeed:
             "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063": "DAI",
             "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270": "WMATIC",
             "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6": "WBTC",
+            # Native USDC (Circle) on Polygon
+            "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": "USDC",
         },
         # Arbitrum
         "arbitrum": {
@@ -112,12 +114,15 @@ class PriceFeed:
             "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58": "USDT",
             "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1": "DAI",
             "0x4200000000000000000000000000000000000042": "OP",
+            # Native USDC (Circle) on Optimism
+            "0x0b2c639c533813f4aa9d7837caf62653d097ff85": "USDC",
         },
         # Base
         "base": {
             "0x4200000000000000000000000000000000000006": "WETH",
             "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": "USDC",
             "0x50c5725949a6f0c72e6c4a641f24049a917db0cb": "DAI",
+            "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca": "USDbC",
         },
         # Avalanche
         "avalanche": {
@@ -126,6 +131,15 @@ class PriceFeed:
             "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": "USDT",
             "0xd586e7f844cea2f87f50152665bcbc2c279d8d70": "DAI.e",
             "0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7": "WAVAX",
+        },
+        # BSC
+        "bsc": {
+            "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": "WBNB",
+            "0x55d398326f99059ff775485246999027b3197955": "USDT",
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": "USDC",
+            "0xe9e7cea3dedca5984780bafc599bd69add087d56": "BUSD",
+            "0x2170ed0880ac9a755fd29b2688956bd959f933f8": "WETH",
+            "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c": "WBTC",
         },
     }
     
@@ -181,6 +195,7 @@ class PriceFeed:
         "WBNB": 600.0,
         "CAKE": 2.50,
         "BUSD": 1.0,
+        "USDbC": 1.0,
     }
     
     # Token decimals mapping (most tokens use 18, but stablecoins often use 6)
@@ -188,6 +203,7 @@ class PriceFeed:
         # 6 decimal tokens (stablecoins)
         "USDC": 6,
         "USDT": 6,
+        "USDbC": 6,
         "BUSD": 6,  # Some versions
         # 8 decimal tokens
         "WBTC": 8,
@@ -518,10 +534,16 @@ class PriceFeed:
             # Avalanche USDC/USDT
             "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": 6,  # USDC
             "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": 6,  # USDT
-            # BSC USDC/USDT/BUSD
+            # BSC USDC/USDT/BUSD (18 decimals on BSC, unlike other chains)
             "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": 18, # USDC (18 on BSC)
             "0x55d398326f99059ff775485246999027b3197955": 18, # USDT (18 on BSC)
             "0xe9e7cea3dedca5984780bafc599bd69add087d56": 18, # BUSD
+            # Native USDC (Circle) — 6 decimals
+            "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": 6,  # Polygon native USDC
+            "0x0b2c639c533813f4aa9d7837caf62653d097ff85": 6,  # Optimism native USDC
+            # Base
+            "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": 6,  # Base USDC
+            "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca": 6,  # Base USDbC
         }
         
         if token_address:
@@ -549,8 +571,8 @@ class PriceFeed:
         
         usd_value = amount * Decimal(str(price))
         
-        # Sanity check: Cap at $100 billion (no single tx should be more)
-        MAX_USD = Decimal("100000000000")  # $100B
+        # Sanity check: Cap at $10 billion (no single tx should be more)
+        MAX_USD = Decimal("10000000000")  # $10B
         if usd_value > MAX_USD:
             logger.warning("usd_value_capped", 
                           original=str(usd_value)[:20], 

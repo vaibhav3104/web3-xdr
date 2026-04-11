@@ -221,7 +221,7 @@ rules:
     description: Swap with unusually high price impact (potential manipulation)
     severity: critical
     confidence: 0.85
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — price impact calculation unreliable, normal DEX activity
     protocol: uniswap
     detection:
       type: event
@@ -240,7 +240,7 @@ rules:
     description: Large liquidity removal (potential rug pull)
     severity: high
     confidence: 0.80
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — routine LP rebalancing, needs pool-specific context
     protocol: uniswap
     detection:
       type: event
@@ -341,7 +341,7 @@ rules:
     description: Large swap on SushiSwap
     severity: medium
     confidence: 0.80
-    enabled: true
+    enabled: false  # Disabled: 100% FP rate — normal whale activity, not threats
     protocol: sushiswap
     detection:
       type: event
@@ -362,7 +362,7 @@ rules:
     description: Large swap on PancakeSwap
     severity: medium
     confidence: 0.80
-    enabled: true
+    enabled: false  # Disabled: 100% FP rate — normal whale activity, not threats
     protocol: pancakeswap
     detection:
       type: event
@@ -600,7 +600,7 @@ rules:
     description: Large cross-chain swap
     severity: high
     confidence: 0.85
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — routine Stargate volume, $500K swaps are normal
     protocol: stargate
     detection:
       type: event
@@ -618,7 +618,7 @@ rules:
     description: Large liquidity removal from pool
     severity: high
     confidence: 0.85
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — routine pool rebalancing
     protocol: stargate
     detection:
       type: event

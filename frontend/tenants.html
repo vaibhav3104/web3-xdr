@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Multi-Tenancy Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -25,23 +26,13 @@
         .plan-enterprise { border-top: 3px solid #f59e0b; }
     </style>
 </head>
-<body class="min-h-screen" x-data="tenantManager()">
+<body class="min-h-screen">
+<div id="app" x-data="tenantManager()">
     <!-- Header -->
     <header class="border-b border-gray-800 px-6 py-4">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-4">
-                <a href="/frontend/index.html" class="flex items-center space-x-2">
-                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                        </svg>
-                    </div>
-                    <span class="text-xl font-bold bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
-                        Sentinel3
-                    </span>
-                </a>
-                <span class="text-gray-500">|</span>
-                <span class="text-orange-400 font-semibold">🏢 Multi-Tenancy</span>
+                <h1 class="text-orange-400 font-semibold text-lg">🏢 Multi-Tenancy</h1>
             </div>
             <div class="flex items-center space-x-4">
                 <!-- Tenant Switcher -->
@@ -318,7 +309,8 @@
             </div>
         </div>
     </div>
-    
+</div><!-- /app -->
+
     <script>
         function tenantManager() {
             return {
@@ -338,7 +330,8 @@
                 
                 async loadTenants() {
                     try {
-                        const token = localStorage.getItem('token');
+                        const token = localStorage.getItem('xdr_token') || localStorage.getItem('token');
+                        if (!token) return;
                         const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/tenants', {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
@@ -420,7 +413,7 @@
                 
                 async createTenant() {
                     try {
-                        const token = localStorage.getItem('token');
+                        const token = localStorage.getItem('xdr_token') || localStorage.getItem('token');
                         const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/tenants', {
                             method: 'POST',
                             headers: {

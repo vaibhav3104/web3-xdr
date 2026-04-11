@@ -6,6 +6,7 @@ Calculates and aggregates financial metrics from predicted incidents.
 Provides ROI metrics to demonstrate value to users.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
@@ -225,10 +226,12 @@ class ScorecardService:
         Returns:
             Complete scorecard dictionary
         """
-        total_saved = await self.get_total_preserved_capital(timeframe_hours)
-        incidents_blocked = await self.get_incidents_blocked_count(timeframe_hours)
-        speed_metrics = await self.get_speed_metrics()
-        leaderboard = await self.get_leaderboard(limit=3)
+        total_saved, incidents_blocked, speed_metrics, leaderboard = await asyncio.gather(
+            self.get_total_preserved_capital(timeframe_hours),
+            self.get_incidents_blocked_count(timeframe_hours),
+            self.get_speed_metrics(),
+            self.get_leaderboard(limit=3),
+        )
         
         top_save = leaderboard[0] if leaderboard else None
         

@@ -38,6 +38,21 @@ AMOUNT_TOLERANCE_PERCENT = float(os.getenv("AMOUNT_TOLERANCE_PERCENT", "0.1"))
 ORPHAN_CHECK_DELAY_SECONDS = int(os.getenv("ORPHAN_CHECK_DELAY_SECONDS", "60"))
 MIN_ALERT_AMOUNT_USD = float(os.getenv("MIN_ALERT_AMOUNT_USD", "10000"))
 
+# Per-bridge fee models (max expected fee as % of transfer amount).
+# Tolerance = base tolerance + bridge fee so legitimate fee deductions don't trigger AMOUNT_MISMATCH.
+BRIDGE_FEE_PERCENT: Dict[str, float] = {
+    "wormhole": 0.0,       # Wormhole: no protocol fee, only relayer
+    "layerzero": 0.0,
+    "axelar": 0.1,         # Axelar: up to 0.1% fee
+    "stargate": 0.06,      # Stargate: 6 bps
+    "across": 0.12,        # Across: variable, up to 12 bps
+    "cbridge": 0.1,
+    "hop": 0.1,
+    "multichain": 0.1,
+    "portal": 0.0,
+    "default": 0.5,        # Conservative default for unknown bridges
+}
+
 
 class CrossChainEventType(Enum):
     """Types of cross-chain events."""
@@ -86,7 +101,8 @@ class CrossChainEvent:
     token_symbol: str
     amount: float
     amount_usd: float
-    
+    token_decimals: int = 18  # ERC-20 decimals for normalization
+
     # Cross-chain identifiers
     message_id: Optional[str] = None
     nonce: Optional[int] = None
@@ -491,9 +507,24 @@ class CrossChainCorrelator:
             token=lock.token_symbol
         )
         
-        # Check amount mismatch
-        amount_diff = abs(mint.amount - lock.amount)
-        if lock.amount > 0 and amount_diff / lock.amount > self.amount_tolerance:
+        # Check amount mismatch (accounting for bridge fees and decimal normalization)
+        lock_amount = lock.amount
+        mint_amount = mint.amount
+
+        # Normalize if decimals differ (e.g., USDC 6-dec on L1 vs 18-dec on L2)
+        if lock.token_decimals != mint.token_decimals:
+            scale = 10 ** (lock.token_decimals - mint.token_decimals)
+            mint_amount = mint_amount * scale if scale > 0 else mint_amount / abs(scale)
+
+        # Effective tolerance = base tolerance + expected bridge fee
+        bridge_fee = BRIDGE_FEE_PERCENT.get(
+            (lock.bridge_id or "").lower(),
+            BRIDGE_FEE_PERCENT["default"]
+        ) / 100.0
+        effective_tolerance = self.amount_tolerance + bridge_fee
+
+        amount_diff = abs(mint_amount - lock_amount)
+        if lock_amount > 0 and amount_diff / lock_amount > effective_tolerance:
             return await self._create_violation(
                 ViolationType.AMOUNT_MISMATCH,
                 bridge_id=lock.bridge_id,
@@ -501,9 +532,12 @@ class CrossChainCorrelator:
                 dest_chain=mint.dest_chain,
                 lock_event=lock,
                 mint_event=mint,
-                lock_amount=lock.amount,
-                mint_amount=mint.amount,
-                description=f"Amount mismatch: locked {lock.amount} but minted {mint.amount}"
+                lock_amount=lock_amount,
+                mint_amount=mint_amount,
+                description=(
+                    f"Amount mismatch: locked {lock_amount} but minted {mint_amount} "
+                    f"(tolerance {effective_tolerance:.4f}, diff {amount_diff/lock_amount:.4f})"
+                )
             )
         
         # Check time anomaly
@@ -544,25 +578,34 @@ class CrossChainCorrelator:
             )
         return None
     
+    def _get_effective_tolerance(self, bridge_id: Optional[str]) -> float:
+        """Get fee-aware tolerance for a bridge."""
+        bridge_fee = BRIDGE_FEE_PERCENT.get(
+            (bridge_id or "").lower(),
+            BRIDGE_FEE_PERCENT["default"]
+        ) / 100.0
+        return self.amount_tolerance + bridge_fee
+
     def _find_local_matching_lock(
         self,
         mint: CrossChainEvent,
         key: str
     ) -> Optional[CrossChainEvent]:
         """Find matching lock in local storage."""
+        effective_tolerance = self._get_effective_tolerance(mint.bridge_id)
         for lock in self._local_pending_locks.get(key, []):
             time_diff = mint.timestamp - lock.timestamp
             if time_diff > self.correlation_window or time_diff < timedelta(0):
                 continue
-            
+
             if lock.message_id and mint.message_id == lock.message_id:
                 return lock
-            
+
             if lock.amount > 0:
                 diff = abs(mint.amount - lock.amount) / lock.amount
-                if diff <= self.amount_tolerance:
+                if diff <= effective_tolerance:
                     return lock
-        
+
         return None
     
     async def _try_match_local_mint(
@@ -582,18 +625,19 @@ class CrossChainCorrelator:
         """Check if lock and mint match."""
         if lock.message_id and mint.message_id == lock.message_id:
             return True
-        
+
         if lock.amount <= 0:
             return False
-        
+
+        effective_tolerance = self._get_effective_tolerance(lock.bridge_id)
         diff = abs(mint.amount - lock.amount) / lock.amount
-        if diff > self.amount_tolerance:
+        if diff > effective_tolerance:
             return False
-        
+
         time_diff = mint.timestamp - lock.timestamp
         if time_diff > self.correlation_window or time_diff < timedelta(0):
             return False
-        
+
         return True
     
     def _get_correlation_key(self, event: CrossChainEvent) -> str:

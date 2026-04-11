@@ -37,6 +37,7 @@ class TokenData(BaseModel):
     username: Optional[str] = None
     role: Optional[str] = None
     exp: Optional[datetime] = None
+    jti: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

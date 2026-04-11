@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Analytics Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -96,20 +97,13 @@
         ::-webkit-scrollbar-thumb { background: #52525b; border-radius: 4px; }
     </style>
 </head>
-<body x-data="dashboard()">
+<body>
+<div id="app" x-data="dashboard()">
     <!-- Header -->
     <header class="border-b border-zinc-800 px-6 py-4 sticky top-0 bg-zinc-950/90 backdrop-blur-sm z-50">
         <div class="flex items-center justify-between max-w-[1800px] mx-auto">
             <div class="flex items-center space-x-4">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold">Sentinel3</h1>
-                    <p class="text-xs text-zinc-500">Analytics Dashboard</p>
-                </div>
+                <h1 class="text-xl font-bold">Analytics Dashboard</h1>
             </div>
             
             <div class="flex items-center space-x-6">
@@ -308,7 +302,8 @@
             </div>
         </div>
     </main>
-    
+</div><!-- /app -->
+
     <script>
         function dashboard() {
             return {
@@ -334,12 +329,12 @@
                 
                 async init() {
                     await this.loadData();
-                    this.initCharts();
-                    
+                    try { this.initCharts(); } catch(e) { console.warn('Charts unavailable:', e.message); }
+
                     // Refresh data every 3 seconds
                     setInterval(() => this.loadData(), 3000);
                     // Update charts every 10 seconds
-                    setInterval(() => this.updateCharts(), 10000);
+                    setInterval(() => { try { this.updateCharts(); } catch(e) {} }, 10000);
                 },
                 
                 async loadData() {
@@ -381,7 +376,8 @@
                         // Load events
                         const evtRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/events?limit=20');
                         if (evtRes.ok) {
-                            this.events = await evtRes.json();
+                            const evtData = await evtRes.json();
+                            this.events = evtData.events || evtData || [];
                         }
                     } catch (e) {
                         console.log('Error loading data:', e);
@@ -390,7 +386,9 @@
                 
                 initCharts() {
                     // Events Over Time Chart
-                    const eventsCtx = document.getElementById('eventsChart').getContext('2d');
+                    const eventsEl = document.getElementById('eventsChart');
+                    if (!eventsEl) return;
+                    const eventsCtx = eventsEl.getContext('2d');
                     this.charts.events = new Chart(eventsCtx, {
                         type: 'line',
                         data: {
@@ -417,7 +415,9 @@
                     });
                     
                     // Chain Distribution Chart
-                    const chainCtx = document.getElementById('chainChart').getContext('2d');
+                    const chainEl = document.getElementById('chainChart');
+                    if (!chainEl) return;
+                    const chainCtx = chainEl.getContext('2d');
                     this.charts.chain = new Chart(chainCtx, {
                         type: 'doughnut',
                         data: {
@@ -442,7 +442,9 @@
                     });
                     
                     // Severity Chart
-                    const sevCtx = document.getElementById('severityChart').getContext('2d');
+                    const sevEl = document.getElementById('severityChart');
+                    if (!sevEl) return;
+                    const sevCtx = sevEl.getContext('2d');
                     this.charts.severity = new Chart(sevCtx, {
                         type: 'bar',
                         data: {

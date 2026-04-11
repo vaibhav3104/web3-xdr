@@ -3,10 +3,11 @@ JWT Token Handler for Sentinel3 Authentication.
 """
 
 import os
+import re
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
 from functools import wraps
 
 import jwt
@@ -21,24 +22,85 @@ logger = structlog.get_logger()
 # Security scheme
 security = HTTPBearer(auto_error=False)
 
+# Password complexity: min 8 chars, 1 upper, 1 lower, 1 digit
+_PASSWORD_PATTERN = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$')
+
+
+def validate_password(password: str) -> None:
+    """Raise ValueError if password doesn't meet complexity rules."""
+    if not _PASSWORD_PATTERN.match(password):
+        raise ValueError(
+            "Password must be at least 8 characters with 1 uppercase, "
+            "1 lowercase, and 1 digit"
+        )
+
+
+class TokenBlacklist:
+    """
+    Redis-backed token blacklist with in-memory fallback.
+    Revoked JTIs are stored until their natural expiry.
+    """
+
+    def __init__(self):
+        self._memory: Dict[str, float] = {}  # jti -> expiry timestamp
+        self._redis = None
+
+    async def _get_redis(self):
+        if self._redis is not None:
+            return self._redis
+        try:
+            import redis.asyncio as aioredis
+            url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            self._redis = aioredis.from_url(url, decode_responses=True)
+            await self._redis.ping()
+            return self._redis
+        except Exception:
+            self._redis = None
+            return None
+
+    async def revoke(self, jti: str, exp_timestamp: float) -> None:
+        """Add a token JTI to the blacklist."""
+        ttl = max(int(exp_timestamp - datetime.now(timezone.utc).timestamp()), 0)
+        r = await self._get_redis()
+        if r:
+            try:
+                await r.setex(f"blacklist:{jti}", ttl, "1")
+                return
+            except Exception:
+                pass
+        # Fallback: in-memory
+        self._memory[jti] = exp_timestamp
+        # Evict expired entries
+        now = datetime.now(timezone.utc).timestamp()
+        self._memory = {k: v for k, v in self._memory.items() if v > now}
+
+    async def is_revoked(self, jti: str) -> bool:
+        r = await self._get_redis()
+        if r:
+            try:
+                return await r.exists(f"blacklist:{jti}") > 0
+            except Exception:
+                pass
+        return self._memory.get(jti, 0) > datetime.now(timezone.utc).timestamp()
+
+
+# Singleton blacklist
+token_blacklist = TokenBlacklist()
+
 
 class JWTHandler:
     """
     JWT Token Handler for authentication.
     """
-    
-    # Default secret key (override with environment variable in production!)
-    DEFAULT_SECRET = "web3-xdr-super-secret-key-change-in-production-2024"
-    
-    # Default users (for demo - in production use database)
-    DEFAULT_USERS: Dict[str, Dict[str, Any]] = {
+
+    # Default demo users — only loaded when ENVIRONMENT != production
+    _DEMO_USERS: Dict[str, Dict[str, Any]] = {
         "admin": {
             "username": "admin",
             "email": "admin@web3xdr.io",
             "full_name": "Administrator",
             "role": "admin",
             "disabled": False,
-            # Default password: "admin123" - CHANGE IN PRODUCTION!
             "hashed_password": hashlib.sha256("admin123".encode()).hexdigest()
         },
         "operator": {
@@ -47,7 +109,6 @@ class JWTHandler:
             "full_name": "Security Operator",
             "role": "operator",
             "disabled": False,
-            # Default password: "operator123"
             "hashed_password": hashlib.sha256("operator123".encode()).hexdigest()
         },
         "viewer": {
@@ -56,32 +117,49 @@ class JWTHandler:
             "full_name": "Dashboard Viewer",
             "role": "viewer",
             "disabled": False,
-            # Default password: "viewer123"
             "hashed_password": hashlib.sha256("viewer123".encode()).hexdigest()
         }
     }
-    
+
     def __init__(
         self,
         secret_key: Optional[str] = None,
         algorithm: str = "HS256",
         access_token_expire_minutes: int = 60
     ):
-        self.secret_key = secret_key or os.getenv("JWT_SECRET_KEY", self.DEFAULT_SECRET)
+        env = os.getenv("ENVIRONMENT", "development")
+        configured_secret = secret_key or os.getenv("JWT_SECRET_KEY", "")
+
+        # In production, require an explicit secret
+        if env == "production" and not configured_secret:
+            raise RuntimeError(
+                "JWT_SECRET_KEY environment variable is required in production. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+
+        # In dev, generate a random secret per-process if none set (never use a static default)
+        self.secret_key = configured_secret or secrets.token_urlsafe(48)
         self.algorithm = algorithm
         self.access_token_expire_minutes = access_token_expire_minutes
-        
-        # In-memory user store (extend to database for production)
-        self.users: Dict[str, Dict[str, Any]] = self.DEFAULT_USERS.copy()
-        
-        # Load additional users from environment
+
+        # User store: only load demo users outside production
+        self.users: Dict[str, Dict[str, Any]] = {}
+        if env != "production":
+            self.users = self._DEMO_USERS.copy()
+            logger.warning("demo_users_loaded", hint="Set ENVIRONMENT=production to disable")
+
+        # Load users from environment variables (works in all environments)
         self._load_env_users()
-        
+
+        if not self.users:
+            logger.error("no_users_configured", hint="Set XDR_USER_<name>=<password>:<role> env vars")
+
         logger.info(
             "jwt_handler_initialized",
             algorithm=algorithm,
             token_expire_minutes=access_token_expire_minutes,
-            user_count=len(self.users)
+            user_count=len(self.users),
+            environment=env
         )
     
     def _load_env_users(self):
@@ -177,14 +255,16 @@ class JWTHandler:
             username: str = payload.get("sub")
             role: str = payload.get("role")
             exp = payload.get("exp")
-            
+            jti: str = payload.get("jti")
+
             if username is None:
                 return None
-            
+
             return TokenData(
                 username=username,
                 role=role,
-                exp=datetime.fromtimestamp(exp) if exp else None
+                exp=datetime.fromtimestamp(exp) if exp else None,
+                jti=jti
             )
         except jwt.ExpiredSignatureError:
             logger.warning("token_expired")
@@ -192,6 +272,20 @@ class JWTHandler:
         except jwt.InvalidTokenError as e:
             logger.warning("token_invalid", error=str(e))
             return None
+
+    async def revoke_token(self, token: str) -> bool:
+        """Revoke a token by adding its JTI to the blacklist."""
+        try:
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            jti = payload.get("jti")
+            exp = payload.get("exp", 0)
+            if jti:
+                await token_blacklist.revoke(jti, exp)
+                logger.info("token_revoked", jti=jti)
+                return True
+        except jwt.InvalidTokenError:
+            pass
+        return False
     
     def create_user(
         self,
@@ -204,7 +298,9 @@ class JWTHandler:
         """Create a new user."""
         if username in self.users:
             raise ValueError(f"User {username} already exists")
-        
+
+        validate_password(password)
+
         self.users[username] = {
             "username": username,
             "email": email or f"{username}@web3xdr.io",
@@ -244,10 +340,12 @@ class JWTHandler:
         user = self.get_user(username)
         if not user:
             return False
-        
+
         if not self.verify_password(current_password, user.hashed_password):
             return False
-        
+
+        validate_password(new_password)
+
         self.users[username]["hashed_password"] = self.hash_password(new_password)
         logger.info("password_changed", username=username)
         return True
@@ -311,17 +409,25 @@ async def require_auth(
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    
+
     token = credentials.credentials
     token_data = jwt_handler.decode_token(token)
-    
+
     if token_data is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    
+
+    # Check token blacklist (revoked tokens)
+    if token_data.jti and await token_blacklist.is_revoked(token_data.jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
     user = jwt_handler.get_user(token_data.username)
     if user is None:
         raise HTTPException(
@@ -329,13 +435,13 @@ async def require_auth(
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    
+
     if user.disabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled"
         )
-    
+
     return User(
         username=user.username,
         email=user.email,

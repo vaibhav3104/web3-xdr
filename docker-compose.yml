@@ -12,7 +12,7 @@
 #
 # ============================================================================
 
-version: '3.8'
+
 
 services:
   # --------------------------------------------------------------------------
@@ -88,6 +88,13 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -163,8 +170,17 @@ services:
       - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL:-}
       - POLYGON_RPC_URL=${POLYGON_RPC_URL:-}
       - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL:-}
+      # Alerting
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHANNEL_ID=${TELEGRAM_CHANNEL_ID:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      # Features
+      - GRAPH_ENABLED=${GRAPH_ENABLED:-true}
+      - ML_DETECTION_ENABLED=${ML_DETECTION_ENABLED:-true}
+      - CONTINUOUS_LEARNING_ENABLED=${CONTINUOUS_LEARNING_ENABLED:-true}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     volumes:
       - ./config:/app/config:ro
     depends_on:
@@ -173,6 +189,13 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+        reservations:
+          memory: 256m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
       interval: 30s
@@ -203,6 +226,31 @@ services:
       - pgadmin-data:/var/lib/pgadmin
     depends_on:
       - postgres
+    restart: unless-stopped
+    networks:
+      - xdr-network
+    profiles:
+      - admin
+
+  # --------------------------------------------------------------------------
+  # Database Backup (Automated daily backups)
+  # --------------------------------------------------------------------------
+  db-backup:
+    image: postgres:15-alpine
+    container_name: sentinel3-db-backup
+    entrypoint: sh -c "while true; do /backup.sh; sleep 86400; done"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-xdr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xdr_password}
+      POSTGRES_DB: ${POSTGRES_DB:-web3_xdr}
+    volumes:
+      - ./scripts/backup-db.sh:/backup.sh:ro
+      - backup-data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - xdr-network
@@ -248,7 +296,8 @@ services:
       - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-xdr_password}
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     depends_on:
       - postgres
       - prometheus
@@ -278,3 +327,5 @@ volumes:
     name: sentinel3-prometheus-data
   grafana-data:
     name: sentinel3-grafana-data
+  backup-data:
+    name: sentinel3-backup-data

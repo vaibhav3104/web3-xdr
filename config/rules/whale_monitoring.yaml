@@ -28,11 +28,17 @@ rules:
     
     thresholds:
       min_amount_usd: 5000000
-    
+
+    # Known high-volume addresses — suppress known institutional/protocol movements
+    exclusions:
+      addresses:
+        - "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb"  # Morpho protocol
+        - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet
+
     rate_limit:
-      max_alerts: 20
+      max_alerts: 10
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]

@@ -350,7 +350,13 @@ class BytecodeExtractor:
 
 # Feature vector for ML
 def features_to_vector(features: BytecodeFeatures) -> List[float]:
-    """Convert features to numerical vector for ML"""
+    """Convert features to numerical vector for ML.
+
+    Index 19 = external_call_targets count (normalized).
+    NOT risk_score — that was a hand-crafted summary that dominated feature
+    importance (51.8%), causing the model to learn a trivial shortcut instead
+    of actual bytecode patterns.
+    """
     return [
         features.bytecode_length / 10000,  # Normalize
         features.unique_opcodes / 100,
@@ -371,7 +377,7 @@ def features_to_vector(features: BytecodeFeatures) -> List[float]:
         float(features.has_reentrancy_pattern),
         float(features.has_delegatecall_pattern),
         float(features.has_selfdestruct),
-        features.risk_score / 100,
+        len(features.external_call_targets) / 20,  # Unique external addresses
     ]
 
 if __name__ == "__main__":

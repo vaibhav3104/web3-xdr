@@ -27,12 +27,19 @@ rules:
     
     thresholds:
       min_amount_usd: 1000000  # $1M+
-    
-    # Rate limiting to avoid alert fatigue
+
+    # Known institutional bridge pairs — suppress repeat noise
+    exclusions:
+      addresses:
+        - "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59"  # Recurring Base bridge pair (4x repeat)
+        - "0x787fd1dc3b533171781e4ae1a563c1ac7b4435e4"  # Recurring Base bridge counterparty
+        - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet (routine exchange deposits)
+
+    # Rate limiting tightened from 10 to 5/hr — large bridge transfers are routine at this threshold
     rate_limit:
-      max_alerts: 10
+      max_alerts: 5
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -86,13 +93,13 @@ rules:
     
     severity: high
     confidence: 0.75
-    enabled: true
-    
+    enabled: false  # DISABLED 2026-04-11: 100% FP — normal bridge message volume trivially exceeds threshold
+
     detection:
       type: event
       event_type: LogMessagePublished
       chain: any
-      
+
       aggregation:
         function: count
         group_by: [chain, bridge_id]

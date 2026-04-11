@@ -15,8 +15,9 @@
     // SET THE ACTIVE API HERE
     // ============================================
     // Options: GPU_API, PRODUCTION_API, LOCAL_API
-    // Using PRODUCTION_API as it has PROC_TYPE=api for faster startup
-    window.SENTINEL3_API_BASE = PRODUCTION_API;
+    // Always use same-origin (relative URLs) since frontend and API are co-located.
+    // Only override to PRODUCTION_API or GPU_API if frontend is hosted separately.
+    window.SENTINEL3_API_BASE = LOCAL_API;
     
     // Helper function for API calls
     window.sentinel3Fetch = async function(endpoint, options = {}) {

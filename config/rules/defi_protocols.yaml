@@ -74,14 +74,14 @@ rules:
       protocol exploitation or market manipulation.
     severity: medium
     confidence: 0.65
-    enabled: true
-    
+    enabled: false  # DISABLED 2026-04-11: 100% FP — no per-pool grouping, normal borrow volume exceeds threshold
+
     detection:
       type: velocity
       event_type: Borrow
       metric: events_per_minute
       threshold: 50
-      
+
     time_window: 5m
     
     actions:
@@ -96,11 +96,11 @@ rules:
   - id: uniswap-large-swap-001
     name: Uniswap Large Swap Detected
     description: |
-      Detects unusually large swaps on Uniswap which could indicate 
+      Detects unusually large swaps on Uniswap which could indicate
       whale activity or potential price manipulation.
     severity: medium
     confidence: 0.60
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — normal Uniswap volume, $1M swaps are routine
     
     detection:
       type: event
@@ -400,10 +400,11 @@ rules:
     name: Unauthorized Admin Function Call
     description: |
       Detects calls to admin/owner functions from non-admin addresses.
+      Overlaps with admin-change-ft007 — this rule focuses on Pause/Unpause events.
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       event_type:
@@ -412,7 +413,15 @@ rules:
         - RoleGranted
         - Paused
         - Unpaused
-    
+
+    exclusions:
+      addresses:
+        - "0x000100abaad02f1cfc8bbe32bd5a564817339e72"  # Known Base deployer/factory
+
+    rate_limit:
+      max_alerts: 5
+      period: 1h
+
     actions:
       - type: alert
         channels: [telegram, slack]

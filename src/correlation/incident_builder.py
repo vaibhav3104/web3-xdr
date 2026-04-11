@@ -199,22 +199,25 @@ class Incident:
 class IncidentBuilder:
     """
     Builds and manages incidents from violations.
-    
+
     Implements intelligent clustering to group related violations
     into cohesive incidents.
     """
-    
+
     def __init__(self, time_window_hours: int = 1):
         """
         Initialize incident builder.
-        
+
         Args:
             time_window_hours: Time window for clustering (default: 1 hour)
         """
         self.time_window_hours = time_window_hours
         self.incidents: Dict[str, Incident] = {}  # cluster_key -> Incident
         self.event_to_incident: Dict[str, str] = {}  # event_id -> cluster_key (for idempotency)
-        
+
+        # Cross-chain address tracking: address -> set of (chain, cluster_key)
+        self._address_chains: Dict[str, Set[Tuple[str, str]]] = {}
+
         logger.info(
             "incident_builder_initialized",
             time_window_hours=time_window_hours
@@ -345,7 +348,14 @@ class IncidentBuilder:
         
         # Track event -> incident mapping for idempotency
         self.event_to_incident[event.event_id] = cluster_key
-        
+
+        # Cross-chain address tracking
+        for addr in list(incident.affected_addresses):
+            if addr:
+                self._address_chains.setdefault(addr, set()).add(
+                    (event.chain_id, cluster_key)
+                )
+
         return incident
     
     def _classify_attack_type(self, violation_type: str) -> str:
@@ -427,3 +437,53 @@ class IncidentBuilder:
                 incident_id=incident.incident_id,
                 false_positive=false_positive
             )
+
+    # ------------------------------------------------------------------
+    # Cross-chain correlation helpers
+    # ------------------------------------------------------------------
+
+    def get_incidents_by_address(self, address: str) -> List[Incident]:
+        """Return all incidents where *address* appears (any chain)."""
+        address = address.lower()
+        entries = self._address_chains.get(address, set())
+        seen: Set[str] = set()
+        results: List[Incident] = []
+        for _chain, cluster_key in entries:
+            if cluster_key not in seen:
+                seen.add(cluster_key)
+                inc = self.incidents.get(cluster_key)
+                if inc:
+                    results.append(inc)
+        return results
+
+    def get_cross_chain_incidents(self) -> List[List[Incident]]:
+        """
+        Find incident groups linked by a shared address across >1 chain.
+
+        Returns a list of groups — each group contains incidents on different
+        chains that share at least one address, suggesting the same attacker.
+        """
+        groups: List[List[Incident]] = []
+        seen_clusters: Set[str] = set()
+
+        for addr, chain_keys in self._address_chains.items():
+            chains = {ck[0] for ck in chain_keys}
+            if len(chains) < 2:
+                continue  # Only interested in multi-chain
+
+            cluster_keys = {ck[1] for ck in chain_keys}
+            # Skip if already fully covered
+            if cluster_keys.issubset(seen_clusters):
+                continue
+
+            group: List[Incident] = []
+            for ck in cluster_keys:
+                inc = self.incidents.get(ck)
+                if inc and inc.status in (IncidentStatus.OPEN_PENDING, IncidentStatus.OPEN_CONFIRMED):
+                    group.append(inc)
+
+            if len(group) >= 2:
+                groups.append(group)
+                seen_clusters.update(cluster_keys)
+
+        return groups

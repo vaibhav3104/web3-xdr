@@ -151,3 +151,92 @@ predicted_to_confirmed_match_rate = Gauge(
     ["chain"]
 )
 
+# =============================================================
+# Incident & Detection Metrics
+# =============================================================
+
+incidents_created_total = Counter(
+    "sentinel3_incidents_created_total",
+    "Total incidents created",
+    ["severity", "source"]  # source: rule, ml, invariant
+)
+
+incidents_active = Gauge(
+    "sentinel3_incidents_active",
+    "Currently active (unresolved) incidents",
+    ["severity"]
+)
+
+rule_evaluations_total = Counter(
+    "sentinel3_rule_evaluations_total",
+    "Total rule evaluations",
+    ["rule_id", "result"]  # result: match, no_match
+)
+
+invariant_violations_total = Counter(
+    "sentinel3_invariant_violations_total",
+    "Total invariant violations detected",
+    ["invariant_type", "bridge_id"]
+)
+
+invariant_checks_total = Counter(
+    "sentinel3_invariant_checks_total",
+    "Total invariant checks run",
+    ["invariant_type"]
+)
+
+# =============================================================
+# Circuit Breaker Metrics
+# =============================================================
+
+circuit_breaker_state = Gauge(
+    "sentinel3_circuit_breaker_state",
+    "Circuit breaker state (0=closed, 1=open, 2=half_open)",
+    ["chain"]
+)
+
+circuit_breaker_trips_total = Counter(
+    "sentinel3_circuit_breaker_trips_total",
+    "Total circuit breaker trips (closed -> open)",
+    ["chain"]
+)
+
+# =============================================================
+# Alert Delivery Metrics
+# =============================================================
+
+alerts_sent_total = Counter(
+    "sentinel3_alerts_sent_total",
+    "Total alert notifications sent",
+    ["channel", "severity"]  # channel: slack, telegram
+)
+
+alerts_failed_total = Counter(
+    "sentinel3_alerts_failed_total",
+    "Total alert delivery failures",
+    ["channel", "error_type"]
+)
+
+# =============================================================
+# DB & Pool Metrics
+# =============================================================
+
+db_operations_total = Counter(
+    "sentinel3_db_operations_total",
+    "Total database operations",
+    ["operation"]  # operation: save_event, save_incident, query_incidents
+)
+
+db_operation_duration_seconds = Histogram(
+    "sentinel3_db_operation_duration_seconds",
+    "Database operation duration",
+    ["operation"],
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]
+)
+
+db_errors_total = Counter(
+    "sentinel3_db_errors_total",
+    "Total database errors",
+    ["operation", "error_type"]
+)
+

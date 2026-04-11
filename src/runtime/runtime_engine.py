@@ -178,14 +178,18 @@ class RuntimeEngine:
                         )
                         continue
                     
-                    # Step 4: Extract state diff
-                    state_diff = await self.simulator.extract_state_diff(
-                        simulation_run.to_dict(),
-                        list(self.protected_addresses),
-                        list(self.watched_tokens),
-                        list(self.watched_pools)
-                    )
-                    simulation_run.state_diff_fingerprint = state_diff
+                    # Step 4: Extract state diff (skip if already populated by simulate())
+                    if not simulation_run.state_diff_fingerprint or (
+                        not simulation_run.state_diff_fingerprint.token_balance_deltas
+                        and not simulation_run.state_diff_fingerprint.total_supply_deltas
+                    ):
+                        state_diff = await self.simulator.extract_state_diff(
+                            simulation_run.to_dict(),
+                            list(self.protected_addresses),
+                            list(self.watched_tokens),
+                            list(self.watched_pools)
+                        )
+                        simulation_run.state_diff_fingerprint = state_diff
                     
                     # Step 5: Evaluate invariants
                     # Create a synthetic SecurityEvent from simulation

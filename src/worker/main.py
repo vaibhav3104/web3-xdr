@@ -168,6 +168,16 @@ from src.telemetry.metrics import (
     worker_processing_duration_seconds,
     rpc_latency_seconds,
     rpc_requests_total,
+    incidents_created_total,
+    invariant_violations_total,
+    invariant_checks_total,
+    circuit_breaker_state,
+    circuit_breaker_trips_total,
+    alerts_sent_total,
+    alerts_failed_total,
+    db_operations_total,
+    db_operation_duration_seconds,
+    db_errors_total,
 )
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
@@ -286,6 +296,90 @@ class RateLimitHandler:
         return False
 
 
+class CircuitBreaker:
+    """
+    Per-chain circuit breaker.
+
+    States:
+    - CLOSED:    Normal operation. Failures increment a counter.
+    - OPEN:      Too many failures. Skip this chain entirely until cooldown expires.
+    - HALF_OPEN: Cooldown expired. Allow one probe request. Success → CLOSED, failure → OPEN.
+
+    Separate from RateLimitHandler (which handles HTTP 429). This catches
+    persistent connection failures, dead RPCs, or chains that consistently error.
+    """
+
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+    def __init__(
+        self,
+        failure_threshold: int = 10,
+        cooldown_seconds: float = 120.0,
+        max_cooldown_seconds: float = 600.0,
+    ):
+        self._failure_threshold = failure_threshold
+        self._base_cooldown = cooldown_seconds
+        self._max_cooldown = max_cooldown_seconds
+        self._states: Dict[str, str] = {}          # chain_id → state
+        self._failures: Dict[str, int] = {}         # chain_id → consecutive failures
+        self._open_until: Dict[str, float] = {}     # chain_id → timestamp
+        self._trip_count: Dict[str, int] = {}       # chain_id → times tripped (for escalating cooldown)
+
+    def state(self, chain_id: str) -> str:
+        import time
+        st = self._states.get(chain_id, self.CLOSED)
+        if st == self.OPEN and time.time() >= self._open_until.get(chain_id, 0):
+            self._states[chain_id] = self.HALF_OPEN
+            return self.HALF_OPEN
+        return st
+
+    def allow_request(self, chain_id: str) -> bool:
+        st = self.state(chain_id)
+        return st in (self.CLOSED, self.HALF_OPEN)
+
+    def record_success(self, chain_id: str):
+        self._failures[chain_id] = 0
+        self._states[chain_id] = self.CLOSED
+
+    def record_failure(self, chain_id: str):
+        import time
+        failures = self._failures.get(chain_id, 0) + 1
+        self._failures[chain_id] = failures
+
+        if self.state(chain_id) == self.HALF_OPEN:
+            # Probe failed → reopen with escalating cooldown
+            self._trip(chain_id)
+        elif failures >= self._failure_threshold:
+            self._trip(chain_id)
+
+    def _trip(self, chain_id: str):
+        import time
+        trips = self._trip_count.get(chain_id, 0) + 1
+        self._trip_count[chain_id] = trips
+        cooldown = min(self._base_cooldown * (2 ** (trips - 1)), self._max_cooldown)
+        self._open_until[chain_id] = time.time() + cooldown
+        self._states[chain_id] = self.OPEN
+        logger.warning(
+            "circuit_breaker_open",
+            chain=chain_id,
+            consecutive_failures=self._failures.get(chain_id, 0),
+            cooldown_seconds=round(cooldown, 1),
+            trip_count=trips,
+        )
+
+    def get_stats(self) -> Dict[str, dict]:
+        return {
+            cid: {
+                "state": self.state(cid),
+                "failures": self._failures.get(cid, 0),
+                "trips": self._trip_count.get(cid, 0),
+            }
+            for cid in self._states
+        }
+
+
 def max_severity(sev1: str, sev2: str) -> str:
     """Return the higher severity level."""
     severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
@@ -313,6 +407,17 @@ class Sentinel3Worker:
         
         # Rate limit handler for RPC endpoints
         self.rate_limiter = RateLimitHandler()
+
+        # Circuit breaker for persistent chain failures
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=10,
+            cooldown_seconds=120.0,
+            max_cooldown_seconds=600.0,
+        )
+
+        # Track last reconnect attempt per chain (avoid tight reconnect loops)
+        self._last_reconnect_attempt: Dict[str, datetime] = {}
+        self._reconnect_interval = timedelta(minutes=2)
         
         # Runtime Security Plane components
         self.runtime_engines: Dict[str, "RuntimeEngine"] = {}
@@ -320,6 +425,10 @@ class Sentinel3Worker:
         
         # YAML Rule Engine (initialized in initialize())
         self.rule_engine = None
+
+        # Economic Invariant Engine (bridge exploit detection)
+        self.invariant_engine = None
+        self._bridge_contract_map: Dict[str, dict] = {}  # contract_address → {bridge_id, source_chain, dest_chain}
         
         # Security Graph components (Wiz-for-Web3)
         self.graph_builder = None
@@ -369,7 +478,25 @@ class Sentinel3Worker:
         rules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "rules")
         rules_loaded = self.rule_engine.load_rules_from_directory(rules_dir)
         logger.info("yaml_rules_loaded_for_ingestion", count=rules_loaded, stats=self.rule_engine.stats())
-        
+
+        # Bootstrap TP/FP feedback loop from historical incident data
+        try:
+            from src.rules.feedback_loop import get_feedback_loop
+            import psycopg2
+            fl = get_feedback_loop()
+            pg_conn = psycopg2.connect(
+                host=os.getenv("POSTGRES_HOST", "postgres"),
+                port=os.getenv("POSTGRES_PORT", "5432"),
+                dbname=os.getenv("POSTGRES_DB", "sentinel"),
+                user=os.getenv("POSTGRES_USER", "sentinel"),
+                password=os.getenv("POSTGRES_PASSWORD", "sentinel"),
+            )
+            loaded = fl.load_from_db(pg_conn.cursor())
+            pg_conn.close()
+            logger.info("feedback_loop_bootstrapped", feedbacks_loaded=loaded)
+        except Exception as e:
+            logger.warning("feedback_loop_bootstrap_failed", error=str(e))
+
         # Initialize Security Graph (Wiz-for-Web3)
         if self.graph_enabled:
             try:
@@ -473,7 +600,66 @@ class Sentinel3Worker:
                 logger.warning("listener_connect_error", chain_id=chain_id, error=str(conn_err))
             
             logger.info("chain_initialized", chain_id=chain_id, rpc_count=len(rpc_urls))
-        
+
+        # Register reorg handler to invalidate events/incidents from reorged blocks
+        from src.telemetry.finality_tracker import invalidate_reorged_events
+        self.finality_manager.register_reorg_handler(invalidate_reorged_events)
+        logger.info("reorg_handler_registered", trackers=len(self.finality_manager.trackers))
+
+        # Initialize Economic Invariant Engine for bridge exploit detection
+        try:
+            from src.invariants.engine import InvariantEngine
+            from src.invariants.economic import MintLockParityInvariant, UnbackedMintInvariant
+            from src.telemetry.price_feed import get_price_feed
+
+            price_feed = get_price_feed()
+            self.invariant_engine = InvariantEngine(price_feed=price_feed)
+
+            # Build bridge contract → bridge_id lookup and create invariants
+            bridges = self.config.get("bridges", [])
+            for bridge in bridges:
+                bridge_id = bridge.get("id", "")
+                source_chain = bridge.get("source_chain", "")
+                dest_chain = bridge.get("dest_chain", "")
+                contracts = bridge.get("contracts", [])
+
+                for addr in contracts:
+                    self._bridge_contract_map[addr.lower()] = {
+                        "bridge_id": bridge_id,
+                        "source_chain": source_chain,
+                        "dest_chain": dest_chain,
+                    }
+
+                # Create invariants for bridges that have both source and dest chains
+                if source_chain and dest_chain:
+                    self.invariant_engine.add_invariant(
+                        MintLockParityInvariant(
+                            bridge_id=bridge_id,
+                            source_chain=source_chain,
+                            dest_chain=dest_chain,
+                            tolerance_window=timedelta(minutes=30),
+                        )
+                    )
+                    self.invariant_engine.add_invariant(
+                        UnbackedMintInvariant(
+                            bridge_id=bridge_id,
+                            source_chain=source_chain,
+                            dest_chain=dest_chain,
+                        )
+                    )
+
+            # Register violation handler → create incident
+            self.invariant_engine.add_result_handler(self._handle_invariant_violation)
+
+            logger.info(
+                "invariant_engine_initialized",
+                bridge_contracts=len(self._bridge_contract_map),
+                invariants=len(self.invariant_engine.invariants),
+            )
+        except Exception as e:
+            logger.warning("invariant_engine_init_failed", error=str(e))
+            self.invariant_engine = None
+
         # Initialize Runtime Security Plane if enabled
         if self.runtime_enabled and RUNTIME_AVAILABLE:
             await self._initialize_runtime_engines()
@@ -514,12 +700,38 @@ class Sentinel3Worker:
                         successful_chains=len(successful_chains)
                     )
                 
+                # --- Auto-reconnect disconnected listeners (every 2 min) ---
+                now_utc = datetime.now(timezone.utc)
+                for chain_id, listener in list(self.listeners.items()):
+                    if listener is not None and listener.w3 is None:
+                        last_try = self._last_reconnect_attempt.get(chain_id)
+                        if last_try and (now_utc - last_try) < self._reconnect_interval:
+                            continue
+                        self._last_reconnect_attempt[chain_id] = now_utc
+                        try:
+                            connected = await listener.connect()
+                            if connected:
+                                listener.add_event_handler(self._save_event_to_db)
+                                self.circuit_breaker.record_success(chain_id)
+                                logger.info("listener_reconnected", chain_id=chain_id)
+                            else:
+                                self.circuit_breaker.record_failure(chain_id)
+                                logger.debug("listener_reconnect_failed", chain_id=chain_id)
+                        except Exception as reconn_err:
+                            self.circuit_breaker.record_failure(chain_id)
+                            logger.debug("listener_reconnect_error", chain_id=chain_id, error=str(reconn_err)[:100])
+
                 for chain_id, listener in self.listeners.items():
                     try:
                         # Skip chains where listener didn't connect (w3 is None)
                         if listener is None or listener.w3 is None:
                             continue
-                        
+
+                        # Check circuit breaker (persistent failures)
+                        if not self.circuit_breaker.allow_request(chain_id):
+                            logger.debug("chain_circuit_open", chain=chain_id)
+                            continue
+
                         # Check if chain is rate limited
                         if self.rate_limiter.is_rate_limited(chain_id):
                             remaining = self.rate_limiter.get_remaining_backoff(chain_id)
@@ -540,15 +752,19 @@ class Sentinel3Worker:
                         except asyncio.TimeoutError:
                             logger.warning("rpc_timeout", chain=chain_id, method="get_block_number")
                             self.rate_limiter.record_rate_limit(chain_id, Exception("RPC timeout"))
+                            self.circuit_breaker.record_failure(chain_id)
                             continue
-                        
+
                         latency = time.time() - start_time
                         rpc_latency_seconds.labels(chain=chain_id, endpoint="primary", method="eth_blockNumber").observe(latency)
                         rpc_requests_total.labels(chain=chain_id, endpoint="primary", method="eth_blockNumber", status="success").inc()
-                        
-                        # Record success - reset rate limit counter
+
+                        # Record success - reset rate limit counter and circuit breaker
                         self.rate_limiter.record_success(chain_id)
-                        
+                        self.circuit_breaker.record_success(chain_id)
+                        chain_head_height.labels(chain=chain_id).set(head_block)
+                        circuit_breaker_state.labels(chain=chain_id).set(0)  # CLOSED
+
                         # Track successful chain
                         if chain_id not in successful_chains:
                             successful_chains.add(chain_id)
@@ -736,45 +952,30 @@ class Sentinel3Worker:
                                                 self._event_type_stats_last_log = datetime.now(timezone.utc)
                                             
                                             logger.debug("event_saved_directly", chain=chain_id, tx_hash=event.tx_hash, event_type=event_type_str)
-                                            
+
                                             # ========================================
-                                            # YAML RULE EVALUATION (in ingestion loop)
+                                            # ECONOMIC INVARIANT EVALUATION
+                                            # Feed bridge events to the invariant engine
                                             # ========================================
-                                            # Evaluate rules directly here instead of relying on event bus
-                                            if self.rule_engine:
+                                            if self.invariant_engine and event.event_type in (
+                                                EventType.LOCK, EventType.UNLOCK,
+                                                EventType.MINT, EventType.BURN,
+                                                EventType.BRIDGE_DEPOSIT, EventType.BRIDGE_WITHDRAW,
+                                            ):
+                                                # Enrich event with bridge_id from contract lookup
+                                                bridge_info = self._bridge_contract_map.get(
+                                                    (event.contract_address or "").lower()
+                                                )
+                                                if bridge_info:
+                                                    event.bridge_id = bridge_info["bridge_id"]
                                                 try:
-                                                    rule_matches = self.rule_engine.evaluate(db_event)
-                                                    if rule_matches:
-                                                        for match in rule_matches:
-                                                            logger.warning(
-                                                                "yaml_rule_triggered",
-                                                                rule_id=match.rule.id,
-                                                                rule_name=match.rule.name,
-                                                                severity=match.rule.severity,
-                                                                chain=chain_id,
-                                                                event_type=db_event.get("event_type"),
-                                                                tx_hash=event.tx_hash[:20] if event.tx_hash else ""
-                                                            )
-                                                            
-                                                            # Create incident for HIGH and CRITICAL severity rules
-                                                            if match.rule.severity.upper() in ["HIGH", "CRITICAL"]:
-                                                                await self._create_incident_from_rule(
-                                                                    rule=match.rule,
-                                                                    event_data=db_event,
-                                                                    db_event=db_event,
-                                                                    match_details=match.match_details
-                                                                )
-                                                            # Also create incidents for MEDIUM rules (optional, but useful)
-                                                            elif match.rule.severity.upper() == "MEDIUM":
-                                                                await self._create_incident_from_rule(
-                                                                    rule=match.rule,
-                                                                    event_data=db_event,
-                                                                    db_event=db_event,
-                                                                    match_details=match.match_details
-                                                                )
-                                                except Exception as rule_err:
-                                                    logger.debug("ingestion_rule_evaluation_error", error=str(rule_err))
-                                            
+                                                    await self.invariant_engine.process_event(event)
+                                                except Exception as inv_err:
+                                                    logger.debug("invariant_eval_error", error=str(inv_err)[:100])
+
+                                            # Rule evaluation happens in _save_event_to_db handler only
+                                            # (removed duplicate evaluation here to prevent velocity counter inflation)
+
                                         except Exception as db_error:
                                             logger.error("direct_db_save_failed", chain=chain_id, tx_hash=event.tx_hash, error=str(db_error), exc_info=True)
                                         
@@ -801,16 +1002,18 @@ class Sentinel3Worker:
                                     backoff = self.rate_limiter.record_rate_limit(chain_id, e)
                                     logger.warning("log_poll_rate_limited", chain=chain_id, backoff_seconds=round(backoff, 1))
                                 else:
+                                    self.circuit_breaker.record_failure(chain_id)
                                     logger.error("log_poll_failed", chain=chain_id, error=str(e))
-                        
+
                     except Exception as e:
                         # Check if this is a rate limit error
                         if self.rate_limiter.is_rate_limit_error(e):
                             backoff = self.rate_limiter.record_rate_limit(chain_id, e)
                             logger.warning("chain_ingestion_rate_limited", chain=chain_id, backoff_seconds=round(backoff, 1))
                         else:
+                            self.circuit_breaker.record_failure(chain_id)
                             logger.error("chain_ingestion_error", chain=chain_id, error=str(e))
-                
+
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
                 
             except Exception as e:
@@ -1128,15 +1331,26 @@ class Sentinel3Worker:
         """
         Event handler to save SecurityEvent to database.
         Called by listener's emit_event() for contract deployments and other events.
+        Single canonical path for YAML rule evaluation.
         """
         from src.database.service import DatabaseService
         import hashlib
-        
+
         try:
             chain_id = event.chain_id
             log_index = getattr(event, 'log_index', 0)
             stable_key = f"{chain_id}:{event.tx_hash}:{log_index}"
             event_id = hashlib.sha256(stable_key.encode()).hexdigest()[:32]
+
+            # Dedup: skip if we already processed this event in this handler
+            if not hasattr(self, '_handler_seen_events'):
+                self._handler_seen_events = set()
+            if event_id in self._handler_seen_events:
+                return
+            self._handler_seen_events.add(event_id)
+            # Cap dedup cache at 20K entries
+            if len(self._handler_seen_events) > 20000:
+                self._handler_seen_events = set(list(self._handler_seen_events)[-10000:])
             
             # Convert severity to string name
             severity_str = event.severity.name if hasattr(event.severity, 'name') else str(event.severity).upper()
@@ -1383,10 +1597,29 @@ class Sentinel3Worker:
             if data and data.startswith("0x"):
                 data = data[2:]
             
-            # Parse raw amount from data (first 32 bytes = 64 hex chars)
+            # Parse raw amount from data
+            # For simple events (Transfer): first 32 bytes is the value
+            # For Swap events: data has multiple amount fields, pick the largest
             if data and len(data) >= 64:
                 try:
-                    raw_amount = int(data[:64], 16)
+                    is_swap = event_type in (EventType.SWAP,) or event_name in ("Swap",)
+                    if is_swap and len(data) >= 256:
+                        # Uniswap V2 Swap: (amount0In, amount1In, amount0Out, amount1Out)
+                        # Uniswap V3 Swap: (amount0, amount1, sqrtPriceX96, liquidity, tick)
+                        # Take the largest non-zero field from the first 4 words
+                        candidates = []
+                        for i in range(4):
+                            try:
+                                val = int(data[i*64:(i+1)*64], 16)
+                                # Handle int256 (V3): if top bit set, it's negative
+                                if val >= 2**255:
+                                    val = val - 2**256
+                                candidates.append(abs(val))
+                            except (ValueError, TypeError):
+                                pass
+                        raw_amount = max(candidates) if candidates else 0
+                    else:
+                        raw_amount = int(data[:64], 16)
                 except (ValueError, TypeError):
                     pass
             
@@ -1507,6 +1740,87 @@ class Sentinel3Worker:
             logger.error("log_conversion_failed", error=str(e), exc_info=True)
             return None
     
+    async def _handle_invariant_violation(self, result):
+        """Handle an invariant violation — create a CRITICAL/HIGH incident."""
+        from src.database.service import DatabaseService
+
+        if not result.violated:
+            return
+
+        invariant_violations_total.labels(
+            invariant_type=result.invariant_name,
+            bridge_id=(result.details or {}).get("bridge_id", "unknown")
+        ).inc()
+
+        try:
+            inv_name = result.invariant_name
+            severity = result.severity.name if hasattr(result.severity, 'name') else str(result.severity).upper()
+            details = result.details or {}
+            bridge_id = details.get("bridge_id", "unknown")
+            violation_amount = getattr(result, 'violation_amount', 0)
+            confidence = getattr(result, 'confidence', 0.9)
+
+            # Dedup: one incident per invariant+bridge per hour
+            dedupe_key = f"inv_{inv_name}_{bridge_id}"
+            if not hasattr(self, '_invariant_incident_cache'):
+                self._invariant_incident_cache = {}
+            now = datetime.now(timezone.utc)
+            if dedupe_key in self._invariant_incident_cache:
+                if (now - self._invariant_incident_cache[dedupe_key]).total_seconds() < 3600:
+                    return
+            self._invariant_incident_cache[dedupe_key] = now
+
+            incident_id = f"inc_inv_{inv_name}_{bridge_id}_{int(now.timestamp())}"
+            usd_value = float(details.get("violation_usd", 0) or 0)
+
+            incident_data = {
+                "incident_id": incident_id,
+                "title": f"[{severity}] Bridge Invariant Violation: {inv_name.replace('_', ' ').title()}",
+                "summary": f"Economic invariant '{inv_name}' violated on bridge '{bridge_id}'. "
+                           f"Violation amount: {violation_amount} tokens. "
+                           f"This indicates potential unbacked minting or lock/mint imbalance — "
+                           f"a pattern seen in Ronin ($625M) and Nomad ($190M) bridge exploits.",
+                "severity": severity,
+                "status": "OPEN_PENDING",
+                "attack_type": "BRIDGE_EXPLOIT",
+                "confidence": confidence,
+                "total_loss_usd": usd_value,
+                "affected_chains": list(set(filter(None, [
+                    details.get("source_chain"),
+                    details.get("dest_chain"),
+                ]))),
+                "event_ids": [],
+                "rule_ids": [f"invariant:{inv_name}"],
+                "recommended_actions": [
+                    "IMMEDIATE: Verify bridge lock/mint parity on-chain",
+                    "Check if validator signatures are valid",
+                    "Monitor for additional unbacked withdrawals",
+                    "Consider emergency bridge pause if confirmed",
+                ],
+                "cluster_key": f"inv_{inv_name}_{bridge_id}_{now.strftime('%Y%m%d%H')}",
+                "raw_data": {
+                    "invariant": inv_name,
+                    "bridge_id": bridge_id,
+                    "violation_amount": str(violation_amount),
+                    "details": {k: str(v) for k, v in details.items()},
+                },
+            }
+
+            saved_id = await DatabaseService.save_incident(incident_data)
+            if saved_id:
+                incidents_created_total.labels(severity=severity, source="invariant").inc()
+                logger.warning(
+                    "invariant_violation_incident_created",
+                    incident_id=saved_id,
+                    invariant=inv_name,
+                    bridge=bridge_id,
+                    severity=severity,
+                    violation_amount=violation_amount,
+                )
+                asyncio.create_task(self._send_alert_notification(incident_data))
+        except Exception as e:
+            logger.error("invariant_violation_handler_failed", error=str(e), exc_info=True)
+
     async def _create_incident_from_rule(
         self,
         rule,
@@ -1776,7 +2090,7 @@ class Sentinel3Worker:
                 "event_ids": [db_event.get("event_id", "")],
                 "rule_ids": [rule.id],
                 "recommended_actions": recommended_actions,
-                "cluster_key": f"{rule.id}_{chain_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
+                "cluster_key": f"{rule.id}_{chain_id}_{(contract_address or 'no_contract')[:10]}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
             }
             
             # Add ML analysis to raw_data if available
@@ -1808,6 +2122,7 @@ class Sentinel3Worker:
                     if v > cutoff
                 }
                 
+                incidents_created_total.labels(severity=adjusted_severity, source="rule").inc()
                 logger.info(
                     "incident_created_from_rule",
                     incident_id=saved_id,
@@ -1818,6 +2133,9 @@ class Sentinel3Worker:
                     ml_filtered=ml_confidence is not None,
                     tp_probability=round(ml_confidence, 2) if ml_confidence else None
                 )
+
+                # Send alert notification (fire-and-forget for HIGH/CRITICAL)
+                asyncio.create_task(self._send_alert_notification(incident_data))
         except Exception as e:
             logger.error("incident_creation_failed", error=str(e), rule_id=rule.id, exc_info=True)
     
@@ -1911,7 +2229,7 @@ class Sentinel3Worker:
                     "Check for related transactions in the same block",
                     "Verify if this is a known pattern"
                 ],
-                "cluster_key": f"ml_{prediction.threat_type}_{chain_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
+                "cluster_key": f"ml_{prediction.threat_type}_{chain_id}_{contract_addr}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}",
                 "raw_data": {
                     "ml_prediction": {
                         "threat_type": prediction.threat_type,
@@ -1936,6 +2254,7 @@ class Sentinel3Worker:
                     if v > cutoff
                 }
                 
+                incidents_created_total.labels(severity=severity, source="ml").inc()
                 logger.info(
                     "ml_incident_created",
                     incident_id=saved_id,
@@ -1944,22 +2263,123 @@ class Sentinel3Worker:
                     severity=severity,
                     chain=chain_id
                 )
+
+                # Send alert notification (fire-and-forget for HIGH/CRITICAL)
+                asyncio.create_task(self._send_alert_notification(incident_data))
         except Exception as e:
             logger.error("ml_incident_creation_failed", error=str(e), exc_info=True)
-    
+
+    async def _send_alert_notification(self, incident_data: Dict):
+        """
+        Send alert notification for HIGH/CRITICAL incidents via Slack and Telegram.
+
+        Direct HTTP calls — no dependency on the full AlertRouter/Incident model chain.
+        Fire-and-forget: failures are logged but never block incident creation.
+        """
+        severity = incident_data.get("severity", "LOW")
+        if severity not in ("CRITICAL", "HIGH"):
+            return
+
+        title = incident_data.get("title", "Security Incident")
+        summary = incident_data.get("summary", "")
+        chains = ", ".join(incident_data.get("affected_chains", []))
+        loss_usd = incident_data.get("total_loss_usd", 0)
+        incident_id = incident_data.get("incident_id", "unknown")
+
+        # Format loss string
+        if loss_usd and loss_usd > 0:
+            if loss_usd >= 1_000_000:
+                loss_str = f"${loss_usd/1_000_000:,.1f}M"
+            elif loss_usd >= 1_000:
+                loss_str = f"${loss_usd/1_000:,.1f}K"
+            else:
+                loss_str = f"${loss_usd:,.0f}"
+        else:
+            loss_str = "Unknown"
+
+        emoji = "\U0001f6a8\U0001f6a8\U0001f6a8" if severity == "CRITICAL" else "\U0001f6a8"
+
+        # ---- Slack Webhook ----
+        slack_url = os.getenv("SLACK_WEBHOOK_URL", "")
+        if slack_url:
+            try:
+                import httpx
+                payload = {
+                    "blocks": [
+                        {
+                            "type": "header",
+                            "text": {
+                                "type": "plain_text",
+                                "text": f"{emoji} {severity}: {title}",
+                                "emoji": True
+                            }
+                        },
+                        {
+                            "type": "section",
+                            "fields": [
+                                {"type": "mrkdwn", "text": f"*Severity:* {severity}"},
+                                {"type": "mrkdwn", "text": f"*Chains:* {chains}"},
+                                {"type": "mrkdwn", "text": f"*Est. Exposure:* {loss_str}"},
+                                {"type": "mrkdwn", "text": f"*Incident:* `{incident_id[:24]}`"},
+                            ]
+                        },
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f"*Summary:* {summary[:500]}"}
+                        }
+                    ]
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(slack_url, json=payload)
+                    if resp.status_code == 200:
+                        alerts_sent_total.labels(channel="slack", severity=severity).inc()
+                        logger.info("slack_alert_sent", incident_id=incident_id, severity=severity)
+                    else:
+                        alerts_failed_total.labels(channel="slack", error_type=f"http_{resp.status_code}").inc()
+                        logger.warning("slack_alert_failed", status=resp.status_code, body=resp.text[:200])
+            except Exception as e:
+                alerts_failed_total.labels(channel="slack", error_type="exception").inc()
+                logger.error("slack_alert_error", error=str(e))
+
+        # ---- Telegram Bot API ----
+        tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        tg_channel = os.getenv("TELEGRAM_CHANNEL_ID", "")
+        if tg_token and tg_channel:
+            try:
+                import httpx
+                message = (
+                    f"{emoji} <b>{severity} ALERT</b>\n\n"
+                    f"<b>{title}</b>\n\n"
+                    f"<b>Chains:</b> {chains}\n"
+                    f"<b>Exposure:</b> {loss_str}\n"
+                    f"<b>ID:</b> <code>{incident_id[:24]}</code>\n\n"
+                    f"{summary[:400]}"
+                )
+                url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
+                payload = {
+                    "chat_id": tg_channel,
+                    "text": message,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        alerts_sent_total.labels(channel="telegram", severity=severity).inc()
+                        logger.info("telegram_alert_sent", incident_id=incident_id, severity=severity)
+                    else:
+                        alerts_failed_total.labels(channel="telegram", error_type=f"http_{resp.status_code}").inc()
+                        logger.warning("telegram_alert_failed", status=resp.status_code, body=resp.text[:200])
+            except Exception as e:
+                alerts_failed_total.labels(channel="telegram", error_type="exception").inc()
+                logger.error("telegram_alert_error", error=str(e))
+
     async def detection_loop(self):
         """Loop B: Consume events from bus and process."""
         logger.info("detection_loop_started")
         
         # Import database service for event persistence
         from src.database.service import DatabaseService
-        
-        # Load YAML detection rules
-        from src.rules.engine import RuleEngine
-        rule_engine = RuleEngine()
-        rules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "rules")
-        rules_loaded = rule_engine.load_rules_from_directory(rules_dir)
-        logger.info("yaml_rules_loaded", count=rules_loaded, stats=rule_engine.stats())
         
         while self.running:
             try:
@@ -2013,38 +2433,9 @@ class Sentinel3Worker:
                             status=event_data.get("status", "unknown")
                         )
                         
-                        # Evaluate YAML rules against this event
-                        try:
-                            rule_matches = rule_engine.evaluate(event_data)
-                            if rule_matches:
-                                for match in rule_matches:
-                                    logger.warning(
-                                        "yaml_rule_triggered",
-                                        rule_id=match.rule.id,
-                                        rule_name=match.rule.name,
-                                        severity=match.rule.severity,
-                                        confidence=match.rule.confidence,
-                                        chain=chain_id,
-                                        event_type=event_data.get("event_type"),
-                                        tx_hash=event_data.get("tx_hash", "")[:20]
-                                    )
-                                    # Update event severity based on rule
-                                    if match.rule.is_critical:
-                                        db_event["severity"] = "CRITICAL"
-                                    elif match.rule.is_high and db_event["severity"] not in ["CRITICAL"]:
-                                        db_event["severity"] = "HIGH"
-                                    
-                                    # Create incident for HIGH and CRITICAL severity rules
-                                    if match.rule.severity.upper() in ["HIGH", "CRITICAL"]:
-                                        await self._create_incident_from_rule(
-                                            rule=match.rule,
-                                            event_data=event_data,
-                                            db_event=db_event,
-                                            match_details=match.match_details
-                                        )
-                        except Exception as rule_err:
-                            logger.debug("rule_evaluation_error", error=str(rule_err))
-                        
+                        # Rule evaluation happens in _save_event_to_db handler only
+                        # (removed duplicate evaluation here to prevent velocity counter inflation)
+
                         worker_events_processed_total.labels(
                             chain=chain_id,
                             status=event_data.get("status", "unknown")
@@ -2308,10 +2699,35 @@ class Sentinel3Worker:
         
         uptime_task = asyncio.create_task(update_uptime())
         
+        # Start periodic feedback loop evaluation (every 5 min)
+        async def feedback_loop_evaluation():
+            """Periodically evaluate rules and auto-suppress/unsuppress based on FP rates."""
+            try:
+                from src.rules.feedback_loop import get_feedback_loop
+                fl = get_feedback_loop()
+            except Exception as e:
+                logger.warning("feedback_loop_task_disabled", error=str(e))
+                return
+
+            while self.running:
+                await asyncio.sleep(300)  # 5 minutes
+                try:
+                    actions = fl.evaluate_rules()
+                    non_healthy = [a for a in actions if a[1] != "healthy"]
+                    if non_healthy:
+                        logger.info(
+                            "feedback_loop_evaluation",
+                            actions=[f"{a[0]}:{a[1]}({a[2]:.0%})" for a in non_healthy],
+                        )
+                except Exception as e:
+                    logger.warning("feedback_loop_evaluation_error", error=str(e))
+
+        feedback_task = asyncio.create_task(feedback_loop_evaluation())
+
         logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled, continuous_learning=continuous_learning_enabled)
-        
+
         # Wait for tasks
-        tasks = [ingestion_task, detection_task, uptime_task]
+        tasks = [ingestion_task, detection_task, uptime_task, feedback_task]
         if runtime_task:
             tasks.append(runtime_task)
         if continuous_learning_task:
@@ -2362,12 +2778,16 @@ async def health_handler(request):
     uptime = (datetime.now(timezone.utc) - start_time).total_seconds()
     
     if is_ready and worker_instance and worker_instance.running:
+        cb_stats = worker_instance.circuit_breaker.get_stats() if hasattr(worker_instance, 'circuit_breaker') else {}
+        connected = [cid for cid, l in worker_instance.listeners.items() if l and l.w3] if worker_instance.listeners else []
         return web.json_response({
             "status": "healthy",
             "ready": True,
             "uptime_seconds": uptime,
             "chains_monitored": len(worker_instance.listeners) if worker_instance.listeners else 0,
-            "bus_type": type(worker_instance.bus).__name__ if worker_instance.bus else "none"
+            "chains_connected": len(connected),
+            "bus_type": type(worker_instance.bus).__name__ if worker_instance.bus else "none",
+            "circuit_breakers": cb_stats,
         })
     elif init_error:
         return web.json_response({
@@ -2392,9 +2812,11 @@ async def root_handler(request):
 
 async def metrics_handler(request):
     """Prometheus metrics endpoint."""
+    # aiohttp rejects charset in content_type — strip it
+    ct = CONTENT_TYPE_LATEST.split(";")[0]
     return Response(
         body=generate_latest(),
-        content_type=CONTENT_TYPE_LATEST
+        content_type=ct
     )
 
 
@@ -2447,15 +2869,17 @@ async def main():
     sys.stdout.flush()
     sys.stderr.flush()
     
-    # Handle graceful shutdown
-    def signal_handler(sig, frame):
-        print(f"[WORKER] Signal received: {sig}", flush=True)
-        logger.info("signal_received", signal=sig)
-        if worker_instance:
-            asyncio.create_task(worker_instance.stop())
-    
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    # Handle graceful shutdown via event loop signal handlers
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def signal_handler():
+        print("[WORKER] Shutdown signal received", flush=True)
+        logger.info("signal_received")
+        shutdown_event.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, signal_handler)
     
     try:
         # STEP 1: Create and bind HTTP server IMMEDIATELY (no blocking operations before this)
@@ -2519,12 +2943,21 @@ async def main():
             logger.error("unexpected_error_in_main", error=str(e), exc_info=True)
         
         # Keep server running even if init fails
-        print(f"[WORKER] Server will continue running for health checks", flush=True)
-        logger.info("health_server_running", message="Server will continue running for health checks")
-        
-        # Wait indefinitely (until SIGTERM)
-        while True:
-            await asyncio.sleep(60.0)
+        print("[WORKER] Server will continue running for health checks", flush=True)
+        logger.info("health_server_running")
+
+        # Wait until shutdown signal
+        await shutdown_event.wait()
+
+        # Graceful drain: let in-flight work finish
+        print("[WORKER] Draining in-flight work (30s timeout)...", flush=True)
+        if worker_instance:
+            try:
+                await asyncio.wait_for(worker_instance.stop(), timeout=25.0)
+                print("[WORKER] Worker drained successfully", flush=True)
+            except asyncio.TimeoutError:
+                print("[WORKER] Drain timeout — forcing shutdown", flush=True)
+                logger.warning("drain_timeout")
             
     except Exception as e:
         # Critical error - log and re-raise so Cloud Run sees the failure

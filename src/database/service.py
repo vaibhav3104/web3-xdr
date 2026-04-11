@@ -101,7 +101,7 @@ class DatabaseService:
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
                         block_timestamp, contract_address, severity, status, amount, amount_usd,
-                        from_address, to_address, raw_data, created_at
+                        from_address, to_address, raw_data, log_index, created_at
                     ) VALUES (
                         gen_random_uuid(),
                         :event_id,
@@ -118,9 +118,10 @@ class DatabaseService:
                         :from_address,
                         :to_address,
                         CAST(:raw_data AS JSONB),
+                        COALESCE(:log_index, 0),
                         NOW()
                     )
-                    ON CONFLICT (event_id) DO NOTHING
+                    ON CONFLICT (chain_id, tx_hash, log_index) DO NOTHING
                     """)
                     
                     # Execute for each event in individual savepoints to handle errors
@@ -203,7 +204,8 @@ class DatabaseService:
                                 "amount_usd": amount_usd_str,
                                 "from_address": event.get("from_address"),
                                 "to_address": event.get("to_address"),
-                                "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None
+                                "raw_data": json.dumps(event.get("raw_data", {})) if event.get("raw_data") else None,
+                                "log_index": event.get("log_index", 0),
                             })
                             await savepoint.commit()
                             saved_count += 1
@@ -657,10 +659,10 @@ class DatabaseService:
             query = select(EventModel).where(EventModel.event_id == event_id)
             result = await session.execute(query)
             event = result.scalar_one_or_none()
-            
+
             if not event:
                 return None
-            
+
             return {
                 "event_id": event.event_id,
                 "event_type": event.event_type,
@@ -675,6 +677,41 @@ class DatabaseService:
                 "to_address": event.to_address,
                 "raw_data": event.raw_data
             }
+
+    @staticmethod
+    async def get_events_by_ids(event_ids: list, limit: int = 100) -> List[Dict]:
+        """
+        Batch-fetch events by a list of event_ids (single query, avoids N+1).
+        """
+        if not event_ids:
+            return []
+        async with DatabaseManager.get_session() as session:
+            query = (
+                select(EventModel)
+                .where(EventModel.event_id.in_(event_ids[:limit]))
+                .order_by(EventModel.block_timestamp.desc())
+            )
+            result = await session.execute(query)
+            events = result.scalars().all()
+
+            # Preserve the original ordering from event_ids
+            event_map = {}
+            for e in events:
+                event_map[e.event_id] = {
+                    "event_id": e.event_id,
+                    "event_type": e.event_type,
+                    "chain": e.chain_id,
+                    "contract_address": e.contract_address,
+                    "amount": float(e.amount or 0),
+                    "amount_usd": float(e.amount_usd or 0),
+                    "timestamp": e.block_timestamp.isoformat() if e.block_timestamp else "",
+                    "tx_hash": e.tx_hash or "",
+                    "severity": e.severity or "INFO",
+                    "from_address": e.from_address,
+                    "to_address": e.to_address,
+                    "raw_data": e.raw_data,
+                }
+            return [event_map[eid] for eid in event_ids[:limit] if eid in event_map]
     
     @staticmethod
     async def get_events_by_type(
@@ -1139,6 +1176,78 @@ class DatabaseService:
                 await session.rollback()
                 return False
     
+    @staticmethod
+    async def write_audit_log(
+        incident_id: str,
+        action: str,
+        previous_status: str,
+        new_status: str,
+        analyst_id: str = None,
+        notes: str = None,
+        metadata: dict = None,
+    ) -> bool:
+        """Write an immutable audit log entry for an incident status change."""
+        async with DatabaseManager.get_session() as session:
+            try:
+                from sqlalchemy import text
+                await session.execute(
+                    text("""
+                        INSERT INTO incident_audit_log
+                            (id, incident_id, action, previous_status, new_status, analyst_id, notes)
+                        VALUES
+                            (gen_random_uuid(), :incident_id, :action, :prev, :new, :analyst, :notes)
+                    """),
+                    {
+                        "incident_id": incident_id,
+                        "action": action,
+                        "prev": previous_status,
+                        "new": new_status,
+                        "analyst": analyst_id,
+                        "notes": notes,
+                    }
+                )
+                await session.commit()
+                return True
+            except Exception as e:
+                logger.error("write_audit_log_error", incident_id=incident_id, error=str(e))
+                await session.rollback()
+                return False
+
+    @staticmethod
+    async def get_incident_audit_log(incident_id: str) -> list:
+        """Get all audit log entries for an incident."""
+        async with DatabaseManager.get_session() as session:
+            try:
+                from sqlalchemy import text
+                result = await session.execute(
+                    text("""
+                        SELECT id, incident_id, action, previous_status, new_status,
+                               analyst_id, notes, metadata_json, created_at
+                        FROM incident_audit_log
+                        WHERE incident_id = :incident_id
+                        ORDER BY created_at ASC
+                    """),
+                    {"incident_id": incident_id}
+                )
+                rows = result.fetchall()
+                return [
+                    {
+                        "id": str(r[0]),
+                        "incident_id": r[1],
+                        "action": r[2],
+                        "previous_status": r[3],
+                        "new_status": r[4],
+                        "analyst_id": r[5],
+                        "notes": r[6],
+                        "metadata": r[7],
+                        "created_at": r[8].isoformat() if r[8] else None,
+                    }
+                    for r in rows
+                ]
+            except Exception as e:
+                logger.error("get_audit_log_error", incident_id=incident_id, error=str(e))
+                return []
+
     @staticmethod
     async def update_incident_feedback(
         incident_id: str,

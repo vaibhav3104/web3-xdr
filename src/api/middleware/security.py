@@ -6,10 +6,12 @@ Implements rate limiting, API key validation, and security headers
 import os
 import time
 import hashlib
+import uuid
 from typing import Dict, Optional, Callable
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import asyncio
+import structlog
 
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader, HTTPBearer
@@ -25,9 +27,11 @@ logger = structlog.get_logger(__name__)
 
 class RateLimiter:
     """
-    Token bucket rate limiter with sliding window
+    Redis-backed sliding window rate limiter with in-memory fallback.
+    Uses sorted sets in Redis for distributed, replica-safe rate limiting.
+    Falls back to in-memory when Redis is unavailable.
     """
-    
+
     def __init__(
         self,
         requests_per_minute: int = 60,
@@ -37,63 +41,100 @@ class RateLimiter:
         self.rpm = requests_per_minute
         self.rph = requests_per_hour
         self.burst = burst_limit
-        
-        # Track requests per IP
-        self.minute_requests: Dict[str, list] = defaultdict(list)
-        self.hour_requests: Dict[str, list] = defaultdict(list)
-        
+
+        # In-memory fallback
+        self._mem_minute: Dict[str, list] = defaultdict(list)
+        self._mem_hour: Dict[str, list] = defaultdict(list)
         self._lock = asyncio.Lock()
-    
-    async def is_allowed(self, client_ip: str) -> tuple[bool, dict]:
-        """
-        Check if request is allowed under rate limits
-        Returns (allowed, info_dict)
-        """
-        now = time.time()
-        minute_ago = now - 60
-        hour_ago = now - 3600
-        
-        async with self._lock:
-            # Clean old entries
-            self.minute_requests[client_ip] = [
-                t for t in self.minute_requests[client_ip] if t > minute_ago
-            ]
-            self.hour_requests[client_ip] = [
-                t for t in self.hour_requests[client_ip] if t > hour_ago
-            ]
-            
-            minute_count = len(self.minute_requests[client_ip])
-            hour_count = len(self.hour_requests[client_ip])
-            
-            # Check limits
+
+        # Redis (lazy init)
+        self._redis = None
+        self._redis_failed = False
+
+    async def _get_redis(self):
+        if self._redis_failed:
+            return None
+        if self._redis is not None:
+            return self._redis
+        try:
+            import redis.asyncio as aioredis
+            url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            self._redis = aioredis.from_url(url, decode_responses=True)
+            await self._redis.ping()
+            logger.info("rate_limiter_redis_connected")
+            return self._redis
+        except Exception as e:
+            logger.warning("rate_limiter_redis_fallback", error=str(e))
+            self._redis_failed = True
+            return None
+
+    async def _check_redis(self, client_ip: str, now: float) -> tuple[bool, dict]:
+        """Check rate limits using Redis sorted sets."""
+        r = await self._get_redis()
+        if not r:
+            return await self._check_memory(client_ip, now)
+
+        try:
+            minute_key = f"rl:m:{client_ip}"
+            hour_key = f"rl:h:{client_ip}"
+            pipe = r.pipeline()
+
+            # Remove expired entries and count
+            pipe.zremrangebyscore(minute_key, 0, now - 60)
+            pipe.zremrangebyscore(hour_key, 0, now - 3600)
+            pipe.zcard(minute_key)
+            pipe.zcard(hour_key)
+            results = await pipe.execute()
+            minute_count = results[2]
+            hour_count = results[3]
+
             if minute_count >= self.rpm:
-                return False, {
-                    "error": "rate_limit_exceeded",
-                    "limit": "per_minute",
-                    "retry_after": 60 - (now - self.minute_requests[client_ip][0])
-                }
-            
+                return False, {"error": "rate_limit_exceeded", "limit": "per_minute", "retry_after": 60}
             if hour_count >= self.rph:
-                return False, {
-                    "error": "rate_limit_exceeded", 
-                    "limit": "per_hour",
-                    "retry_after": 3600 - (now - self.hour_requests[client_ip][0])
-                }
-            
-            # Allow and record
-            self.minute_requests[client_ip].append(now)
-            self.hour_requests[client_ip].append(now)
-            
+                return False, {"error": "rate_limit_exceeded", "limit": "per_hour", "retry_after": 3600}
+
+            # Record this request
+            pipe2 = r.pipeline()
+            pipe2.zadd(minute_key, {str(now): now})
+            pipe2.expire(minute_key, 120)
+            pipe2.zadd(hour_key, {str(now): now})
+            pipe2.expire(hour_key, 7200)
+            await pipe2.execute()
+
             return True, {
                 "remaining_minute": self.rpm - minute_count - 1,
                 "remaining_hour": self.rph - hour_count - 1
             }
+        except Exception:
+            # Redis error — fall back to memory
+            return await self._check_memory(client_ip, now)
+
+    async def _check_memory(self, client_ip: str, now: float) -> tuple[bool, dict]:
+        """Fallback in-memory rate limiting."""
+        async with self._lock:
+            self._mem_minute[client_ip] = [t for t in self._mem_minute[client_ip] if t > now - 60]
+            self._mem_hour[client_ip] = [t for t in self._mem_hour[client_ip] if t > now - 3600]
+
+            mc = len(self._mem_minute[client_ip])
+            hc = len(self._mem_hour[client_ip])
+
+            if mc >= self.rpm:
+                return False, {"error": "rate_limit_exceeded", "limit": "per_minute", "retry_after": 60}
+            if hc >= self.rph:
+                return False, {"error": "rate_limit_exceeded", "limit": "per_hour", "retry_after": 3600}
+
+            self._mem_minute[client_ip].append(now)
+            self._mem_hour[client_ip].append(now)
+            return True, {"remaining_minute": self.rpm - mc - 1, "remaining_hour": self.rph - hc - 1}
+
+    async def is_allowed(self, client_ip: str) -> tuple[bool, dict]:
+        return await self._check_redis(client_ip, time.time())
 
 
 # Global rate limiter instance
 rate_limiter = RateLimiter(
-    requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "120")),
-    requests_per_hour=int(os.getenv("RATE_LIMIT_RPH", "3000")),
+    requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "300")),
+    requests_per_hour=int(os.getenv("RATE_LIMIT_RPH", "10000")),
     burst_limit=int(os.getenv("RATE_LIMIT_BURST", "20"))
 )
 
@@ -165,21 +206,39 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
     Add security headers to all responses
     """
-    
+
+    # CSP allows our CDN scripts (Tailwind, Alpine, Chart.js, D3, DOMPurify, Google Fonts)
+    CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://unpkg.com "
+        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://d3js.org; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none';"
+    )
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         response = await call_next(request)
-        
-        # Security headers
+
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        
+        response.headers["Content-Security-Policy"] = self.CSP
+
+        # Prevent caching of HTML/JS so browser always gets latest
+        path = request.url.path
+        if path.endswith(('.html', '.js')) or path == '/':
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+
         # HSTS (only in production)
         if os.getenv("ENVIRONMENT") == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        
+
         return response
 
 
@@ -272,6 +331,49 @@ def require_api_key(scopes: list = None):
 
 
 # ============================================================================
+# Error Sanitization
+# ============================================================================
+
+class ErrorSanitizationMiddleware(BaseHTTPMiddleware):
+    """
+    Catches unhandled exceptions and returns sanitized JSON errors.
+    In production, stack traces are never exposed.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            import traceback
+            import json
+            import uuid
+
+            error_id = uuid.uuid4().hex[:12]
+            is_prod = os.getenv("ENVIRONMENT") == "production"
+
+            logger.error(
+                "unhandled_exception",
+                error_id=error_id,
+                path=request.url.path,
+                method=request.method,
+                error=str(exc),
+                traceback=traceback.format_exc() if not is_prod else None
+            )
+
+            body = {
+                "error": "internal_server_error",
+                "message": "An unexpected error occurred." if is_prod else str(exc),
+                "error_id": error_id,
+            }
+
+            return Response(
+                content=json.dumps(body),
+                status_code=500,
+                media_type="application/json"
+            )
+
+
+# ============================================================================
 # Request Logging
 # ============================================================================
 
@@ -286,21 +388,47 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.url.path in self.EXCLUDE_PATHS:
             return await call_next(request)
-        
+
         start_time = time.time()
-        
+
+        # Assign request ID for correlation
+        request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+
         # Get client info
         client_ip = request.client.host if request.client else "unknown"
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             client_ip = forwarded.split(",")[0].strip()
-        
+
         # Process request
         response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
         
         # Calculate duration
         duration_ms = (time.time() - start_time) * 1000
         
+        # Track Prometheus metrics
+        try:
+            from src.metrics import track_api_request
+            # Normalize path to avoid high-cardinality labels
+            path = request.url.path
+            # Collapse IDs: /api/incidents/abc123 → /api/incidents/{id}
+            parts = path.strip("/").split("/")
+            normalized = []
+            for i, part in enumerate(parts):
+                if i > 0 and len(part) > 20:
+                    normalized.append("{id}")
+                elif part.startswith("0x") and len(part) > 10:
+                    normalized.append("{address}")
+                else:
+                    normalized.append(part)
+            norm_path = "/" + "/".join(normalized)
+            track_api_request(request.method, norm_path, response.status_code, duration_ms / 1000.0)
+        except Exception:
+            pass
+
         # Log request
         logger.info(
             "api_request",
@@ -311,7 +439,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             client_ip=client_ip,
             user_agent=request.headers.get("User-Agent", "")[:100]
         )
-        
+
         return response
 
 

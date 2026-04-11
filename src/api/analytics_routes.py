@@ -3,11 +3,16 @@ Analytics API Routes for Sentinel3.
 Provides historical data, charts, and risk scoring endpoints.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 import structlog
+
+from ..database.connection import DatabaseManager
+from .cache import cache_get, cache_set
 
 logger = structlog.get_logger()
 
@@ -59,78 +64,81 @@ async def get_historical_analytics(
     - Value at risk
     - Events breakdown by day, chain, type, severity
     """
-    from ..database.service import DatabaseService
-    from ..database.connection import DatabaseManager
-    
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     try:
-        # Get events from database
-        events, _ = await DatabaseService.get_events(
-            start_time=start_time,
-            end_time=end_time,
-            limit=10000  # Get a good sample
-        )
-        
-        # Calculate statistics
-        total_events = len(events)
-        
-        # Group by day
-        events_by_day = {}
-        events_by_chain = {}
-        events_by_type = {}
-        events_by_severity = {}
-        total_value = 0
-        
-        for event in events:
-            # By day
-            timestamp = event.get('block_timestamp')
-            if timestamp:
-                if isinstance(timestamp, str):
-                    try:
-                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    except:
-                        timestamp = None
-                if timestamp:
-                    day_key = timestamp.strftime('%Y-%m-%d')
-                    events_by_day[day_key] = events_by_day.get(day_key, 0) + 1
-            
-            # By chain
-            chain = event.get('chain_id', 'unknown')
-            events_by_chain[chain] = events_by_chain.get(chain, 0) + 1
-            
-            # By type
-            event_type = event.get('event_type', 'unknown')
-            events_by_type[event_type] = events_by_type.get(event_type, 0) + 1
-            
-            # By severity
-            severity = (event.get('severity') or 'info').upper()
-            events_by_severity[severity] = events_by_severity.get(severity, 0) + 1
-            
-            # Value at risk
-            amount_usd = event.get('amount_usd')
-            if amount_usd and isinstance(amount_usd, (int, float)):
-                total_value += float(amount_usd)
-        
-        # Convert events_by_day to sorted list
-        day_list = [
-            {"date": k, "count": v}
-            for k, v in sorted(events_by_day.items())
-        ]
-        
+        cached = await cache_get("analytics_hist", days)
+        if cached is not None:
+            return cached
+
+        # SQL queries for all aggregations (avoids fetching 10k events into memory)
+        events_by_day_q = text("""
+            SELECT DATE(block_timestamp) as day, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY DATE(block_timestamp)
+            ORDER BY day
+        """)
+        events_by_chain_q = text("""
+            SELECT chain_id, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY chain_id
+        """)
+        events_by_type_q = text("""
+            SELECT event_type, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY event_type
+        """)
+        events_by_severity_q = text("""
+            SELECT UPPER(COALESCE(severity, 'INFO')) as sev, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY UPPER(COALESCE(severity, 'INFO'))
+        """)
+        total_value_q = text("""
+            SELECT COUNT(*) as total_events, COALESCE(SUM(amount_usd), 0) as total_value
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+        """)
+
+        params = {"start": start_time, "end": end_time}
+
+        # Run all aggregations via a single session — consume results before session closes
+        async with DatabaseManager.get_session() as session:
+            day_res = await session.execute(events_by_day_q, params)
+            day_rows = day_res.fetchall()
+            chain_res = await session.execute(events_by_chain_q, params)
+            chain_rows = chain_res.fetchall()
+            type_res = await session.execute(events_by_type_q, params)
+            type_rows = type_res.fetchall()
+            sev_res = await session.execute(events_by_severity_q, params)
+            sev_rows = sev_res.fetchall()
+            totals_res = await session.execute(total_value_q, params)
+            totals_row = totals_res.fetchone()
+
+        # Build response dicts from SQL results
+        day_list = [{"date": str(row[0]), "count": row[1]} for row in day_rows]
+        events_by_chain = {(row[0] or 'unknown'): row[1] for row in chain_rows}
+        events_by_type = {(row[0] or 'unknown'): row[1] for row in type_rows}
+        events_by_severity = {row[0]: row[1] for row in sev_rows}
+        total_events = totals_row[0] if totals_row else 0
+        total_value = float(totals_row[1]) if totals_row else 0
+
         # Get incident count from shared state
         from ..shared_state import monitor_state
         incidents = monitor_state.get_incidents()
         total_incidents = len(incidents)
-        
+
         # Calculate high severity events as "incidents"
         high_severity_count = (
-            events_by_severity.get('CRITICAL', 0) + 
+            events_by_severity.get('CRITICAL', 0) +
             events_by_severity.get('HIGH', 0)
         )
-        
-        return {
+
+        result = {
             "period_days": days,
             "start_date": start_time.isoformat(),
             "end_date": end_time.isoformat(),
@@ -144,7 +152,9 @@ async def get_historical_analytics(
             "events_by_type": events_by_type,
             "events_by_severity": events_by_severity
         }
-        
+        await cache_set("analytics_hist", days, value=result, ttl=300)
+        return result
+
     except Exception as e:
         logger.error("historical_analytics_error", error=str(e))
         # Return empty stats on error
@@ -168,51 +178,49 @@ async def get_incidents_over_time(
     """
     Get incident/event counts over time for charting.
     """
-    from ..database.service import DatabaseService
-    
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     try:
-        events, _ = await DatabaseService.get_events(
-            start_time=start_time,
-            end_time=end_time,
-            limit=10000
-        )
-        
-        # Group by time period
-        time_buckets = {}
-        
-        for event in events:
-            timestamp = event.get('block_timestamp')
-            if timestamp:
-                if isinstance(timestamp, str):
-                    try:
-                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    except:
-                        continue
-                
-                if granularity == "hour":
-                    key = timestamp.strftime('%Y-%m-%d %H:00')
-                elif granularity == "week":
-                    # Get week start (Monday)
-                    week_start = timestamp - timedelta(days=timestamp.weekday())
-                    key = f"Week of {week_start.strftime('%Y-%m-%d')}"
-                else:  # day
-                    key = timestamp.strftime('%Y-%m-%d')
-                
-                time_buckets[key] = time_buckets.get(key, 0) + 1
-        
-        # Sort and format
-        sorted_data = sorted(time_buckets.items())
-        
-        return {
-            "labels": [item[0] for item in sorted_data],
-            "data": [item[1] for item in sorted_data],
+        cached = await cache_get("chart_incidents", days, granularity)
+        if cached is not None:
+            return cached
+
+        # Build SQL GROUP BY based on granularity
+        if granularity == "hour":
+            bucket_expr = "DATE_TRUNC('hour', block_timestamp)"
+            fmt_label = "TO_CHAR(DATE_TRUNC('hour', block_timestamp), 'YYYY-MM-DD HH24:00')"
+        elif granularity == "week":
+            bucket_expr = "DATE_TRUNC('week', block_timestamp)"
+            fmt_label = "'Week of ' || TO_CHAR(DATE_TRUNC('week', block_timestamp), 'YYYY-MM-DD')"
+        else:  # day
+            bucket_expr = "DATE(block_timestamp)"
+            fmt_label = "TO_CHAR(DATE(block_timestamp), 'YYYY-MM-DD')"
+
+        query = text(f"""
+            SELECT {fmt_label} as label, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY {bucket_expr}
+            ORDER BY {bucket_expr}
+        """)
+
+        async with DatabaseManager.get_session() as session:
+            res = await session.execute(query, {"start": start_time, "end": end_time})
+            rows = res.fetchall()
+
+        labels = [str(row[0]) for row in rows]
+        data = [row[1] for row in rows]
+
+        result = {
+            "labels": labels,
+            "data": data,
             "granularity": granularity,
-            "total": sum(time_buckets.values())
+            "total": sum(data)
         }
-        
+        await cache_set("chart_incidents", days, granularity, value=result, ttl=300)
+        return result
+
     except Exception as e:
         logger.error("incidents_chart_error", error=str(e))
         return {"labels": [], "data": [], "granularity": granularity, "total": 0}
@@ -225,26 +233,28 @@ async def get_events_by_chain(
     """
     Get event distribution by blockchain chain.
     """
-    from ..database.service import DatabaseService
-    
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     try:
-        events, _ = await DatabaseService.get_events(
-            start_time=start_time,
-            end_time=end_time,
-            limit=10000
-        )
-        
-        chain_counts = {}
-        for event in events:
-            chain = event.get('chain_id', 'unknown')
-            chain_counts[chain] = chain_counts.get(chain, 0) + 1
-        
-        # Sort by count descending
-        sorted_chains = sorted(chain_counts.items(), key=lambda x: x[1], reverse=True)
-        
+        cached = await cache_get("chart_chain", days)
+        if cached is not None:
+            return cached
+
+        query = text("""
+            SELECT chain_id, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY chain_id
+            ORDER BY cnt DESC
+        """)
+
+        async with DatabaseManager.get_session() as session:
+            res = await session.execute(query, {"start": start_time, "end": end_time})
+            rows = res.fetchall()
+
+        sorted_chains = [(row[0] or 'unknown', row[1]) for row in rows]
+
         # Chain colors
         chain_colors = {
             'ethereum': '#627EEA',
@@ -257,14 +267,16 @@ async def get_events_by_chain(
             'base': '#0052FF',
             'unknown': '#888888'
         }
-        
-        return {
+
+        result = {
             "labels": [item[0].title() for item in sorted_chains],
             "data": [item[1] for item in sorted_chains],
             "colors": [chain_colors.get(item[0].lower(), '#888888') for item in sorted_chains],
-            "total": sum(chain_counts.values())
+            "total": sum(item[1] for item in sorted_chains)
         }
-        
+        await cache_set("chart_chain", days, value=result, ttl=300)
+        return result
+
     except Exception as e:
         logger.error("chain_chart_error", error=str(e))
         return {"labels": [], "data": [], "colors": [], "total": 0}
@@ -282,15 +294,17 @@ async def get_attack_types_distribution(
     2. Events with threat_category in raw_data (from ML scanner)
     """
     from ..database.service import DatabaseService
-    from ..database.connection import DatabaseManager
-    from sqlalchemy import text
-    
+
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     attack_counts = {}
-    
+
     try:
+        cached = await cache_get("chart_attack_type", days)
+        if cached is not None:
+            return cached
+
         # 1. Get attack types from INCIDENTS table (primary source)
         async with DatabaseManager.get_session() as session:
             incident_query = text("""
@@ -361,13 +375,15 @@ async def get_attack_types_distribution(
             'No Attacks Detected': '#22c55e',    # Green (good!)
         }
         
-        return {
+        result = {
             "labels": [item[0] for item in sorted_types],
             "data": [item[1] for item in sorted_types],
             "colors": [attack_colors.get(item[0], '#8b5cf6') for item in sorted_types],
             "total": sum(attack_counts.values())
         }
-        
+        await cache_set("chart_attack_type", days, value=result, ttl=300)
+        return result
+
     except Exception as e:
         logger.error("attack_type_chart_error", error=str(e))
         return {"labels": ["Error Loading Data"], "data": [0], "colors": ["#6b7280"], "total": 0}
@@ -379,31 +395,36 @@ async def get_events_by_event_type(
 ):
     """
     Get distribution of EVENT TYPES (transaction types like transfer, swap, etc.).
-    
+
     This is different from attack types - these are the underlying blockchain event types.
     """
-    from ..database.service import DatabaseService
-    
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     try:
-        events, _ = await DatabaseService.get_events(
-            start_time=start_time,
-            end_time=end_time,
-            limit=10000
-        )
-        
-        type_counts = {}
-        for event in events:
-            event_type = event.get('event_type', 'unknown')
-            # Normalize type names
-            type_name = event_type.replace('_', ' ').title()
-            type_counts[type_name] = type_counts.get(type_name, 0) + 1
-        
-        # Sort by count descending, take top 10
-        sorted_types = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        
+        cached = await cache_get("chart_event_type", days)
+        if cached is not None:
+            return cached
+
+        query = text("""
+            SELECT COALESCE(event_type, 'unknown') as etype, COUNT(*) as cnt
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+            GROUP BY event_type
+            ORDER BY cnt DESC
+            LIMIT 10
+        """)
+
+        async with DatabaseManager.get_session() as session:
+            res = await session.execute(query, {"start": start_time, "end": end_time})
+            rows = res.fetchall()
+
+        # Normalize type names (replace underscores, title-case)
+        sorted_types = [
+            (row[0].replace('_', ' ').title(), row[1])
+            for row in rows
+        ]
+
         # Event type colors
         event_colors = {
             'Transfer': '#3b8aff',
@@ -417,14 +438,18 @@ async def get_events_by_event_type(
             'Unstake': '#f97316',
             'Unknown': '#6b7280',
         }
-        
-        return {
+
+        total = sum(item[1] for item in sorted_types)
+
+        result = {
             "labels": [item[0] for item in sorted_types],
             "data": [item[1] for item in sorted_types],
             "colors": [event_colors.get(item[0], '#8b5cf6') for item in sorted_types],
-            "total": sum(type_counts.values())
+            "total": total
         }
-        
+        await cache_set("chart_event_type", days, value=result, ttl=300)
+        return result
+
     except Exception as e:
         logger.error("event_type_chart_error", error=str(e))
         return {"labels": [], "data": [], "colors": [], "total": 0}
@@ -442,12 +467,10 @@ async def get_attack_patterns(
     - patterns: Detailed breakdown by attack type
     """
     from ..database.service import DatabaseService
-    from ..database.connection import DatabaseManager
-    from sqlalchemy import text
-    
+
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     try:
         # Attack pattern metadata (icons, categories, descriptions)
         attack_metadata = {
@@ -506,42 +529,33 @@ async def get_attack_patterns(
         async with DatabaseManager.get_session() as session:
             # Get incidents grouped by attack_type
             incident_query = text("""
-                SELECT 
-                    attack_type,
-                    COUNT(*) as cnt,
-                    COALESCE(SUM(total_loss_usd), 0) as total_loss,
-                    array_agg(DISTINCT unnest(affected_chains)) as chains
+                SELECT attack_type, COUNT(*) as cnt, COALESCE(SUM(total_loss_usd), 0) as total_loss
                 FROM incidents
                 WHERE created_at >= :start_time
                 GROUP BY attack_type
                 ORDER BY cnt DESC
             """)
-            
-            try:
-                result = await session.execute(incident_query, {"start_time": start_time})
-                for row in result.fetchall():
-                    attack_type = (row[0] or 'Unknown').replace('_', ' ').title()
-                    attack_counts[attack_type] = row[1]
-                    attack_values[attack_type] = float(row[2]) if row[2] else 0
-                    attack_chains[attack_type] = row[3] if row[3] else []
-                    total_value_lost += attack_values[attack_type]
-            except Exception as query_error:
-                # Simpler query if the complex one fails
-                logger.warning("complex_query_failed", error=str(query_error))
-                simple_query = text("""
-                    SELECT attack_type, COUNT(*) as cnt, COALESCE(SUM(total_loss_usd), 0) as total_loss
-                    FROM incidents
-                    WHERE created_at >= :start_time
-                    GROUP BY attack_type
-                    ORDER BY cnt DESC
-                """)
-                result = await session.execute(simple_query, {"start_time": start_time})
-                for row in result.fetchall():
-                    attack_type = (row[0] or 'Unknown').replace('_', ' ').title()
-                    attack_counts[attack_type] = row[1]
-                    attack_values[attack_type] = float(row[2]) if row[2] else 0
-                    attack_chains[attack_type] = []
-                    total_value_lost += attack_values[attack_type]
+            result = await session.execute(incident_query, {"start_time": start_time})
+            for row in result.fetchall():
+                attack_type = (row[0] or 'Unknown').replace('_', ' ').title()
+                attack_counts[attack_type] = row[1]
+                attack_values[attack_type] = float(row[2]) if row[2] else 0
+                attack_chains[attack_type] = []
+                total_value_lost += attack_values[attack_type]
+
+            # Get distinct chains per attack type
+            chains_query = text("""
+                SELECT attack_type, affected_chains
+                FROM incidents
+                WHERE created_at >= :start_time AND affected_chains IS NOT NULL
+            """)
+            chains_result = await session.execute(chains_query, {"start_time": start_time})
+            for row in chains_result.fetchall():
+                attack_type = (row[0] or 'Unknown').replace('_', ' ').title()
+                if attack_type in attack_chains:
+                    for chain in (row[1] or []):
+                        if chain not in attack_chains[attack_type]:
+                            attack_chains[attack_type].append(chain)
         
         # Also check ML-detected threats in events
         events, _ = await DatabaseService.get_events(
@@ -704,46 +718,38 @@ async def get_value_over_time(
     """
     Get value at risk over time.
     """
-    from ..database.service import DatabaseService
-    
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    
+
     try:
-        events, _ = await DatabaseService.get_events(
-            start_time=start_time,
-            end_time=end_time,
-            limit=10000
-        )
-        
-        # Group value by day
-        value_by_day = {}
-        
-        for event in events:
-            timestamp = event.get('block_timestamp')
-            amount_usd = event.get('amount_usd')
-            
-            if timestamp and amount_usd:
-                if isinstance(timestamp, str):
-                    try:
-                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    except:
-                        continue
-                
-                day_key = timestamp.strftime('%Y-%m-%d')
-                
-                if isinstance(amount_usd, (int, float)):
-                    value_by_day[day_key] = value_by_day.get(day_key, 0) + float(amount_usd)
-        
-        # Sort and format
-        sorted_data = sorted(value_by_day.items())
-        
-        return {
-            "labels": [item[0] for item in sorted_data],
-            "data": [round(item[1], 2) for item in sorted_data],
-            "total": sum(value_by_day.values())
+        cached = await cache_get("chart_value", days)
+        if cached is not None:
+            return cached
+
+        query = text("""
+            SELECT DATE(block_timestamp) as day, SUM(amount_usd) as total_value
+            FROM events
+            WHERE block_timestamp >= :start AND block_timestamp <= :end
+              AND amount_usd IS NOT NULL
+            GROUP BY DATE(block_timestamp)
+            ORDER BY day
+        """)
+
+        async with DatabaseManager.get_session() as session:
+            res = await session.execute(query, {"start": start_time, "end": end_time})
+            rows = res.fetchall()
+
+        labels = [str(row[0]) for row in rows]
+        data = [round(float(row[1]), 2) for row in rows]
+
+        result = {
+            "labels": labels,
+            "data": data,
+            "total": sum(data)
         }
-        
+        await cache_set("chart_value", days, value=result, ttl=300)
+        return result
+
     except Exception as e:
         logger.error("value_chart_error", error=str(e))
         return {"labels": [], "data": [], "total": 0}

@@ -108,6 +108,8 @@ if message_id and message_id ~= "" then
         return {'REPLAY', '', ''}
     end
     redis.call('SADD', processed_key, message_id)
+    -- TTL: expire processed messages after 7 days to prevent unbounded growth
+    redis.call('EXPIRE', processed_key, 604800)
 end
 
 -- Calculate time window
@@ -134,8 +136,9 @@ for i = 1, #locks, 2 do
         end
         
         local lock_amount = tonumber(lock['amount'] or 0)
-        if lock_amount > 0 then
+        if lock_amount > 0 and mint_amount > 0 then
             local diff = math.abs(mint_amount - lock_amount) / lock_amount
+            -- Tolerance covers base config + bridge fee allowance
             if diff <= tolerance then
                 matching_lock_id = lock_id
                 matching_lock_json = cjson.encode(lock)
@@ -204,7 +207,7 @@ for i = 1, #mints, 2 do
         end
         
         local mint_amount = tonumber(mint['amount'] or 0)
-        if mint_amount > 0 then
+        if mint_amount > 0 and lock_amount > 0 then
             local diff = math.abs(mint_amount - lock_amount) / lock_amount
             if diff <= tolerance then
                 matching_mint_id = mint_id
@@ -284,6 +287,12 @@ class RedisStateManager:
         # Local fallback cache (when Redis unavailable)
         self._fallback_mode = False
         self._local_cache: Dict[str, Any] = {}
+
+        # Reconnection state
+        self._reconnect_attempts = 0
+        self._last_reconnect_attempt: Optional[datetime] = None
+        self._max_reconnect_backoff = 300  # 5 minutes max between attempts
+        self._base_reconnect_interval = 10  # start with 10 seconds
         
     @classmethod
     async def get_instance(cls) -> "RedisStateManager":
@@ -357,7 +366,76 @@ class RedisStateManager:
             await self._client.close()
             self._connected = False
             logger.info("redis_disconnected")
-    
+
+    async def try_reconnect(self) -> bool:
+        """
+        Attempt to reconnect to Redis with exponential backoff.
+
+        Call this periodically (e.g., from a health check loop) when in fallback mode.
+        Returns True if reconnection succeeded.
+        """
+        if not self._fallback_mode:
+            return True  # Already connected
+
+        now = datetime.now(timezone.utc)
+
+        # Exponential backoff: 10s, 20s, 40s, 80s, 160s, 300s (capped)
+        backoff = min(
+            self._base_reconnect_interval * (2 ** self._reconnect_attempts),
+            self._max_reconnect_backoff,
+        )
+
+        if self._last_reconnect_attempt:
+            elapsed = (now - self._last_reconnect_attempt).total_seconds()
+            if elapsed < backoff:
+                return False  # Too early to retry
+
+        self._last_reconnect_attempt = now
+        self._reconnect_attempts += 1
+
+        logger.info(
+            "redis_reconnect_attempt",
+            attempt=self._reconnect_attempts,
+            backoff_seconds=backoff,
+        )
+
+        try:
+            if self._client:
+                await self._client.close()
+
+            self._client = await aioredis.from_url(
+                self.config.url,
+                max_connections=self.config.max_connections,
+                socket_timeout=self.config.socket_timeout,
+                socket_connect_timeout=self.config.socket_connect_timeout,
+                retry_on_timeout=self.config.retry_on_timeout,
+                health_check_interval=self.config.health_check_interval,
+                decode_responses=self.config.decode_responses,
+            )
+
+            await self._client.ping()
+            await self._register_lua_scripts()
+
+            self._connected = True
+            self._fallback_mode = False
+            self._reconnect_attempts = 0
+
+            logger.info(
+                "redis_reconnected",
+                after_attempts=self._reconnect_attempts,
+                url=self.config.url.split("@")[-1],
+            )
+            return True
+
+        except Exception as e:
+            logger.warning(
+                "redis_reconnect_failed",
+                attempt=self._reconnect_attempts,
+                next_backoff=min(backoff * 2, self._max_reconnect_backoff),
+                error=str(e),
+            )
+            return False
+
     @property
     def is_connected(self) -> bool:
         """Check if connected to Redis."""
@@ -391,8 +469,11 @@ class RedisStateManager:
             True if stored successfully
         """
         if self._fallback_mode:
-            return self._fallback_add_event(event_id, event_data)
-        
+            # Attempt reconnection before falling back
+            await self.try_reconnect()
+            if self._fallback_mode:
+                return self._fallback_add_event(event_id, event_data)
+
         try:
             timestamp = timestamp or datetime.now(timezone.utc)
             ts_score = timestamp.timestamp()
@@ -505,13 +586,15 @@ class RedisStateManager:
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
         """
         Process a Lock event atomically.
-        
+
         Returns:
             Tuple of (status, matched_mint_data)
             status: 'MATCHED' | 'PENDING'
         """
         if self._fallback_mode:
-            return self._fallback_process_lock(event_id, event_data, correlation_key, amount)
+            await self.try_reconnect()
+            if self._fallback_mode:
+                return self._fallback_process_lock(event_id, event_data, correlation_key, amount)
         
         try:
             pending_locks_key = RedisKeys.PENDING_LOCKS.format(key=correlation_key)
@@ -544,6 +627,8 @@ class RedisStateManager:
             
         except Exception as e:
             logger.error("redis_process_lock_failed", event_id=event_id, error=str(e))
+            self._fallback_mode = True
+            self._connected = False
             return self._fallback_process_lock(event_id, event_data, correlation_key, amount)
     
     async def process_mint_event(
@@ -564,8 +649,10 @@ class RedisStateManager:
             status: 'MATCHED' | 'ORPHAN' | 'REPLAY'
         """
         if self._fallback_mode:
-            return self._fallback_process_mint(event_id, event_data, correlation_key, amount)
-        
+            await self.try_reconnect()
+            if self._fallback_mode:
+                return self._fallback_process_mint(event_id, event_data, correlation_key, amount)
+
         try:
             pending_locks_key = RedisKeys.PENDING_LOCKS.format(key=correlation_key)
             pending_mints_key = RedisKeys.PENDING_MINTS.format(key=correlation_key)
@@ -603,6 +690,8 @@ class RedisStateManager:
             
         except Exception as e:
             logger.error("redis_process_mint_failed", event_id=event_id, error=str(e))
+            self._fallback_mode = True
+            self._connected = False
             return self._fallback_process_mint(event_id, event_data, correlation_key, amount)
     
     async def find_correlated_event(
@@ -655,8 +744,10 @@ class RedisStateManager:
             Tuple of (orphan_lock_ids, orphan_mint_ids)
         """
         if self._fallback_mode:
-            return ([], [])
-        
+            await self.try_reconnect()
+            if self._fallback_mode:
+                return ([], [])
+
         try:
             max_age = max_age_seconds or int(self._correlation_window.total_seconds())
             cutoff_time = (datetime.now(timezone.utc) - timedelta(seconds=max_age)).timestamp()

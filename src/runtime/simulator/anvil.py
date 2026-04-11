@@ -245,10 +245,27 @@ class AnvilSimulator(Simulator):
                 # This is a simplified version - full implementation would use debug_traceCall
                 
                 duration_ms = int((time.time() - start_time) * 1000)
-                
-                # Extract state diff (simplified - would need trace for full diff)
-                state_diff = StateDiffFingerprint()  # Empty for now, will be populated by extract_state_diff
-                
+
+                # Extract state diff via debug_traceCall (prestateTracer)
+                state_diff = StateDiffFingerprint()
+                try:
+                    state_diff = await self.extract_state_diff(
+                        simulation_result={"tx_params": tx_params, "port": port},
+                        protected_addresses=[pending_tx.to_address] if pending_tx.to_address else [],
+                        watched_tokens=[pending_tx.to_address] if pending_tx.to_address else [],
+                        watched_pools=[],
+                    )
+                    if state_diff.token_balance_deltas or state_diff.total_supply_deltas or state_diff.reserve_deltas:
+                        logger.info(
+                            "state_diff_extracted",
+                            tx_hash=pending_tx.tx_hash[:16],
+                            balance_deltas=len(state_diff.token_balance_deltas),
+                            supply_deltas=len(state_diff.total_supply_deltas),
+                            reserve_deltas=len(state_diff.reserve_deltas),
+                        )
+                except Exception as diff_err:
+                    logger.debug("state_diff_extraction_failed", error=str(diff_err))
+
                 # Step 3: Revert snapshot (cleanup)
                 if snapshot_id is not None:
                     try:
@@ -366,38 +383,176 @@ class AnvilSimulator(Simulator):
             block_hash=block_hash
         )
     
+    # Well-known ERC-20 storage slot patterns for balanceOf(address)
+    # slot = keccak256(abi.encode(address, BALANCE_MAPPING_SLOT))
+    COMMON_BALANCE_SLOTS = [0, 1, 2, 3, 5, 9, 51]  # OZ, Vyper, custom patterns
+    # Well-known ERC-20 totalSupply slots
+    COMMON_SUPPLY_SLOTS = [0, 2, 3]
+
     async def extract_state_diff(
         self,
         simulation_result: Dict[str, Any],
         protected_addresses: List[str],
         watched_tokens: List[str],
-        watched_pools: List[str]
+        watched_pools: List[str],
     ) -> StateDiffFingerprint:
         """
-        Extract state diff fingerprint from simulation result.
-        
-        This is a simplified implementation. A full implementation would:
-        1. Use debug_traceCall to get full state diff
-        2. Parse storage slots for tokens/pools
-        3. Extract balance changes, supply changes, etc.
+        Extract state diff fingerprint from simulation using debug_traceCall.
+
+        Uses Anvil's prestateTracer to capture storage-level changes, then
+        maps known storage slot patterns to semantic fields (balances,
+        totalSupply, pool reserves).
         """
         fingerprint = StateDiffFingerprint()
-        
-        # TODO: Implement full state diff extraction using trace
-        # For now, return empty fingerprint
-        # In production, this would:
-        # - Call debug_traceCall on the simulation
-        # - Parse the trace for storage changes
-        # - Extract balance deltas for protected addresses
-        # - Extract totalSupply deltas for watched tokens
-        # - Extract reserve deltas for watched pools
-        
-        logger.debug(
-            "state_diff_extracted",
-            protected_addresses=len(protected_addresses),
-            watched_tokens=len(watched_tokens),
-            watched_pools=len(watched_pools)
-        )
-        
+
+        tx_params = simulation_result.get("tx_params")
+        port = simulation_result.get("port")
+        if not tx_params or not port:
+            logger.debug("state_diff_skipped_no_params")
+            return fingerprint
+
+        web3 = self._anvil_web3.get(port)
+        if not web3:
+            return fingerprint
+
+        try:
+            # Call debug_traceCall with prestateTracer (Anvil supports this)
+            trace = await web3.provider.make_request(
+                "debug_traceCall",
+                [
+                    tx_params,
+                    "latest",
+                    {"tracer": "prestateTracer", "tracerConfig": {"diffMode": True}},
+                ],
+            )
+
+            if not trace or not isinstance(trace, dict):
+                logger.debug("state_diff_empty_trace")
+                return fingerprint
+
+            # trace has {"pre": {addr: {storage, balance, ...}}, "post": {addr: ...}}
+            pre_state = trace.get("pre", trace.get("result", {}).get("pre", {}))
+            post_state = trace.get("post", trace.get("result", {}).get("post", {}))
+
+            if not pre_state and not post_state:
+                # Try flat format (some Anvil versions)
+                pre_state = trace.get("result", {})
+                post_state = {}
+
+            # --- 1. Token balance deltas for protected addresses ---
+            protected_set = {a.lower() for a in protected_addresses}
+            watched_token_set = {t.lower() for t in watched_tokens}
+            watched_pool_set = {p.lower() for p in watched_pools}
+
+            for token_addr in watched_token_set:
+                token_pre = pre_state.get(token_addr, {}).get("storage", {})
+                token_post = post_state.get(token_addr, {}).get("storage", {})
+
+                if not token_post:
+                    continue
+
+                # Find changed storage slots
+                changed_slots = set(token_post.keys())
+
+                for addr in protected_set:
+                    # Compute expected balance slots (keccak of packed addr + mapping slot)
+                    for mapping_slot in self.COMMON_BALANCE_SLOTS:
+                        slot_key = Web3.keccak(
+                            bytes.fromhex(addr[2:].zfill(64))
+                            + mapping_slot.to_bytes(32, "big")
+                        ).hex()
+                        slot_key_prefixed = "0x" + slot_key
+
+                        if slot_key_prefixed in changed_slots:
+                            pre_val = int(token_pre.get(slot_key_prefixed, "0x0"), 16)
+                            post_val = int(token_post[slot_key_prefixed], 16)
+                            delta = Decimal(post_val - pre_val)
+
+                            if delta != 0:
+                                if addr not in fingerprint.token_balance_deltas:
+                                    fingerprint.token_balance_deltas[addr] = {}
+                                fingerprint.token_balance_deltas[addr][token_addr] = delta
+
+                # --- 2. totalSupply deltas ---
+                for supply_slot in self.COMMON_SUPPLY_SLOTS:
+                    slot_hex = "0x" + supply_slot.to_bytes(32, "big").hex()
+                    if slot_hex in changed_slots:
+                        pre_val = int(token_pre.get(slot_hex, "0x0"), 16)
+                        post_val = int(token_post[slot_hex], 16)
+                        delta = Decimal(post_val - pre_val)
+                        if delta != 0:
+                            fingerprint.total_supply_deltas[token_addr] = delta
+
+            # --- 3. Reserve deltas for watched pools ---
+            for pool_addr in watched_pool_set:
+                pool_pre = pre_state.get(pool_addr, {}).get("storage", {})
+                pool_post = post_state.get(pool_addr, {}).get("storage", {})
+
+                if not pool_post:
+                    continue
+
+                # Uniswap V2 reserves: slot 8 packs reserve0 + reserve1 + blockTimestampLast
+                reserve_slot = "0x" + (8).to_bytes(32, "big").hex()
+                if reserve_slot in pool_post:
+                    pre_packed = int(pool_pre.get(reserve_slot, "0x0"), 16)
+                    post_packed = int(pool_post[reserve_slot], 16)
+
+                    # Unpack: reserve0 = lower 112 bits, reserve1 = next 112 bits
+                    mask_112 = (1 << 112) - 1
+                    pre_r0, pre_r1 = pre_packed & mask_112, (pre_packed >> 112) & mask_112
+                    post_r0, post_r1 = post_packed & mask_112, (post_packed >> 112) & mask_112
+
+                    deltas = {}
+                    if post_r0 - pre_r0 != 0:
+                        deltas["reserve0"] = Decimal(post_r0 - pre_r0)
+                    if post_r1 - pre_r1 != 0:
+                        deltas["reserve1"] = Decimal(post_r1 - pre_r1)
+                    if deltas:
+                        fingerprint.reserve_deltas[pool_addr] = deltas
+
+                # Check all changed slots for potential reserve changes (V3 pools)
+                for slot_key in pool_post:
+                    if slot_key == reserve_slot:
+                        continue
+                    pre_val = int(pool_pre.get(slot_key, "0x0"), 16)
+                    post_val = int(pool_post[slot_key], 16)
+                    # Large changes in pool storage are suspicious
+                    if abs(post_val - pre_val) > 10**18:  # > 1 token unit
+                        if pool_addr not in fingerprint.reserve_deltas:
+                            fingerprint.reserve_deltas[pool_addr] = {}
+                        fingerprint.reserve_deltas[pool_addr][slot_key[:10]] = Decimal(post_val - pre_val)
+
+            # --- 4. Admin/proxy slot changes ---
+            # EIP-1967 slots
+            ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+            IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+
+            for addr in {**pre_state, **post_state}:
+                addr_post = post_state.get(addr, {}).get("storage", {})
+                addr_pre = pre_state.get(addr, {}).get("storage", {})
+
+                for slot_name, slot_key in [("admin", ADMIN_SLOT), ("implementation", IMPL_SLOT)]:
+                    if slot_key in addr_post:
+                        old_val = addr_pre.get(slot_key, "0x0")
+                        new_val = addr_post[slot_key]
+                        if old_val != new_val:
+                            fingerprint.admin_changes.append({
+                                "contract": addr,
+                                "slot": slot_name,
+                                "old": old_val,
+                                "new": new_val,
+                            })
+
+            logger.info(
+                "state_diff_extracted",
+                balance_deltas=len(fingerprint.token_balance_deltas),
+                supply_deltas=len(fingerprint.total_supply_deltas),
+                reserve_deltas=len(fingerprint.reserve_deltas),
+                admin_changes=len(fingerprint.admin_changes),
+            )
+
+        except Exception as e:
+            logger.warning("state_diff_extraction_failed", error=str(e))
+
         return fingerprint
 

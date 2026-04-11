@@ -132,14 +132,84 @@ gcloud secrets add-iam-policy-binding ${GUARDIAN_SECRET} \
 echo ""
 
 # =============================================================================
-# Step 4: Verify other required secrets exist
+# Step 4: Alert Delivery Secrets (Slack + Telegram)
 # =============================================================================
-echo "Step 4: Verifying other required secrets..."
+echo "Step 4: Setting up alert delivery secrets..."
+
+# Slack Webhook
+echo ""
+echo "Enter Slack Webhook URL (or press Enter to skip):"
+read -s SLACK_URL
+if [ -n "$SLACK_URL" ]; then
+    SLACK_SECRET="web3-xdr-slack-webhook-url"
+    if gcloud secrets describe ${SLACK_SECRET} --project=${GCP_PROJECT} &>/dev/null; then
+        echo -n "${SLACK_URL}" | gcloud secrets versions add ${SLACK_SECRET} --data-file=- --project=${GCP_PROJECT}
+    else
+        echo -n "${SLACK_URL}" | gcloud secrets create ${SLACK_SECRET} --data-file=- --project=${GCP_PROJECT}
+    fi
+    gcloud secrets add-iam-policy-binding ${SLACK_SECRET} \
+        --member="serviceAccount:${COMPUTE_SA}" \
+        --role="roles/secretmanager.secretAccessor" \
+        --project=${GCP_PROJECT} &>/dev/null || true
+    echo -e "${GREEN}✓ Slack webhook secret configured${NC}"
+else
+    echo -e "${YELLOW}⚠ Slack webhook skipped${NC}"
+fi
+
+# Telegram Bot Token
+echo ""
+echo "Enter Telegram Bot Token (or press Enter to skip):"
+read -s TG_TOKEN
+if [ -n "$TG_TOKEN" ]; then
+    TG_TOKEN_SECRET="web3-xdr-telegram-bot-token"
+    if gcloud secrets describe ${TG_TOKEN_SECRET} --project=${GCP_PROJECT} &>/dev/null; then
+        echo -n "${TG_TOKEN}" | gcloud secrets versions add ${TG_TOKEN_SECRET} --data-file=- --project=${GCP_PROJECT}
+    else
+        echo -n "${TG_TOKEN}" | gcloud secrets create ${TG_TOKEN_SECRET} --data-file=- --project=${GCP_PROJECT}
+    fi
+    gcloud secrets add-iam-policy-binding ${TG_TOKEN_SECRET} \
+        --member="serviceAccount:${COMPUTE_SA}" \
+        --role="roles/secretmanager.secretAccessor" \
+        --project=${GCP_PROJECT} &>/dev/null || true
+    echo -e "${GREEN}✓ Telegram bot token secret configured${NC}"
+else
+    echo -e "${YELLOW}⚠ Telegram bot token skipped${NC}"
+fi
+
+# Telegram Channel ID
+echo ""
+echo "Enter Telegram Channel ID (or press Enter to skip):"
+read TG_CHANNEL
+if [ -n "$TG_CHANNEL" ]; then
+    TG_CHANNEL_SECRET="web3-xdr-telegram-channel-id"
+    if gcloud secrets describe ${TG_CHANNEL_SECRET} --project=${GCP_PROJECT} &>/dev/null; then
+        echo -n "${TG_CHANNEL}" | gcloud secrets versions add ${TG_CHANNEL_SECRET} --data-file=- --project=${GCP_PROJECT}
+    else
+        echo -n "${TG_CHANNEL}" | gcloud secrets create ${TG_CHANNEL_SECRET} --data-file=- --project=${GCP_PROJECT}
+    fi
+    gcloud secrets add-iam-policy-binding ${TG_CHANNEL_SECRET} \
+        --member="serviceAccount:${COMPUTE_SA}" \
+        --role="roles/secretmanager.secretAccessor" \
+        --project=${GCP_PROJECT} &>/dev/null || true
+    echo -e "${GREEN}✓ Telegram channel ID secret configured${NC}"
+else
+    echo -e "${YELLOW}⚠ Telegram channel ID skipped${NC}"
+fi
+
+echo ""
+
+# =============================================================================
+# Step 5: Verify other required secrets exist
+# =============================================================================
+echo "Step 5: Verifying other required secrets..."
 REQUIRED_SECRETS=(
     "web3-xdr-jwt-secret"
     "web3-xdr-database-url"
     "web3-xdr-infura-api-key"
     "web3-xdr-openai-api-key"
+    "web3-xdr-slack-webhook-url"
+    "web3-xdr-telegram-bot-token"
+    "web3-xdr-telegram-channel-id"
 )
 
 MISSING_SECRETS=()

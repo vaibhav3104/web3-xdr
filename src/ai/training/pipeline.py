@@ -169,106 +169,143 @@ class TrainingPipeline:
                 })
         
         # Add extra samples for underrepresented attack types
+        # Feature index 19 = external_targets (not risk)
         extra_attack_types = [
-            ("governance_attack", {"flash_loan": 1.0, "admin": 1.0, "risk": 0.8}),
-            ("rug_pull", {"selfdestruct": 1.0, "admin": 1.0, "risk": 0.95}),
-            ("honeypot", {"selfdestruct": 0.5, "delegatecall": 1.0, "risk": 0.85}),
-            ("unknown_threat", {"delegatecall": 1.0, "risk": 0.6}),
+            ("governance_attack", {"flash_loan": 1.0, "admin": 1.0, "ext_targets": 0.3}),
+            ("rug_pull", {"selfdestruct": 1.0, "admin": 1.0, "ext_targets": 0.1}),
+            ("honeypot", {"selfdestruct": 0.5, "delegatecall": 1.0, "ext_targets": 0.1}),
+            ("unknown_threat", {"delegatecall": 1.0, "ext_targets": 0.2}),
         ]
-        
+
         for attack_type, pattern in extra_attack_types:
             for i in range(30):  # 30 extra samples per type
                 features = [0.0] * 20
-                features[0] = random.uniform(0.2, 0.5)  # bytecode_length
-                features[2] = random.uniform(0.1, 0.4)  # call_count
+                features[0] = random.uniform(0.2, 0.5)   # bytecode_length
+                features[2] = random.uniform(0.1, 0.4)   # call_count
                 features[11] = pattern.get("flash_loan", 0.0) * random.uniform(0.8, 1.0)
                 features[15] = pattern.get("admin", 0.0) * random.uniform(0.8, 1.0)
                 features[17] = pattern.get("delegatecall", 0.0) * random.uniform(0.8, 1.0)
                 features[18] = pattern.get("selfdestruct", 0.0) * random.uniform(0.8, 1.0)
-                features[19] = pattern.get("risk", 0.5) * random.uniform(0.9, 1.1)
+                features[19] = pattern.get("ext_targets", 0.2) * random.uniform(0.8, 1.2)
                 features = [max(0, min(1, f)) for f in features]
-                
+
                 self.training_data.append({
                     "features": features,
                     "label": attack_type,
                     "source": "synthetic_attack"
                 })
+
+        # Fix 2: Extra oracle manipulation samples (4 distinct sub-patterns)
+        oracle_patterns = [
+            # TWAP manipulation: heavy SLOAD + STATICCALL
+            {"call": 0.6, "staticcall": 0.7, "sload": 0.9, "sstore": 0.4, "ext": 0.6},
+            # Chainlink abuse: external oracle calls
+            {"call": 0.8, "staticcall": 0.8, "sload": 0.7, "sstore": 0.3, "ext": 0.7},
+            # DEX spot price: flash loan + oracle read
+            {"call": 0.7, "staticcall": 0.5, "sload": 0.8, "flash": 1.0, "ext": 0.5},
+            # AMM reserve manipulation
+            {"call": 0.5, "staticcall": 0.6, "sload": 0.6, "sstore": 0.5, "ext": 0.4},
+        ]
+        for i in range(60):
+            p = random.choice(oracle_patterns)
+            features = [0.0] * 20
+            features[0] = random.uniform(0.3, 0.6)
+            features[2] = p["call"] * random.uniform(0.85, 1.15)
+            features[4] = p["staticcall"] * random.uniform(0.85, 1.15)
+            features[7] = p["sload"] * random.uniform(0.85, 1.15)
+            features[8] = p.get("sstore", 0.3) * random.uniform(0.85, 1.15)
+            features[11] = p.get("flash", 0.3) * random.uniform(0.7, 1.0)
+            features[19] = p["ext"] * random.uniform(0.85, 1.15)
+            features = [max(0, min(1, f)) for f in features]
+            self.training_data.append({
+                "features": features,
+                "label": "oracle_manipulation",
+                "source": "synthetic_oracle"
+            })
     
     def _create_synthetic_features(self, attack: Dict) -> List[float]:
-        """Create synthetic feature vector based on attack characteristics"""
+        """Create synthetic feature vector based on attack characteristics.
+
+        Feature index 19 = external_call_targets (normalized), NOT risk_score.
+        """
         # Base features
         features = [0.0] * 20
-        
+
         attack_type = attack["attack_type"]
-        
+
         # Set features based on attack type
         if attack_type in ["flash_loan", "reentrancy"]:
-            features[0] = 0.5  # bytecode_length (normalized)
-            features[2] = 0.4  # call_count
+            features[0] = 0.5   # bytecode_length (normalized)
+            features[2] = 0.4   # call_count
             features[11] = 1.0  # has_flash_loan_callback
-            features[16] = 1.0 if attack_type == "reentrancy" else 0.0  # has_reentrancy
-            features[19] = 0.85  # risk_score
-        
+            features[16] = 1.0 if attack_type == "reentrancy" else 0.0
+            features[19] = 0.4  # external_targets
+
         elif attack_type in ["signature_forgery", "validator_compromise", "bridge_exploit"]:
             features[0] = 0.3
             features[13] = 1.0  # has_mint
             features[14] = 1.0  # has_burn
-            features[19] = 0.9
-        
+            features[19] = 0.35
+
         elif attack_type == "oracle_manipulation":
-            features[2] = 0.6  # High call count
-            features[7] = 0.5  # sload count
-            features[19] = 0.75
-        
+            # Fix 2: Much more distinctive oracle patterns
+            features[0] = 0.5   # medium bytecode
+            features[2] = 0.7   # high call_count (oracle calls)
+            features[4] = 0.7   # high staticcall (reading oracle)
+            features[7] = 0.8   # high sload (reading price slots)
+            features[8] = 0.5   # moderate sstore (writing manipulated prices)
+            features[11] = 0.4  # may use flash loan
+            features[19] = 0.6  # multiple oracle targets
+
         elif attack_type == "governance_attack":
             features[11] = 1.0  # flash loan
             features[15] = 1.0  # admin functions
-            features[19] = 0.8
-        
+            features[19] = 0.3
+
         elif attack_type in ["rug_pull", "honeypot"]:
-            features[9] = 1.0  # selfdestruct
+            features[9] = 1.0   # selfdestruct
             features[15] = 1.0  # admin
             features[18] = 1.0  # has selfdestruct
-            features[19] = 0.95
-        
+            features[19] = 0.1  # few external targets
+
         # Add some noise for variety
         import random
         features = [f + random.uniform(-0.1, 0.1) for f in features]
         features = [max(0, min(1, f)) for f in features]  # Clamp to [0, 1]
-        
+
         return features
     
     def _add_safe_contract_data(self):
         """Add synthetic safe contract examples"""
-        # Generate safe contract features
+        # Generate safe contract features — index 19 = external_targets (not risk_score)
         import random
-        
+
         safe_patterns = [
-            # Simple ERC20
-            {"bytecode_length": 0.2, "call_count": 0.1, "risk_score": 0.1},
-            # Standard DEX
-            {"bytecode_length": 0.4, "call_count": 0.3, "risk_score": 0.2},
-            # Lending protocol
-            {"bytecode_length": 0.5, "call_count": 0.4, "sload_count": 0.3, "risk_score": 0.25},
-            # NFT contract
-            {"bytecode_length": 0.3, "call_count": 0.2, "risk_score": 0.15},
-            # Governance
-            {"bytecode_length": 0.4, "admin_functions": 1.0, "risk_score": 0.3},
+            # Simple ERC20 — minimal external interactions
+            {"bytecode_length": 0.2, "call_count": 0.1, "ext_targets": 0.05},
+            # Standard DEX — a few known router targets
+            {"bytecode_length": 0.4, "call_count": 0.3, "ext_targets": 0.15},
+            # Lending protocol — interacts with several tokens
+            {"bytecode_length": 0.5, "call_count": 0.4, "sload_count": 0.3, "ext_targets": 0.2},
+            # NFT contract — minimal
+            {"bytecode_length": 0.3, "call_count": 0.2, "ext_targets": 0.05},
+            # Governance — admin functions
+            {"bytecode_length": 0.4, "admin_functions": 1.0, "ext_targets": 0.1},
         ]
-        
+
         # Generate 500 safe samples (balance with attack samples)
         for i in range(500):
             pattern = random.choice(safe_patterns)
             features = [0.0] * 20
-            
+
             features[0] = pattern.get("bytecode_length", 0.3) + random.uniform(-0.1, 0.1)
             features[2] = pattern.get("call_count", 0.2) + random.uniform(-0.1, 0.1)
             features[7] = pattern.get("sload_count", 0.2) + random.uniform(-0.1, 0.1)
             features[15] = pattern.get("admin_functions", 0.0)
-            features[19] = pattern.get("risk_score", 0.2) + random.uniform(-0.05, 0.05)
-            
+            features[19] = pattern.get("ext_targets", 0.1) + random.uniform(-0.05, 0.05)
+
             features = [max(0, min(1, f)) for f in features]
-            
+
             self.training_data.append({
                 "features": features,
                 "label": "safe",

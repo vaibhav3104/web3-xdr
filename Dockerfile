@@ -1,28 +1,48 @@
 # ============================================================================
-# Web3 XDR - Production Dockerfile
+# Web3 XDR - Production Dockerfile (Multi-stage)
 # ============================================================================
-FROM python:3.11-slim
 
-# Set environment variables
+# ── Stage 1: Builder ───────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Set working directory
-WORKDIR /app
+WORKDIR /build
 
-# Install system dependencies (including PostgreSQL client and git for foundry)
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    libpq-dev \
     gcc \
+    libpq-dev \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python deps into a virtual env for clean copy
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt .
+
+# PyTorch CPU-only (smaller) then everything else
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Runtime-only system deps (no gcc, no git)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Foundry (Anvil) for transaction simulation
-# Download pre-built binaries directly from GitHub releases
-ENV FOUNDRY_VERSION=stable
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi && \
     if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi && \
@@ -32,37 +52,29 @@ RUN ARCH=$(uname -m) && \
     rm /tmp/foundry.tar.gz && \
     anvil --version
 
-# Copy requirements first for caching
-COPY requirements.txt .
-
-# Install PyTorch CPU-only first (from PyTorch index for smaller size)
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-
-# Install remaining Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy pre-built Python packages from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY src/ ./src/
 COPY config/ ./config/
 COPY frontend/ ./frontend/
+COPY alembic/ ./alembic/
+COPY alembic.ini .
 COPY monitor.py .
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Make entrypoint executable and create non-root user for security
+# Non-root user
 RUN chmod +x /app/entrypoint.sh && \
     useradd --create-home --shell /bin/bash xdr && \
     chown -R xdr:xdr /app
 
 USER xdr
 
-# Expose ports (API: 8080, Worker: 9090)
 EXPOSE 8080 9090
 
-# Health check (defaults to worker port 9090)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-9090}/health || exit 1
 
-# Default: Run worker
-# Override with: docker run -e PROC_TYPE=api ... for API-only mode
 ENTRYPOINT ["/app/entrypoint.sh"]
-

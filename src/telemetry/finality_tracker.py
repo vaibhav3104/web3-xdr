@@ -18,12 +18,16 @@ import asyncio
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Any
 from enum import Enum
 
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# Type alias for reorg callbacks
+ReorgCallback = Callable[[str, int, List[int]], Coroutine[Any, Any, None]]
+# signature: (chain_id, reorg_block, affected_block_numbers) -> None
 
 
 class FinalityStatus(Enum):
@@ -79,26 +83,33 @@ class FinalityTracker:
     
     def __init__(self, config: ChainFinalityConfig):
         self.config = config
-        
+
         # Sliding window: block_number -> BlockInfo
         self.block_window: Dict[int, BlockInfo] = {}
-        
+
         # Track head block
         self.head_block: Optional[BlockInfo] = None
-        
+
         # Track last confirmed block
         self.last_confirmed_block: int = 0
-        
+
         # Track reorgs
         self.reorg_count = 0
         self.last_reorg_at: Optional[datetime] = None
-        
+
+        # Reorg callbacks — called with (chain_id, reorg_block, affected_blocks)
+        self._reorg_callbacks: List[ReorgCallback] = []
+
         logger.info(
             "finality_tracker_initialized",
             chain=self.config.chain_id,
             confirmations=self.config.confirmations,
             max_reorg_depth=self.config.max_reorg_depth
         )
+
+    def on_reorg(self, callback: ReorgCallback):
+        """Register a callback to fire when a reorg is detected."""
+        self._reorg_callbacks.append(callback)
     
     def update_head(self, block_number: int, block_hash: str, parent_hash: Optional[str] = None):
         """Update the chain head."""
@@ -134,17 +145,17 @@ class FinalityTracker:
         self._update_confirmed_block()
     
     def _handle_reorg(self, reorg_block: int):
-        """Handle a detected reorg."""
+        """Handle a detected reorg and notify listeners."""
         # Mark blocks from reorg point as REORGED
-        blocks_to_mark = [
+        affected_blocks = [
             num for num in self.block_window.keys()
             if num >= reorg_block - self.config.max_reorg_depth
         ]
-        
-        for block_num in blocks_to_mark:
+
+        for block_num in affected_blocks:
             if block_num in self.block_window:
                 self.block_window[block_num].status = FinalityStatus.REORGED
-        
+
         # Reset last confirmed if it was affected
         if self.last_confirmed_block >= reorg_block - self.config.confirmations:
             self.last_confirmed_block = max(0, reorg_block - self.config.confirmations - 1)
@@ -153,6 +164,15 @@ class FinalityTracker:
                 chain=self.config.chain_id,
                 reset_to=self.last_confirmed_block
             )
+
+        # Fire reorg callbacks to invalidate events/incidents from affected blocks
+        for callback in self._reorg_callbacks:
+            try:
+                asyncio.ensure_future(
+                    callback(self.config.chain_id, reorg_block, affected_blocks)
+                )
+            except Exception as e:
+                logger.error("reorg_callback_failed", error=str(e))
     
     def _prune_blocks(self):
         """Remove blocks older than max_reorg_depth."""
@@ -240,7 +260,8 @@ class FinalityTrackerManager:
     
     def __init__(self):
         self.trackers: Dict[str, FinalityTracker] = {}
-    
+        self._global_reorg_callbacks: List[ReorgCallback] = []
+
     def get_tracker(self, chain_id: str, config: Optional[ChainFinalityConfig] = None) -> FinalityTracker:
         """Get or create a tracker for a chain."""
         if chain_id not in self.trackers:
@@ -251,8 +272,11 @@ class FinalityTrackerManager:
                     chain_id,
                     ChainFinalityConfig(chain_id, 12, 12, 12.0)  # Safe default
                 )
-            self.trackers[chain_id] = FinalityTracker(tracker_config)
-        
+            tracker = FinalityTracker(tracker_config)
+            for cb in self._global_reorg_callbacks:
+                tracker.on_reorg(cb)
+            self.trackers[chain_id] = tracker
+
         return self.trackers[chain_id]
     
     def update_chain_head(self, chain_id: str, block_number: int, block_hash: str, parent_hash: Optional[str] = None):
@@ -266,10 +290,64 @@ class FinalityTrackerManager:
             return False
         return self.trackers[chain_id].is_confirmed(block_number)
     
+    def register_reorg_handler(self, callback: ReorgCallback):
+        """Register a reorg handler on ALL current and future trackers."""
+        self._global_reorg_callbacks.append(callback)
+        for tracker in self.trackers.values():
+            tracker.on_reorg(callback)
+
     def get_all_statuses(self) -> Dict[str, Dict[str, any]]:
         """Get status for all trackers."""
         return {
             chain_id: tracker.get_status()
             for chain_id, tracker in self.trackers.items()
         }
+
+
+async def invalidate_reorged_events(chain_id: str, reorg_block: int, affected_blocks: List[int]):
+    """
+    Default reorg handler: marks events/incidents from affected blocks as invalidated.
+
+    Logs a critical warning and attempts to update the database to mark
+    incidents from reorged blocks as false positives (since the underlying
+    transactions may no longer exist on the canonical chain).
+    """
+    logger.critical(
+        "reorg_invalidation_triggered",
+        chain_id=chain_id,
+        reorg_block=reorg_block,
+        affected_block_count=len(affected_blocks),
+        affected_range=f"{min(affected_blocks)}-{max(affected_blocks)}" if affected_blocks else "none",
+    )
+
+    if not affected_blocks:
+        return
+
+    try:
+        from ..database.service import DatabaseService
+
+        # Mark incidents from affected blocks as needing re-evaluation
+        for block_num in affected_blocks:
+            incidents = await DatabaseService.get_incidents_by_block(
+                chain_id=chain_id, block_number=block_num
+            )
+            for incident in (incidents or []):
+                await DatabaseService.update_incident_status(
+                    incident_id=incident.incident_id,
+                    new_status="REORG_INVALIDATED",
+                    analyst_id="system",
+                    notes=f"Block {block_num} was reorged at block {reorg_block}. "
+                          f"Events from this block are no longer on the canonical chain.",
+                )
+                logger.warning(
+                    "incident_invalidated_by_reorg",
+                    incident_id=incident.incident_id,
+                    block_number=block_num,
+                    chain_id=chain_id,
+                )
+    except ImportError:
+        logger.debug("database_service_not_available_for_reorg_invalidation")
+    except Exception as e:
+        # Best-effort — reorg invalidation should not crash the tracker
+        logger.error("reorg_invalidation_error", error=str(e), chain_id=chain_id)
 

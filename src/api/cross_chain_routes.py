@@ -247,7 +247,7 @@ async def get_bridges_health():
     - Correlation success rate
     """
     stats = cross_chain_correlator.get_stats()
-    violations = cross_chain_correlator.violations
+    violations = cross_chain_correlator.get_violations()
     
     # Group by bridge
     bridge_stats = {}
@@ -300,6 +300,63 @@ async def get_bridges_health():
         })
     
     return health_results
+
+
+@router.get("/incidents/by-address/{address}")
+async def get_incidents_by_address(address: str):
+    """
+    Get all incidents involving a given address across any chain.
+
+    Useful for tracing a single attacker who operates on multiple chains —
+    e.g. the same EOA exploiting Ethereum and Arbitrum in the same hour.
+    """
+    from ..correlation.incident_builder import IncidentBuilder
+
+    # Use the global incident builder if one exists, otherwise return empty.
+    # In production the builder lives on the worker; here we try a shared instance.
+    builder: Optional[IncidentBuilder] = getattr(cross_chain_correlator, "_incident_builder", None)
+    if not builder:
+        return {
+            "address": address,
+            "incidents": [],
+            "message": "Incident builder not initialised on this process"
+        }
+
+    incidents = builder.get_incidents_by_address(address.lower())
+    return {
+        "address": address,
+        "incident_count": len(incidents),
+        "incidents": [inc.to_dict() for inc in incidents],
+    }
+
+
+@router.get("/incidents/cross-chain-groups")
+async def get_cross_chain_groups():
+    """
+    Return groups of incidents linked by shared addresses across >1 chain.
+
+    Each group represents a likely single attacker operating on multiple chains.
+    """
+    from ..correlation.incident_builder import IncidentBuilder
+
+    builder: Optional[IncidentBuilder] = getattr(cross_chain_correlator, "_incident_builder", None)
+    if not builder:
+        return {"groups": [], "message": "Incident builder not initialised on this process"}
+
+    groups = builder.get_cross_chain_incidents()
+    return {
+        "group_count": len(groups),
+        "groups": [
+            {
+                "shared_addresses": list(
+                    set.intersection(*(inc.affected_addresses for inc in group)) if group else set()
+                ),
+                "chains": list({inc.source_chain for inc in group}),
+                "incidents": [inc.to_dict() for inc in group],
+            }
+            for group in groups
+        ],
+    }
 
 
 @router.get("/dashboard")

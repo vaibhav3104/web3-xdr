@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Admin Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        [x-cloak] { display: none !important; }
         :root {
             --bg-dark: #0f0f14;
             --bg-card: #1a1a24;
@@ -193,7 +195,8 @@
         }
     </style>
 </head>
-<body class="min-h-screen" x-data="adminConsole()" x-init="checkAuth()">
+<body class="min-h-screen">
+<div id="app" x-data="adminConsole()" x-init="checkAuth()">
     <!-- Notification -->
     <div x-show="notification.show" 
          x-transition
@@ -209,17 +212,8 @@
     <div class="flex">
         <!-- Sidebar -->
         <aside class="w-64 min-h-screen border-r border-gray-800 p-4 relative flex flex-col">
-            <div class="flex items-center space-x-3 mb-8 px-2">
-                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
-                </div>
-                <div>
-                    <div class="font-bold text-lg">Sentinel3</div>
-                    <div class="text-xs text-gray-500">Admin Console</div>
-                </div>
+            <div class="mb-6 px-2">
+                <div class="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Admin Console</div>
             </div>
             
             <nav class="space-y-1">
@@ -696,6 +690,7 @@
             </div>
         </div>
     </div>
+</div><!-- /app -->
 
     <script>
         function adminConsole() {
@@ -931,7 +926,7 @@
                 async toggleRule(rule) {
                     rule.enabled = !rule.enabled;
                     try {
-                        await fetch(`/api/admin/rules/${rule.id}/toggle`, { method: 'POST' });
+                        await fetch((window.SENTINEL3_API_BASE || '') + `/api/admin/rules/${rule.id}/toggle`, { method: 'POST' });
                         this.showNotification(`Rule ${rule.enabled ? 'enabled' : 'disabled'}`, 'success');
                     } catch (e) {
                         this.showNotification('Failed to update rule', 'error');
@@ -1150,7 +1145,7 @@ time_window: 1m`,
                 async deleteRule(rule) {
                     if (!confirm(`Delete rule "${rule.name}"?`)) return;
                     try {
-                        await fetch(`/api/admin/rules/${rule.id}`, { method: 'DELETE' });
+                        await fetch((window.SENTINEL3_API_BASE || '') + `/api/admin/rules/${rule.id}`, { method: 'DELETE' });
                         this.rules = this.rules.filter(r => r.id !== rule.id);
                         this.showNotification('Rule deleted', 'success');
                     } catch (e) {

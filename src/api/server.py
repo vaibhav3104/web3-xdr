@@ -3,123 +3,65 @@ FastAPI Server for Sentinel3 XDR Dashboard API.
 """
 
 import os
+import importlib
 from typing import Optional
-import asyncio
+
 import structlog
-from fastapi import FastAPI, HTTPException, WebSocket
+import uvicorn
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import uvicorn
 
-from .routes import router
-from .admin_routes import router as admin_router
-from .auth_routes import router as auth_router
-from .metrics_routes import router as metrics_router
-from .ai_routes import router as ai_router
-from .tenant_routes import router as tenant_router
-from .simulator_routes import router as simulator_router
-from .guardian_routes import router as guardian_router
-from .parser_routes import router as parser_router
-from .alert_routes import router as alert_router
-from .contract_routes import router as contract_router
-from .scorecard_routes import router as scorecard_router
-from .analytics_routes import router as analytics_router
-
-# Protocol monitoring routes
-try:
-    from .protocol_routes import router as protocol_router
-    PROTOCOL_ROUTES_AVAILABLE = True
-except ImportError:
-    PROTOCOL_ROUTES_AVAILABLE = False
-    protocol_router = None
-
-# Public API routes
-try:
-    from .public_api import router as public_api_router
-    PUBLIC_API_AVAILABLE = True
-except ImportError:
-    PUBLIC_API_AVAILABLE = False
-    public_api_router = None
-
-# WebSocket real-time feed
-try:
-    from .websocket_routes import router as websocket_router, get_ws_manager
-    WEBSOCKET_AVAILABLE = True
-except ImportError:
-    WEBSOCKET_AVAILABLE = False
-    websocket_router = None
-
-# Runtime Security Plane routes
-try:
-    from .runtime_routes import router as runtime_router
-    RUNTIME_ROUTES_AVAILABLE = True
-except ImportError:
-    RUNTIME_ROUTES_AVAILABLE = False
-    runtime_router = None
-
-# Customer management and API keys
-try:
-    from .customer_routes import router as customer_router
-    CUSTOMER_ROUTES_AVAILABLE = True
-except ImportError:
-    CUSTOMER_ROUTES_AVAILABLE = False
-    customer_router = None
-
-# Cross-chain correlation routes
-try:
-    from .cross_chain_routes import router as cross_chain_router
-    CROSS_CHAIN_ROUTES_AVAILABLE = True
-except ImportError:
-    CROSS_CHAIN_ROUTES_AVAILABLE = False
-    cross_chain_router = None
-
-# ML/AI contract analysis routes
-try:
-    from .ml_routes import router as ml_router
-    ML_ROUTES_AVAILABLE = True
-except ImportError:
-    ML_ROUTES_AVAILABLE = False
-    ml_router = None
-
-# Security Graph routes (Wiz-for-Web3)
-try:
-    from .graph_routes import router as graph_router, initialize_graph
-    GRAPH_ROUTES_AVAILABLE = True
-except ImportError:
-    GRAPH_ROUTES_AVAILABLE = False
-    graph_router = None
-    initialize_graph = None
-
-# ML Threat Detection routes
-try:
-    from .ml_threat_routes import router as ml_threat_router, initialize_ml_components
-    ML_THREAT_ROUTES_AVAILABLE = True
-except ImportError:
-    ML_THREAT_ROUTES_AVAILABLE = False
-    ml_threat_router = None
-
-# Vulnerability Scanner routes
-try:
-    from .scanner_routes import router as scanner_router
-    SCANNER_ROUTES_AVAILABLE = True
-except ImportError:
-    SCANNER_ROUTES_AVAILABLE = False
-    scanner_router = None
-    initialize_ml_components = None
-
-# Verification routes (exploit tracking)
-try:
-    from .verification_routes import router as verification_router
-    VERIFICATION_ROUTES_AVAILABLE = True
-except ImportError:
-    VERIFICATION_ROUTES_AVAILABLE = False
-    verification_router = None
+from ..logging_config import configure_logging
+configure_logging()
 
 logger = structlog.get_logger()
 
-# Get frontend directory path
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
+
+
+def _try_import_router(module_path: str, attr: str = "router"):
+    """Import a router from a module, returning None on ImportError."""
+    try:
+        mod = importlib.import_module(module_path, package="src.api")
+        return getattr(mod, attr, None)
+    except ImportError:
+        return None
+
+
+# ── Route registry ──────────────────────────────────────────────────
+# (module_path, attribute, prefix, description)
+# Prefix=None means the router defines its own prefix.
+_CORE_ROUTES = [
+    (".routes",           "router", "/api",  "core"),
+    (".admin_routes",     "router", "/api",  "admin"),
+    (".auth_routes",      "router", "/api",  "auth"),
+    (".metrics_routes",   "router", None,    "metrics"),
+    (".ai_routes",        "router", "/api",  "ai"),
+    (".tenant_routes",    "router", "/api",  "tenants"),
+    (".simulator_routes", "router", "/api",  "simulator"),
+    (".guardian_routes",  "router", None,    "guardian"),
+    (".parser_routes",    "router", None,    "parsers"),
+    (".alert_routes",     "router", None,    "alerts"),
+    (".contract_routes",  "router", "/api",  "contracts"),
+    (".scorecard_routes", "router", None,    "scorecard"),
+    (".analytics_routes", "router", "/api",  "analytics"),
+]
+
+_OPTIONAL_ROUTES = [
+    (".protocol_routes",     "router", "/api",  "protocols"),
+    (".public_api",          "router", "/api",  "public-api"),
+    (".websocket_routes",    "router", None,    "websocket"),
+    (".runtime_routes",      "router", None,    "runtime"),
+    (".customer_routes",     "router", "/api",  "customers"),
+    (".cross_chain_routes",  "router", "/api",  "cross-chain"),
+    (".ml_routes",           "router", None,    "ml"),
+    (".graph_routes",        "router", None,    "security-graph"),
+    (".ml_threat_routes",    "router", None,    "ml-threat"),
+    (".scanner_routes",      "router", "/api",  "scanner"),
+    (".verification_routes", "router", None,    "verification"),
+]
 
 
 def create_app(
@@ -127,186 +69,176 @@ def create_app(
     version: str = "2.0.0",
     cors_origins: Optional[list] = None
 ) -> FastAPI:
-    """
-    Create and configure FastAPI application.
-    """
+    """Create and configure FastAPI application."""
+
     app = FastAPI(
         title=title,
-        description="Sentinel3 - Web3 Extended Detection & Response for Bridges and DeFi",
+        description=(
+            "# Sentinel3 - Web3 Extended Detection & Response\n\n"
+            "Real-time security monitoring for bridges, DeFi protocols, and EVM chains.\n\n"
+            "## Authentication\n"
+            "All `/v1/*` endpoints require an API key via `X-API-Key` header.\n\n"
+            "## Rate Limits\n"
+            "- **Free:** 100 req/min  |  **Pro:** 1,000 req/min  |  **Enterprise:** Custom\n\n"
+            "Check `GET /api/v1/usage` for current usage.\n"
+        ),
         version=version,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
+        openapi_tags=[
+            {"name": "public-api", "description": "Partner API - wallet risk, contract threats"},
+            {"name": "Incidents", "description": "Incident management and triage"},
+            {"name": "Metrics", "description": "Prometheus metrics"},
+        ],
     )
-    
-    # Initialize database on startup
+
+    # ── Startup ─────────────────────────────────────────────────────
     @app.on_event("startup")
     async def startup_event():
         try:
             from ..database.connection import DatabaseManager
             await DatabaseManager.initialize()
-            # Ensure indexes exist (safe to call multiple times)
             await DatabaseManager.ensure_indexes()
-            logger.info("database_initialized_on_startup")
-            
-            # Set start time in shared state for uptime tracking
+            logger.info("database_initialized")
+        except Exception as e:
+            logger.error("database_init_failed", error=str(e))
+
+        try:
             from ..shared_state import monitor_state
             monitor_state.set_start_time()
-            logger.info("api_start_time_set")
+        except Exception:
+            pass
+
+        # Bootstrap TP/FP feedback loop from historical incident data
+        try:
+            import psycopg2
+            from ..rules.feedback_loop import get_feedback_loop
+            fl = get_feedback_loop()
+            pg_conn = psycopg2.connect(
+                host=os.getenv("POSTGRES_HOST", "postgres"),
+                port=os.getenv("POSTGRES_PORT", "5432"),
+                dbname=os.getenv("POSTGRES_DB", "sentinel"),
+                user=os.getenv("POSTGRES_USER", "sentinel"),
+                password=os.getenv("POSTGRES_PASSWORD", "sentinel"),
+            )
+            loaded = fl.load_from_db(pg_conn.cursor())
+            pg_conn.close()
+            logger.info("feedback_loop_bootstrapped", feedbacks_loaded=loaded)
         except Exception as e:
-            logger.error("database_initialization_failed", error=str(e))
-    
-    # CORS middleware - Restricted to allowed origins only
-    # Security: Only allow requests from our own frontend and local development
-    default_cors_origins = [
-        # Production frontend (Cloud Run)
+            logger.warning("feedback_loop_bootstrap_failed", error=str(e))
+
+    # ── CORS ────────────────────────────────────────────────────────
+    default_origins = [
         "https://web3-xdr-production-api-1003459948096.us-central1.run.app",
-        # GPU service
         "https://sentinel3-gpu-1003459948096.us-central1.run.app",
-        # Local development
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:8080",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-        "http://127.0.0.1:8080",
+        "http://localhost:3000", "http://localhost:8000", "http://localhost:8080",
+        "http://127.0.0.1:3000", "http://127.0.0.1:8000", "http://127.0.0.1:8080",
     ]
-    
-    # Allow override via environment variable (comma-separated)
     env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
     if env_cors:
-        default_cors_origins.extend([origin.strip() for origin in env_cors.split(",") if origin.strip()])
-    
-    allowed_origins = cors_origins or default_cors_origins
-    logger.info("cors_configured", allowed_origins=allowed_origins)
-    
+        default_origins.extend(o.strip() for o in env_cors.split(",") if o.strip())
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
+        allow_origins=cors_origins or default_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
     )
-    
-    # Security middleware (rate limiting, headers, logging)
+
+    # ── Security middleware ──────────────────────────────────────────
     try:
         from .middleware.security import (
-            RateLimitMiddleware,
-            SecurityHeadersMiddleware,
-            RequestLoggingMiddleware
+            RateLimitMiddleware, SecurityHeadersMiddleware,
+            RequestLoggingMiddleware, ErrorSanitizationMiddleware
         )
-        
-        # Add security headers to all responses
+        app.add_middleware(ErrorSanitizationMiddleware)
         app.add_middleware(SecurityHeadersMiddleware)
-        
-        # Rate limiting (can be disabled via env var)
         if os.getenv("ENABLE_RATE_LIMITING", "true").lower() == "true":
             app.add_middleware(RateLimitMiddleware)
-            logger.info("rate_limiting_enabled")
-        
-        # Request logging for audit trail
         if os.getenv("ENABLE_REQUEST_LOGGING", "true").lower() == "true":
             app.add_middleware(RequestLoggingMiddleware)
-            logger.info("request_logging_enabled")
-            
     except ImportError as e:
-        logger.warning("security_middleware_not_loaded", error=str(e))
-    
-    # Include main API routes
-    app.include_router(router, prefix="/api")
-    
-    # Include admin API routes
-    app.include_router(admin_router, prefix="/api")
-    
-    # Include auth routes
-    app.include_router(auth_router, prefix="/api")
-    
-    # Include metrics routes (no prefix - /metrics is standard)
-    app.include_router(metrics_router)
-    
-    # Include AI analysis routes
-    app.include_router(ai_router, prefix="/api")
-    
-    # Include multi-tenancy routes
-    app.include_router(tenant_router, prefix="/api")
-    
-    # Include attack simulator routes
-    app.include_router(simulator_router, prefix="/api")
-    
-    # Include guardian/auto-response routes
-    app.include_router(guardian_router)
-    
-    # Include parser management routes
-    app.include_router(parser_router)
-    
-    # Include ML/AI contract analysis routes
-    if ML_ROUTES_AVAILABLE and ml_router:
-        app.include_router(ml_router)
-    
-    # Include contract threat alert routes
-    app.include_router(alert_router)
-    
-    # Include contract deployment detection routes
-    app.include_router(contract_router, prefix="/api")
-    
-    # Include customer management and API key routes
-    if CUSTOMER_ROUTES_AVAILABLE and customer_router:
-        app.include_router(customer_router, prefix="/api")
-    
-    # Include cross-chain correlation routes
-    if CROSS_CHAIN_ROUTES_AVAILABLE and cross_chain_router:
-        app.include_router(cross_chain_router, prefix="/api")
-    
-    # Include Security Graph routes (Wiz-for-Web3)
-    if GRAPH_ROUTES_AVAILABLE and graph_router:
-        app.include_router(graph_router)
-        logger.info("security_graph_routes_enabled")
-    
-    # Include ML Threat Detection routes
-    if ML_THREAT_ROUTES_AVAILABLE and ml_threat_router:
-        app.include_router(ml_threat_router)
-        logger.info("ml_threat_detection_routes_enabled")
-    
-    # Include Runtime Security Plane routes
-    if RUNTIME_ROUTES_AVAILABLE and runtime_router:
-        app.include_router(runtime_router)
-    
-    # Include Scorecard/ROI routes
-    app.include_router(scorecard_router)
-    
-    # Include Protocol monitoring routes
-    if PROTOCOL_ROUTES_AVAILABLE and protocol_router:
-        app.include_router(protocol_router, prefix="/api")
-        logger.info("protocol_routes_registered")
-    
-    # Include Public API routes
-    if PUBLIC_API_AVAILABLE and public_api_router:
-        app.include_router(public_api_router, prefix="/api")
-        logger.info("public_api_routes_registered")
-    
-    # Include Analytics routes
-    app.include_router(analytics_router, prefix="/api")
-    
-    # Include WebSocket real-time feed
-    if WEBSOCKET_AVAILABLE and websocket_router:
-        app.include_router(websocket_router)
-        logger.info("websocket_routes_registered")
-    
-    # Include Verification routes (exploit tracking)
-    if VERIFICATION_ROUTES_AVAILABLE and verification_router:
-        app.include_router(verification_router)
-        logger.info("verification_routes_registered")
-    
-    # Include Vulnerability Scanner routes
-    if SCANNER_ROUTES_AVAILABLE and scanner_router:
-        app.include_router(scanner_router, prefix="/api")
-        logger.info("vulnerability_scanner_routes_registered")
-    
-    # Health check
+        logger.warning("security_middleware_unavailable", error=str(e))
+
+    # ── Register routes ─────────────────────────────────────────────
+    registered = []
+
+    for module, attr, prefix, name in _CORE_ROUTES:
+        r = _try_import_router(module, attr)
+        if r:
+            app.include_router(r, **({} if prefix is None else {"prefix": prefix}))
+            registered.append(name)
+
+    for module, attr, prefix, name in _OPTIONAL_ROUTES:
+        r = _try_import_router(module, attr)
+        if r:
+            app.include_router(r, **({} if prefix is None else {"prefix": prefix}))
+            registered.append(name)
+
+    logger.info("routes_registered", count=len(registered), modules=registered)
+
+    # ── Static routes ───────────────────────────────────────────────
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "service": "sentinel3"}
-    
-    # Serve frontend dashboard at root
+        return {
+            "status": "healthy",
+            "service": "sentinel3",
+            "environment": os.getenv("ENVIRONMENT", "development"),
+        }
+
+    @app.get("/health/detailed")
+    async def health_detailed():
+        """Detailed health check for monitoring dashboards."""
+        checks = {"postgres": "unknown", "redis": "unknown"}
+
+        # Check Postgres
+        try:
+            from ..database.connection import DatabaseManager
+            async with DatabaseManager.get_session() as session:
+                from sqlalchemy import text
+                await session.execute(text("SELECT 1"))
+            checks["postgres"] = "connected"
+        except Exception as e:
+            checks["postgres"] = f"error: {str(e)[:80]}"
+
+        # Check Redis
+        try:
+            import redis.asyncio as aioredis
+            url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            r = aioredis.from_url(url)
+            await r.ping()
+            await r.aclose()
+            checks["redis"] = "connected"
+        except Exception as e:
+            checks["redis"] = f"error: {str(e)[:80]}"
+
+        all_ok = all(v == "connected" for v in checks.values())
+        return {
+            "status": "healthy" if all_ok else "degraded",
+            "service": "sentinel3",
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "checks": checks,
+        }
+
+    @app.get("/health/ready")
+    async def readiness_check():
+        """K8s readiness probe — returns 503 if DB is unreachable."""
+        try:
+            from ..database.connection import DatabaseManager
+            async with DatabaseManager.get_session() as session:
+                from sqlalchemy import text
+                await session.execute(text("SELECT 1"))
+            return {"ready": True}
+        except Exception:
+            from starlette.responses import JSONResponse
+            return JSONResponse({"ready": False}, status_code=503)
+
+    @app.get("/docs", include_in_schema=False)
+    async def docs_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/api/docs")
+
     @app.get("/")
     async def serve_index():
         index_path = os.path.join(FRONTEND_DIR, "index.html")
@@ -314,10 +246,8 @@ def create_app(
             return FileResponse(index_path)
         return {"status": "healthy", "service": "sentinel3", "dashboard": "frontend not found"}
 
-    # Serve any .html file from frontend directory at root level
     @app.get("/{page}.html")
     async def serve_frontend_page(page: str):
-        # Sanitize: only allow alphanumeric and hyphens
         if not all(c.isalnum() or c == '-' for c in page):
             raise HTTPException(status_code=404)
         file_path = os.path.join(FRONTEND_DIR, f"{page}.html")
@@ -325,46 +255,32 @@ def create_app(
             return FileResponse(file_path)
         raise HTTPException(status_code=404, detail=f"Page not found: {page}.html")
 
-    # Mount frontend directory for static assets (JS, CSS, images)
     if os.path.exists(FRONTEND_DIR):
         app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
-    
+
     return app
 
 
-async def run_server(
-    app: FastAPI,
-    host: str = "0.0.0.0",
-    port: int = 8080
-):
-    """
-    Run the API server.
-    """
+async def run_server(app: FastAPI, host: str = "0.0.0.0", port: int = 8080):
+    """Run the API server."""
+    workers = int(os.getenv("UVICORN_WORKERS", "1"))
     config = uvicorn.Config(
-        app,
-        host=host,
-        port=port,
+        app, host=host, port=port,
         log_level="info",
+        workers=workers if workers > 1 else None,
+        access_log=os.getenv("ENVIRONMENT") != "production",
     )
     server = uvicorn.Server(config)
-    
-    logger.info(
-        "starting_api_server",
-        host=host,
-        port=port
-    )
-    
+    logger.info("starting_api_server", host=host, port=port, workers=workers)
     await server.serve()
 
 
 def main():
-    """Main entry point for API server."""
+    """Main entry point."""
     import asyncio
-    
     app = create_app()
     asyncio.run(run_server(app))
 
 
 if __name__ == "__main__":
     main()
-

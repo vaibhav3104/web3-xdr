@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Incidents - Sentinel3</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        [x-cloak] { display: none !important; }
         :root {
             --bg-primary: #0a0a0f;
             --bg-secondary: #12121a;
@@ -53,7 +55,53 @@
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
-<body class="min-h-screen" x-data="incidentsApp()">
+<body class="min-h-screen">
+<div id="app" x-data="incidentsApp()">
+    <!-- Diagnostic banner - remove after debugging -->
+    <div id="diag" style="position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 16px;font-size:12px;font-family:monospace;background:#1a1a2e;color:#8b8b8b;border-bottom:1px solid #333;">
+        Alpine: <span id="d-alpine">?</span> | xData: <span id="d-xdata">?</span> | Init: <span id="d-init">?</span> | Incidents: <span id="d-inc">?</span> | Modal: <span id="d-modal">?</span>
+    </div>
+    <script>
+    (function(){
+        setTimeout(function(){
+            var appEl = document.getElementById('app');
+            var dAlpine = document.getElementById('d-alpine');
+            var dXdata = document.getElementById('d-xdata');
+            var dInit = document.getElementById('d-init');
+            var dInc = document.getElementById('d-inc');
+            var dModal = document.getElementById('d-modal');
+
+            // Alpine loaded?
+            dAlpine.textContent = window.Alpine ? '✓' : '✗';
+            dAlpine.style.color = window.Alpine ? '#3bff7e' : '#ff3b3b';
+
+            // #app element found?
+            if (!appEl) { dXdata.textContent = '✗ #app not found'; dXdata.style.color='#ff3b3b'; return; }
+
+            // Does #app have x-data attr?
+            var xdAttr = appEl.getAttribute('x-data');
+            dXdata.textContent = 'attr=' + (xdAttr || 'NONE') + ' | _x_dataStack=' + !!(appEl._x_dataStack);
+            dXdata.style.color = appEl._x_dataStack ? '#3bff7e' : '#ff3b3b';
+
+            // Try Alpine.$data on #app
+            try {
+                var data = Alpine.$data(appEl);
+                var keys = Object.keys(data);
+                dInit.textContent = 'keys=' + keys.length + ' has_incidents=' + (data.incidents !== undefined);
+                dInit.style.color = keys.length > 5 ? '#3bff7e' : '#ff3b3b';
+                dInc.textContent = (data.incidents||[]).length + ' loaded';
+                dModal.textContent = 'showEventsModal=' + data.showEventsModal;
+            } catch(e) {
+                dInit.textContent = '✗ $data error: ' + e.message;
+                dInit.style.color = '#ff3b3b';
+            }
+
+            // Also dump DOM state
+            var sidebar = document.getElementById('s3-sidebar');
+            dModal.textContent += ' | sidebar=' + (sidebar ? 'yes' : 'no') + ' | bodyFlex=' + document.body.style.display;
+        }, 3000);
+    })();
+    </script>
     <!-- Live Notifications Toast -->
     <div class="fixed top-20 right-4 z-50 space-y-2" x-show="notifications.length > 0">
         <template x-for="(notif, idx) in notifications.slice(0, 3)" :key="notif.id">
@@ -78,14 +126,7 @@
     <header class="border-b border-gray-800 bg-[#12121a]/90 backdrop-blur sticky top-0 z-40">
         <div class="flex items-center justify-between px-6 py-3">
             <div class="flex items-center space-x-4">
-                <a href="index.html" class="flex items-center space-x-2">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
-                        <span class="text-xl">🛡️</span>
-                    </div>
-                    <span class="text-xl font-bold">Sentinel3</span>
-                </a>
-                <span class="text-gray-600">|</span>
-                <span class="text-lg font-semibold text-orange-400">🚨 Incidents</span>
+                <h1 class="text-lg font-semibold text-orange-400">🚨 Incidents</h1>
                 <!-- WebSocket Status -->
                 <div class="flex items-center space-x-2 ml-4">
                     <div class="w-2 h-2 rounded-full" :class="wsConnected ? 'bg-green-500 live-indicator' : 'bg-red-500'"></div>
@@ -344,20 +385,30 @@
                                     <span class="px-2 py-1 rounded text-xs"
                                           :class="{
                                               'bg-red-500/20 text-red-400': incident.status === 'open_pending',
-                                              'bg-yellow-500/20 text-yellow-400': incident.status === 'open_acknowledged',
-                                              'bg-green-500/20 text-green-400': incident.status === 'resolved'
+                                              'bg-yellow-500/20 text-yellow-400': incident.status === 'open_acknowledged' || incident.status === 'acknowledged',
+                                              'bg-blue-500/20 text-blue-400': incident.status === 'investigating',
+                                              'bg-green-500/20 text-green-400': incident.status === 'resolved' || incident.status === 'closed',
+                                              'bg-gray-500/20 text-gray-400': incident.status === 'false_positive'
                                           }"
                                           x-text="formatStatus(incident.status)">
                                     </span>
                                 </td>
                                 <td class="px-3 py-3 text-center">
                                     <div class="flex items-center justify-center space-x-1" @click.stop>
-                                        <button @click="showCorrelatedEvents(incident)" 
+                                        <button @click="showCorrelatedEvents(incident)"
                                                 class="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded text-xs transition"
                                                 title="Correlated Events">🔗</button>
-                                        <button @click="selectIncident(incident)" 
+                                        <button @click="selectIncident(incident)"
                                                 class="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-xs transition"
                                                 title="Details">👁️</button>
+                                        <button x-show="incident.status === 'open_pending'"
+                                                @click="acknowledgeIncident(incident)"
+                                                class="px-2 py-1 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded text-xs transition"
+                                                title="Acknowledge">✓</button>
+                                        <button x-show="incident.status !== 'resolved' && incident.status !== 'closed' && incident.status !== 'false_positive'"
+                                                @click="resolveIncident(incident)"
+                                                class="px-2 py-1 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition"
+                                                title="Resolve">✔</button>
                                     </div>
                                 </td>
                             </tr>
@@ -410,6 +461,40 @@
             </div>
             
             <div class="p-6 overflow-y-auto max-h-[60vh] scrollbar-thin">
+                <!-- Incident Lifecycle Timeline -->
+                <div class="mb-6 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                    <label class="text-xs text-gray-500 uppercase mb-3 block">Incident Lifecycle</label>
+                    <div class="flex items-center justify-between">
+                        <template x-for="(step, idx) in [
+                            {key: 'open_pending', label: 'Open', icon: '🔴'},
+                            {key: 'acknowledged', label: 'Acknowledged', icon: '🟡'},
+                            {key: 'investigating', label: 'Investigating', icon: '🔵'},
+                            {key: 'resolved', label: 'Resolved', icon: '🟢'}
+                        ]" :key="step.key">
+                            <div class="flex items-center">
+                                <div class="flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 transition-all"
+                                         :class="isLifecycleStepActive(selectedIncident?.status, step.key)
+                                             ? 'border-blue-500 bg-blue-500/20'
+                                             : isLifecycleStepDone(selectedIncident?.status, step.key)
+                                                 ? 'border-green-500 bg-green-500/20'
+                                                 : 'border-gray-600 bg-gray-800'"
+                                         x-text="isLifecycleStepDone(selectedIncident?.status, step.key) ? '✓' : step.icon">
+                                    </div>
+                                    <span class="text-xs mt-1" :class="isLifecycleStepActive(selectedIncident?.status, step.key) ? 'text-blue-400 font-bold' : 'text-gray-500'" x-text="step.label"></span>
+                                </div>
+                                <div x-show="idx < 3" class="w-16 h-0.5 mx-2 mb-4"
+                                     :class="isLifecycleStepDone(selectedIncident?.status, step.key) ? 'bg-green-500' : 'bg-gray-700'"></div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="mt-3 flex items-center space-x-4 text-xs text-gray-500">
+                        <span x-show="selectedIncident?.created_at">Created: <span class="text-gray-400" x-text="formatTime(selectedIncident?.created_at)"></span></span>
+                        <span x-show="selectedIncident?.acknowledged_at">Ack'd: <span class="text-yellow-400" x-text="formatTime(selectedIncident?.acknowledged_at)"></span></span>
+                        <span x-show="selectedIncident?.resolved_at">Resolved: <span class="text-green-400" x-text="formatTime(selectedIncident?.resolved_at)"></span></span>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-2 gap-6">
                     <div class="space-y-4">
                         <div>
@@ -530,7 +615,8 @@
                     <div class="flex items-center space-x-2">
                         <button @click="showCorrelatedEvents(selectedIncident)" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium">🔗 Events</button>
                         <button @click="acknowledgeIncident(selectedIncident)" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm" x-show="selectedIncident?.status === 'open_pending'">✓ Acknowledge</button>
-                        <button @click="resolveIncident(selectedIncident)" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm" x-show="selectedIncident?.status !== 'resolved'">✓ Resolve</button>
+                        <button @click="updateIncidentStatus(selectedIncident, 'INVESTIGATING')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm" x-show="selectedIncident?.status === 'open_acknowledged' || selectedIncident?.status === 'acknowledged'">🔍 Investigate</button>
+                        <button @click="resolveIncident(selectedIncident)" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm" x-show="selectedIncident?.status !== 'resolved' && selectedIncident?.status !== 'closed' && selectedIncident?.status !== 'false_positive'">✓ Resolve</button>
                     </div>
                     <button @click="selectedIncident = null" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">Close</button>
                 </div>
@@ -689,6 +775,7 @@
             </div>
         </div>
     </div>
+</div><!-- /app -->
 
     <script>
         function incidentsApp() {
@@ -726,14 +813,21 @@
                 },
                 
                 async init() {
+                    // Diagnostic
+                    var dInit = document.getElementById('d-init');
+                    if(dInit){dInit.textContent='✓ called';dInit.style.color='#3bff7e';}
+
                     await new Promise(r => setTimeout(r, 100));
                     await this.loadIncidents();
+
+                    if(dInit){dInit.textContent='✓ loaded '+this.incidents.length;dInit.style.color='#3bff7e';}
+
                     this.connectWebSocket();
                     setInterval(() => this.loadIncidents(), 30000);
                 },
                 
                 getApiBase() {
-                    return window.SENTINEL3_API_BASE || window.API_BASE_URL || 'https://web3-xdr-production-api-1003459948096.us-central1.run.app';
+                    return window.SENTINEL3_API_BASE || window.API_BASE_URL || '';
                 },
                 
                 connectWebSocket() {
@@ -1086,8 +1180,46 @@
                 },
                 formatAttackType(type) { return type ? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'; },
                 formatStatus(status) {
-                    const map = { 'open_pending': 'Open', 'open_acknowledged': 'Acknowledged', 'resolved': 'Resolved' };
+                    const map = {
+                        'open_pending': 'Open',
+                        'open_acknowledged': 'Acknowledged',
+                        'acknowledged': 'Acknowledged',
+                        'investigating': 'Investigating',
+                        'resolved': 'Resolved',
+                        'closed': 'Closed',
+                        'false_positive': 'False Positive'
+                    };
                     return map[status?.toLowerCase()] || status || 'Unknown';
+                },
+
+                // Incident lifecycle helpers
+                isLifecycleStepActive(status, stepKey) {
+                    const s = (status || '').toLowerCase();
+                    const normalizedStep = stepKey === 'acknowledged' ? ['open_acknowledged', 'acknowledged'] : [stepKey];
+                    return normalizedStep.includes(s);
+                },
+                isLifecycleStepDone(status, stepKey) {
+                    const order = ['open_pending', 'acknowledged', 'investigating', 'resolved'];
+                    const s = (status || '').toLowerCase();
+                    const currentNorm = s === 'open_acknowledged' ? 'acknowledged' : (s === 'closed' || s === 'false_positive' ? 'resolved' : s);
+                    const currentIdx = order.indexOf(currentNorm);
+                    const stepIdx = order.indexOf(stepKey);
+                    return stepIdx >= 0 && currentIdx > stepIdx;
+                },
+
+                async updateIncidentStatus(incident, newStatus) {
+                    if (!incident) return;
+                    try {
+                        const resp = await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/status`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: newStatus })
+                        });
+                        if (resp.ok) {
+                            incident.status = newStatus.toLowerCase();
+                            await this.loadIncidents();
+                        }
+                    } catch (e) { console.error('Status update error:', e); }
                 }
             };
         }

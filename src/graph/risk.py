@@ -302,7 +302,7 @@ class GraphRiskScorer:
         transfer_values = [v for v in (result.get("transfer_values") or []) if v]
         incoming_values = [v for v in (result.get("incoming_values") or []) if v]
         
-        # Check for unusual patterns
+        # Pattern 1: One-directional flow (only outgoing = drain pattern)
         if transfer_count > 0 and incoming_count == 0:
             score += 20
             factors.append({
@@ -310,21 +310,46 @@ class GraphRiskScorer:
                 "contribution": 20,
                 "severity": "MEDIUM"
             })
-        
-        # Check for large single transfers
-        if transfer_values:
-            max_transfer = max(transfer_values)
+
+        # Pattern 2: Statistical outlier detection (z-score) on transfer values
+        if transfer_values and len(transfer_values) >= 3:
             avg_transfer = sum(transfer_values) / len(transfer_values)
-            
-            if max_transfer > avg_transfer * 10 and max_transfer > 100000:
+            variance = sum((v - avg_transfer) ** 2 for v in transfer_values) / len(transfer_values)
+            std_dev = variance ** 0.5 if variance > 0 else 0
+            max_transfer = max(transfer_values)
+
+            if std_dev > 0:
+                z_score = (max_transfer - avg_transfer) / std_dev
+                # z > 3 = 99.7th percentile outlier — highly anomalous
+                if z_score > 3.0 and max_transfer > 50000:
+                    contribution = min(30, int(z_score * 5))
+                    score += contribution
+                    factors.append({
+                        "factor": f"Statistical outlier transfer ${max_transfer:,.0f} (z={z_score:.1f})",
+                        "contribution": contribution,
+                        "severity": "HIGH"
+                    })
+            elif max_transfer > avg_transfer * 10 and max_transfer > 100000:
+                # Fallback: not enough variance data, use ratio heuristic
                 score += 25
                 factors.append({
                     "factor": f"Unusual large transfer (${max_transfer:,.0f})",
                     "contribution": 25,
                     "severity": "HIGH"
                 })
-        
-        # Check for high velocity
+
+        # Pattern 3: Outgoing/incoming ratio imbalance
+        if transfer_count > 5 and incoming_count > 0:
+            ratio = transfer_count / incoming_count
+            if ratio > 10:
+                score += 15
+                factors.append({
+                    "factor": f"Extreme out/in ratio ({ratio:.1f}:1)",
+                    "contribution": 15,
+                    "severity": "MEDIUM"
+                })
+
+        # Pattern 4: High velocity
         if transfer_count > 100:
             score += 15
             factors.append({
@@ -332,7 +357,21 @@ class GraphRiskScorer:
                 "contribution": 15,
                 "severity": "MEDIUM"
             })
-        
+
+        # Pattern 5: Value concentration (single transfer > 80% of total volume)
+        if transfer_values and len(transfer_values) > 1:
+            total_value = sum(transfer_values)
+            if total_value > 0:
+                max_transfer = max(transfer_values)
+                concentration = max_transfer / total_value
+                if concentration > 0.8 and max_transfer > 100000:
+                    score += 15
+                    factors.append({
+                        "factor": f"Single transfer is {concentration:.0%} of total volume",
+                        "contribution": 15,
+                        "severity": "MEDIUM"
+                    })
+
         return (min(score, 100), factors)
     
     async def _calculate_association_risk(
@@ -532,7 +571,59 @@ class GraphRiskScorer:
                     })
             except Exception as e:
                 logger.debug("temporal_parse_error", error=str(e))
-        
+
+        # Dormant reactivation detection
+        if first_seen and last_seen:
+            try:
+                if isinstance(last_seen, str):
+                    last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                else:
+                    last_seen_dt = last_seen
+
+                if isinstance(first_seen, str):
+                    first_seen_dt = datetime.fromisoformat(first_seen.replace("Z", "+00:00"))
+                else:
+                    first_seen_dt = first_seen
+
+                now = datetime.now(timezone.utc)
+                total_lifespan = (now - first_seen_dt.replace(tzinfo=None)).days
+                days_since_last = (now - last_seen_dt.replace(tzinfo=None)).days
+
+                # Dormant = existed for 90+ days but went silent for 60+ days
+                # then reactivated recently (last seen within 7 days)
+                if total_lifespan >= 90 and days_since_last <= 7:
+                    # Check for a dormancy gap: active period vs total lifespan
+                    active_span = (last_seen_dt.replace(tzinfo=None) - first_seen_dt.replace(tzinfo=None)).days
+                    dormancy_gap = total_lifespan - active_span
+
+                    if dormancy_gap >= 60:
+                        score += 35
+                        factors.append({
+                            "factor": f"Dormant reactivation: {dormancy_gap}d silent after {active_span}d active, resumed within last {days_since_last}d",
+                            "contribution": 35,
+                            "severity": "HIGH"
+                        })
+                    elif dormancy_gap >= 30:
+                        score += 20
+                        factors.append({
+                            "factor": f"Reactivated after {dormancy_gap}d dormancy",
+                            "contribution": 20,
+                            "severity": "MEDIUM"
+                        })
+
+                # Sudden burst: low tx count but very recent last_seen on old entity
+                tx_count = result.get("tx_count", 0)
+                if total_lifespan >= 180 and days_since_last <= 3 and tx_count and tx_count < 10:
+                    score += 15
+                    factors.append({
+                        "factor": f"Old entity ({total_lifespan}d) with minimal activity ({tx_count} txs) suddenly active",
+                        "contribution": 15,
+                        "severity": "MEDIUM"
+                    })
+
+            except Exception as e:
+                logger.debug("dormant_reactivation_parse_error", error=str(e))
+
         return (min(score, 100), factors)
     
     def _get_risk_level(self, score: float) -> str:

@@ -70,19 +70,27 @@ async def login(request: LoginRequest, http_request: Request):
 
 
 @router.post("/logout")
-async def logout(current_user: User = Depends(require_auth)):
+async def logout(
+    http_request: Request,
+    current_user: User = Depends(require_auth)
+):
     """
-    Logout user (client should discard token).
-    Note: JWT tokens are stateless, so logout is handled client-side.
-    For production, implement token blacklisting with Redis.
+    Logout user and revoke the JWT token.
+    The token is added to a Redis-backed blacklist so it cannot be reused.
     """
     from ..database.audit import AuditLogger, ActionType
-    
+
+    # Revoke the token
+    auth_header = http_request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        await jwt_handler.revoke_token(token)
+
     AuditLogger.log(
         action_type=ActionType.LOGOUT,
         actor_id=current_user.username
     )
-    
+
     logger.info("user_logout", username=current_user.username)
     return {"message": "Logged out successfully", "username": current_user.username}
 

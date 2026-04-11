@@ -315,13 +315,33 @@ class MockNeo4jConnection:
 def get_neo4j_connection(use_mock: bool = False) -> Neo4jConnection:
     """
     Get a Neo4j connection instance.
-    
+
     Args:
         use_mock: If True, return mock connection for testing
-        
+
     Returns:
         Neo4j connection instance
     """
-    if use_mock or not NEO4J_AVAILABLE:
+    if use_mock:
+        logger.info("neo4j_mock_requested", reason="use_mock=True")
         return MockNeo4jConnection()
+
+    if not NEO4J_AVAILABLE:
+        logger.warning(
+            "neo4j_unavailable_using_mock",
+            reason="neo4j Python package not installed — all graph queries will return empty results. "
+                   "Install with: pip install neo4j",
+        )
+        return MockNeo4jConnection()
+
+    # Check if Neo4j is actually configured (not just importable)
+    neo4j_uri = os.getenv("NEO4J_URI", "")
+    if not neo4j_uri:
+        logger.warning(
+            "neo4j_not_configured_using_mock",
+            reason="NEO4J_URI environment variable not set — risk scoring, association analysis, "
+                   "and graph traversal will return empty results",
+        )
+        return MockNeo4jConnection()
+
     return Neo4jConnection()

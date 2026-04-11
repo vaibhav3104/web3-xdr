@@ -45,15 +45,71 @@ API_KEYS = {
 }
 
 
-async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
-    """Verify API key from header."""
-    if not x_api_key:
+# Per-key usage counters (in-memory; Redis-backed in production)
+_usage_counters: Dict[str, Dict] = {}
+
+
+def _get_usage(key_name: str, rate_limit: int) -> Dict:
+    """Get or create a sliding-window usage counter for a key."""
+    now = time.time()
+    minute_bucket = int(now // 60)
+
+    entry = _usage_counters.get(key_name)
+    if not entry or entry["bucket"] != minute_bucket:
+        entry = {"bucket": minute_bucket, "count": 0, "limit": rate_limit}
+        _usage_counters[key_name] = entry
+    return entry
+
+
+async def verify_api_key(
+    x_api_key: str = Header(None, alias="X-API-Key"),
+    api_key: str = Query(None, alias="api_key"),
+):
+    """Verify API key from header or query parameter."""
+    key = x_api_key or api_key
+    if not key:
         raise HTTPException(status_code=401, detail="API key required")
-    
-    if x_api_key not in API_KEYS:
+
+    key_data = None
+
+    # Check hardcoded demo keys first
+    if key in API_KEYS:
+        key_data = API_KEYS[key]
+
+    # Check customer-managed keys via APIKeyManager
+    if not key_data:
+        try:
+            from .api_keys import api_key_manager
+            is_valid, api_key_obj, error_msg = api_key_manager.validate_key(key)
+            if is_valid and api_key_obj:
+                customer = api_key_manager.customers.get(api_key_obj.customer_id)
+                key_data = {
+                    "name": customer.name if customer else "Unknown",
+                    "tier": customer.tier if customer else "starter",
+                    "rate_limit": api_key_obj.rate_limit_requests,
+                    "permissions": [s.value for s in api_key_obj.scopes],
+                    "customer_id": api_key_obj.customer_id,
+                }
+        except Exception:
+            pass
+
+    if not key_data:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    return API_KEYS[x_api_key]
+
+    # Enforce rate limit
+    rate_limit = key_data.get("rate_limit", 100)
+    usage = _get_usage(key_data["name"], rate_limit)
+    usage["count"] += 1
+
+    if usage["count"] > rate_limit:
+        reset_in = 60 - int(time.time() % 60)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded ({rate_limit}/min). Resets in {reset_in}s.",
+            headers={"Retry-After": str(reset_in)},
+        )
+
+    return key_data
 
 
 # =============================================================================
@@ -215,14 +271,20 @@ async def get_wallet_risk(
     Use this to screen wallets before interaction.
     """
     from ..ai.graph_analysis import graph_analyzer
-    
+    from .cache import cache_get, cache_set
+
+    # Check cache first (60s TTL)
+    cached = await cache_get("wallet_risk", address.lower(), chain_id)
+    if cached:
+        return WalletRiskResponse(**cached)
+
     # Analyze wallet
     analysis = graph_analyzer.analyze_wallet(address)
-    
+
     # Get node data if available
     node = graph_analyzer._nodes.get(address.lower())
-    
-    return WalletRiskResponse(
+
+    result = WalletRiskResponse(
         address=address,
         chain_id=chain_id,
         risk_score=analysis.get("risk_score", 0.5),
@@ -238,6 +300,10 @@ async def get_wallet_risk(
         is_contract=node.is_contract if node else False,
         explorer_url=get_explorer_url(chain_id, "address", address),
     )
+
+    # Cache result for 60 seconds
+    await cache_set("wallet_risk", address.lower(), chain_id, value=result.model_dump(), ttl=60)
+    return result
 
 
 @router.get("/contract/{address}/threat", response_model=ContractThreatResponse)
@@ -422,15 +488,45 @@ async def batch_wallet_risk(
 async def get_api_stats(api_key: dict = Depends(verify_api_key)):
     """Get API usage statistics."""
     from ..ai.graph_analysis import graph_analyzer
-    
+    from .cache import cache_get, cache_set
+
+    cached = await cache_get("api_stats", api_key["name"])
+    if cached:
+        return cached
+
     graph_stats = graph_analyzer.get_stats()
-    
-    return {
+
+    result = {
         "api_version": "v1",
         "partner": api_key["name"],
         "tier": api_key["tier"],
         "graph_stats": graph_stats,
         "supported_chains": list(EXPLORER_URLS.keys()),
+    }
+    await cache_set("api_stats", api_key["name"], value=result, ttl=120)
+    return result
+
+
+@router.get("/usage")
+async def get_usage(api_key: dict = Depends(verify_api_key)):
+    """
+    Get API usage for the current billing period.
+
+    Returns requests used, limit, and reset time.
+    """
+    rate_limit = api_key.get("rate_limit", 100)
+    usage = _get_usage(api_key["name"], rate_limit)
+    reset_in = 60 - int(time.time() % 60)
+
+    return {
+        "partner": api_key["name"],
+        "tier": api_key["tier"],
+        "current_minute": {
+            "requests_used": usage["count"],
+            "requests_limit": rate_limit,
+            "requests_remaining": max(0, rate_limit - usage["count"]),
+            "resets_in_seconds": reset_in,
+        },
     }
 
 

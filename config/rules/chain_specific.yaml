@@ -43,8 +43,8 @@ rules:
       or network manipulation.
     severity: medium
     confidence: 0.65
-    enabled: true
-    
+    enabled: false  # DISABLED 2026-04-11: 100% FP (10/10) — normal mempool volume trivially exceeds threshold
+
     detection:
       type: velocity
       chain: ethereum

@@ -614,18 +614,18 @@ async def get_rule_triggers(limit: int = 10):
     try:
         # Query events that were triggered by rules (severity > INFO indicates a rule match)
         # Events with higher severity are typically rule-triggered
-        events = await DatabaseService.get_events(
+        events, _ = await DatabaseService.get_events(
             limit=limit,
             severity="HIGH"  # Get high+ severity events which are typically rule-triggered
         )
-        
+
         # Also get critical and medium events
-        critical_events = await DatabaseService.get_events(
+        critical_events, _ = await DatabaseService.get_events(
             limit=limit,
             severity="CRITICAL"
         )
-        
-        medium_events = await DatabaseService.get_events(
+
+        medium_events, _ = await DatabaseService.get_events(
             limit=limit,
             severity="MEDIUM"
         )

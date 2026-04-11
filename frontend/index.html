@@ -5,1452 +5,576 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
-    <!-- DOMPurify for XSS Protection -->
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-red: #ff3b3b;
-            --accent-orange: #ff8a3b;
-            --accent-yellow: #ffd93b;
-            --accent-green: #3bff7e;
-            --accent-blue: #3b8aff;
-            --accent-purple: #8a3bff;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --border-color: #2a2a3a;
-        }
-        
-        body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        
-        .font-mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        
-        .gradient-border {
-            background: linear-gradient(135deg, var(--accent-red), var(--accent-purple));
-            padding: 1px;
-        }
-        
-        .gradient-border > * {
-            background: var(--bg-secondary);
-        }
-        
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-        }
-        
-        .severity-critical {
-            background: linear-gradient(135deg, rgba(255, 59, 59, 0.2), rgba(255, 59, 59, 0.1));
-            border-left: 4px solid var(--accent-red);
-        }
-        
-        .severity-high {
-            background: linear-gradient(135deg, rgba(255, 138, 59, 0.2), rgba(255, 138, 59, 0.1));
-            border-left: 4px solid var(--accent-orange);
-        }
-        
-        .severity-medium {
-            background: linear-gradient(135deg, rgba(255, 217, 59, 0.2), rgba(255, 217, 59, 0.1));
-            border-left: 4px solid var(--accent-yellow);
-        }
-        
-        .severity-low {
-            background: linear-gradient(135deg, rgba(59, 255, 126, 0.2), rgba(59, 255, 126, 0.1));
-            border-left: 4px solid var(--accent-green);
-        }
-        
-        .severity-predicted {
-            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.1));
-            border-left: 4px solid #a855f7;
-        }
-        
-        .pulse-critical {
-            animation: pulse-red 2s infinite;
-        }
-        
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.4); }
-            50% { box-shadow: 0 0 20px 5px rgba(255, 59, 59, 0.2); }
-        }
-        
-        .live-indicator {
-            animation: live-pulse 2s infinite;
-        }
-        
-        @keyframes live-pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-        
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        
-        .scrollbar-thin::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .scrollbar-thin::-webkit-scrollbar-track {
-            background: var(--bg-tertiary);
-        }
-        
-        .scrollbar-thin::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: 3px;
-        }
+        * { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        body { background: #09090b; color: #fafafa; }
+        .card { background: #18181b; border: 1px solid #27272a; border-radius: 12px; }
+        .card-hover:hover { border-color: #3f3f46; }
+        .sidebar { background: #18181b; border-right: 1px solid #27272a; }
+        .nav-item { transition: all 0.15s; border-radius: 8px; }
+        .nav-item:hover { background: #27272a; }
+        .nav-item.active { background: #7c3aed20; color: #a78bfa; border-left: 3px solid #7c3aed; }
+        .severity-badge { padding: 2px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
     </style>
 </head>
-<body class="min-h-screen" x-data="dashboard()" x-init="checkAuth(); init()">
-    <!-- Header -->
-    <header class="border-b border-gray-800 px-6 py-4">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <div class="flex items-center space-x-2">
-                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-purple-600 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                        </svg>
+<body class="min-h-screen">
+<div id="app" x-data="dashboard()" x-init="checkAuth(); init()">
+    <!-- Main Content (sidebar injected by nav.js) -->
+    <main>
+        <!-- Top Bar -->
+        <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
+            <div class="flex items-center justify-between">
+                <h1 class="text-lg font-semibold">Dashboard</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 text-xs text-zinc-500">
+                        <span class="w-2 h-2 rounded-full pulse-dot" :class="wsConnected ? 'bg-green-500' : 'bg-yellow-500'"></span>
+                        <span x-text="wsConnected ? 'Live' : 'Polling'"></span>
                     </div>
-                    <span class="text-xl font-bold bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
-                        Sentinel3
-                    </span>
-                </div>
-                <span class="text-gray-500">|</span>
-                <span class="text-gray-400 text-sm">Cross-Chain Security</span>
-            </div>
-            
-            <div class="flex items-center space-x-3">
-                <div class="flex items-center space-x-2 text-sm">
-                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="text-gray-400">Active</span>
-                </div>
-                <a href="/frontend/incidents.html" class="px-3 py-2 bg-gradient-to-r from-red-600/30 to-orange-600/30 hover:from-red-600/50 hover:to-orange-600/50 text-red-300 rounded-lg text-sm transition border border-red-500/30">
-                    🚨 Incidents
-                </a>
-                <a href="/frontend/logs.html" class="px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded-lg text-sm transition">
-                    📋 Log Explorer
-                </a>
-                <a href="/frontend/parsers.html" class="px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 rounded-lg text-sm transition">
-                    🔄 Parsers
-                </a>
-                <a href="/frontend/guardian.html" class="px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 rounded-lg text-sm transition">
-                    🛡️ Guardian
-                </a>
-                <a href="/frontend/simulator.html" class="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded-lg text-sm transition">
-                    🎭 Simulator
-                </a>
-                <a href="/frontend/analytics.html" class="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg text-sm transition">
-                    📊 Analytics
-                </a>
-                <a href="/frontend/scanner.html" class="px-3 py-2 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-400 rounded-lg text-sm transition">
-                    🔬 Vulnerability Scanner
-                </a>
-                <a href="/frontend/security-graph.html" class="px-3 py-2 bg-gradient-to-r from-cyan-600/30 to-purple-600/30 hover:from-cyan-600/50 hover:to-purple-600/50 text-cyan-300 rounded-lg text-sm transition border border-cyan-500/30">
-                    🔷 Security Graph
-                </a>
-                <a href="/frontend/admin.html" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
-                    ⚙️ Admin
-                </a>
-                <button @click="logout()" class="px-3 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm transition">
-                    Logout
-                </button>
-            </div>
-        </div>
-    </header>
-    
-    <!-- Main Content -->
-    <main class="p-6">
-        <!-- Security Graph Banner -->
-        <a href="/frontend/security-graph.html" class="block mb-6 group">
-            <div class="card p-4 bg-gradient-to-r from-cyan-900/30 via-purple-900/30 to-pink-900/30 border-cyan-500/30 hover:border-cyan-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center">
-                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-lg font-bold text-white group-hover:text-cyan-300 transition">🔷 Security Graph</div>
-                            <div class="text-sm text-gray-400">Visualize entity relationships, attack paths & risk scores</div>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-6">
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-cyan-400" x-text="graphStats.nodes || '11K+'">11K+</div>
-                            <div class="text-xs text-gray-500">Nodes</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-purple-400" x-text="graphStats.relationships || '740+'">740+</div>
-                            <div class="text-xs text-gray-500">Relationships</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-red-400" x-text="graphStats.hackers || '15'">15</div>
-                            <div class="text-xs text-gray-500">Known Hackers</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-yellow-400" x-text="graphStats.attackVectors || '8'">8</div>
-                            <div class="text-xs text-gray-500">Attack Vectors</div>
-                        </div>
-                        <div class="px-4 py-2 bg-cyan-600/30 rounded-lg text-cyan-300 text-sm font-medium group-hover:bg-cyan-600/50 transition">
-                            Open Graph →
-                        </div>
-                    </div>
+                    <div class="text-xs text-zinc-600 font-mono" x-text="'Uptime: ' + formatUptime(stats.uptime)"></div>
                 </div>
             </div>
-        </a>
+        </header>
 
-        <!-- Stats Row -->
-        <div class="grid grid-cols-5 gap-4 mb-6">
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">🚨 Active Incidents</div>
-                <div class="text-3xl font-bold text-red-400" x-text="stats.activeIncidents">0</div>
-                <div class="text-xs text-gray-500 mt-1">Open & unacknowledged</div>
-            </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">🔴 Critical Severity</div>
-                <div class="text-3xl font-bold text-orange-400" x-text="stats.criticalIncidents">0</div>
-                <div class="text-xs text-gray-500 mt-1">Total critical incidents</div>
-            </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">📊 Events</div>
-                <div class="text-3xl font-bold text-blue-400" x-text="stats.totalEvents">0</div>
-            </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">🔗 Blocks</div>
-                <div class="text-3xl font-bold text-green-400" x-text="stats.blocksScanned">0</div>
-            </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">⏱️ Uptime</div>
-                <div class="text-3xl font-bold text-purple-400" x-text="formatUptime(stats.uptime)">0s</div>
-            </div>
-        </div>
-        
-        <!-- Charts Row: Attack Types & Chain Distribution -->
-        <div class="grid grid-cols-2 gap-6 mb-6">
-            <!-- Attack Type Trends -->
-            <div class="card p-4">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold">📈 Attack Type Trends (24h)</h3>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 rounded-full bg-green-500 live-indicator"></div>
-                        <span class="text-xs text-gray-500">Live</span>
+        <div class="p-6 space-y-6">
+            <!-- Stats Row -->
+            <div class="grid grid-cols-4 gap-4">
+                <div class="card p-4 card-hover">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs text-zinc-500 uppercase tracking-wide">Active Incidents</span>
+                        <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot" x-show="stats.activeIncidents > 0"></span>
                     </div>
+                    <div class="text-3xl font-bold text-red-400" x-text="stats.activeIncidents">0</div>
+                    <div class="text-xs text-zinc-600 mt-1" x-text="stats.criticalIncidents + ' critical'"></div>
                 </div>
-                <div class="space-y-3">
-                    <template x-for="(data, type) in attackTypeTrends" :key="type">
-                        <div>
-                            <div class="flex items-center justify-between text-sm mb-1">
-                                <span class="text-gray-400" x-text="formatAttackType(type)"></span>
-                                <span class="font-mono" x-text="data.count"></span>
-                            </div>
-                            <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
-                                <div class="h-full rounded-full transition-all duration-500"
-                                     :class="{
-                                         'bg-red-500': type.includes('reentrancy') || type.includes('flash'),
-                                         'bg-orange-500': type.includes('rug') || type.includes('honeypot'),
-                                         'bg-yellow-500': type.includes('manipulation') || type.includes('governance'),
-                                         'bg-blue-500': type.includes('unknown')
-                                     }"
-                                     :style="`width: ${data.percentage}%`"></div>
-                            </div>
-                        </div>
-                    </template>
-                    <div x-show="Object.keys(attackTypeTrends).length === 0" class="text-center py-4 text-gray-500">
-                        No attack data available
+                <div class="card p-4 card-hover">
+                    <div class="text-xs text-zinc-500 uppercase tracking-wide mb-3">Events Processed</div>
+                    <div class="text-3xl font-bold text-blue-400" x-text="stats.totalEvents.toLocaleString()">0</div>
+                    <div class="text-xs text-zinc-600 mt-1" x-text="stats.chainsMonitored + ' chains monitored'"></div>
+                </div>
+                <div class="card p-4 card-hover">
+                    <div class="text-xs text-zinc-500 uppercase tracking-wide mb-3">Blocks Scanned</div>
+                    <div class="text-3xl font-bold text-emerald-400" x-text="stats.blocksScanned.toLocaleString()">0</div>
+                </div>
+                <div class="card p-4 card-hover">
+                    <div class="text-xs text-zinc-500 uppercase tracking-wide mb-3">Threat Distribution</div>
+                    <div class="flex items-end space-x-1 h-8">
+                        <template x-for="(data, type) in attackTypeTrends" :key="type">
+                            <div class="flex-1 rounded-sm bg-violet-500/60" :style="`height: ${Math.max(data.percentage * 0.32, 4)}px`" :title="formatAttackType(type) + ': ' + data.count"></div>
+                        </template>
+                        <div x-show="Object.keys(attackTypeTrends).length === 0" class="text-xs text-zinc-600">No data</div>
                     </div>
+                    <div class="text-xs text-zinc-600 mt-2" x-text="Object.keys(attackTypeTrends).length + ' attack types detected'"></div>
                 </div>
             </div>
-            
-            <!-- Chain Distribution -->
-            <div class="card p-4">
+
+            <!-- Chain Activity -->
+            <div class="card p-4" x-show="Object.keys(chainDistribution).length > 0">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold">🌐 Chain Distribution</h3>
-                    <a href="incidents.html" class="text-xs text-blue-400 hover:underline">View All →</a>
+                    <h3 class="text-sm font-semibold text-zinc-300">Chain Activity</h3>
                 </div>
-                <div class="grid grid-cols-3 gap-3">
+                <div class="flex items-center space-x-3">
                     <template x-for="(data, chain) in chainDistribution" :key="chain">
-                        <div class="bg-gray-800/50 rounded-lg p-3 text-center hover:bg-gray-800 transition cursor-pointer"
-                             @click="window.location.href='incidents.html?chain=' + chain">
-                            <div class="text-2xl mb-1" x-text="getChainEmoji(chain)">⛓️</div>
-                            <div class="text-sm font-medium capitalize" x-text="chain"></div>
-                            <div class="text-lg font-bold mt-1"
-                                 :class="{
-                                     'text-red-400': data.critical > 0,
-                                     'text-orange-400': data.high > 0 && data.critical === 0,
-                                     'text-green-400': data.critical === 0 && data.high === 0
-                                 }"
-                                 x-text="data.total"></div>
-                            <div class="text-xs text-gray-500" x-text="data.critical + ' critical'"></div>
-                        </div>
+                        <a :href="'/frontend/incidents.html?chain=' + chain"
+                           class="flex items-center space-x-2 px-3 py-2 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition text-sm">
+                            <span x-text="getChainEmoji(chain)"></span>
+                            <span class="capitalize text-zinc-300" x-text="chain"></span>
+                            <span class="font-mono text-xs px-1.5 py-0.5 rounded"
+                                  :class="data.critical > 0 ? 'bg-red-500/20 text-red-400' : 'bg-zinc-700 text-zinc-400'"
+                                  x-text="data.total"></span>
+                        </a>
                     </template>
-                    <div x-show="Object.keys(chainDistribution).length === 0" class="col-span-3 text-center py-4 text-gray-500">
-                        No chain data available
-                    </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Main Grid -->
-        <div class="grid grid-cols-3 gap-6">
-            <!-- Incidents Panel -->
-            <div class="col-span-2">
-                <div class="card">
-                    <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-                        <h2 class="text-lg font-semibold">Active Incidents</h2>
-                        <select class="bg-gray-800 text-sm rounded-lg px-3 py-1.5 border border-gray-700" x-model="filters.severity">
+
+            <!-- Main Grid: Incidents + Detail + Events -->
+            <div class="grid grid-cols-3 gap-6">
+                <!-- Incidents List -->
+                <div class="col-span-2 card">
+                    <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-zinc-300">Active Incidents</h2>
+                        <select class="bg-zinc-800 text-xs rounded-lg px-3 py-1.5 border border-zinc-700 text-zinc-400" x-model="filters.severity">
                             <option value="">All Severities</option>
                             <option value="CRITICAL">Critical</option>
                             <option value="HIGH">High</option>
                             <option value="MEDIUM">Medium</option>
+                            <option value="LOW">Low</option>
                         </select>
                     </div>
-                    <div class="p-4 space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin">
+                    <div class="divide-y divide-zinc-800/50 max-h-[600px] overflow-y-auto scrollbar-thin">
                         <template x-for="incident in filteredIncidents" :key="incident.id">
-                            <div 
-                                class="p-4 rounded-lg cursor-pointer transition hover:bg-gray-800/50"
-                                :class="{
-                                    'severity-critical pulse-critical': incident.severity === 'CRITICAL' && !incident.is_predicted,
-                                    'severity-high': incident.severity === 'HIGH' && !incident.is_predicted,
-                                    'severity-medium': incident.severity === 'MEDIUM' && !incident.is_predicted,
-                                    'severity-low': incident.severity === 'LOW' && !incident.is_predicted,
-                                    'severity-predicted': incident.is_predicted
-                                }"
-                                @click="selectIncident(incident)"
-                            >
-                                <div class="flex items-start justify-between mb-2">
-                                    <div>
-                                        <span 
-                                            class="status-badge"
-                                            :class="{
-                                                'bg-red-500/20 text-red-400': incident.severity === 'CRITICAL' && !incident.is_predicted,
-                                                'bg-orange-500/20 text-orange-400': incident.severity === 'HIGH' && !incident.is_predicted,
-                                                'bg-yellow-500/20 text-yellow-400': incident.severity === 'MEDIUM' && !incident.is_predicted,
-                                                'bg-green-500/20 text-green-400': incident.severity === 'LOW' && !incident.is_predicted,
-                                                'bg-purple-500/20 text-purple-400': incident.is_predicted
-                                            }"
-                                            x-text="incident.is_predicted ? 'PREDICTED' : incident.severity"
-                                        ></span>
+                            <div class="px-4 py-3 cursor-pointer transition hover:bg-zinc-800/30"
+                                 :class="selectedIncident?.id === incident.id ? 'bg-zinc-800/50' : ''"
+                                 @click="selectIncident(incident)">
+                                <div class="flex items-center justify-between mb-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="severity-badge"
+                                              :class="{
+                                                  'bg-red-500/20 text-red-400': incident.severity === 'CRITICAL' && !incident.is_predicted,
+                                                  'bg-orange-500/20 text-orange-400': incident.severity === 'HIGH' && !incident.is_predicted,
+                                                  'bg-yellow-500/20 text-yellow-400': incident.severity === 'MEDIUM' && !incident.is_predicted,
+                                                  'bg-emerald-500/20 text-emerald-400': incident.severity === 'LOW' && !incident.is_predicted,
+                                                  'bg-violet-500/20 text-violet-400': incident.is_predicted
+                                              }"
+                                              x-text="incident.is_predicted ? 'PREDICTED' : incident.severity"></span>
+                                        <span class="text-xs text-zinc-600 font-mono" x-text="incident.attack_type"></span>
                                     </div>
-                                    <span class="text-xs text-gray-500 font-mono" x-text="formatTime(incident.created_at)"></span>
+                                    <span class="text-xs text-zinc-600 font-mono" x-text="formatTime(incident.created_at)"></span>
                                 </div>
-                                <h3 class="font-semibold mb-1" x-text="incident.title"></h3>
-                                <div class="flex items-center space-x-4 text-sm text-gray-400">
-                                    <span x-text="incident.attack_type"></span>
-                                    <span>•</span>
-                                    <span x-text="formatUSD(incident.total_loss_usd) + ' at risk'"></span>
-                                    <span>•</span>
-                                    <span x-text="incident.affected_chains.join(', ')"></span>
+                                <h3 class="text-sm font-medium text-zinc-200 mb-1" x-text="incident.title"></h3>
+                                <div class="flex items-center space-x-3 text-xs text-zinc-500">
+                                    <span x-text="formatUSD(incident.total_loss_usd) + ' at risk'" x-show="incident.total_loss_usd > 0"></span>
+                                    <span x-text="(incident.affected_chains || []).join(', ')"></span>
                                 </div>
-                                <!-- Incident ID in list view -->
-                                <div class="mt-1 text-xs font-mono text-gray-600 truncate" x-text="'ID: ' + (incident.id || incident.incident_id || 'N/A')"></div>
                             </div>
                         </template>
-                        
-                        <div x-show="filteredIncidents.length === 0" class="text-center py-12 text-gray-500">
-                            <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+                        <div x-show="filteredIncidents.length === 0" class="text-center py-16 text-zinc-600">
+                            <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            <p>No active incidents</p>
-                            <p class="text-sm">System is monitoring for threats</p>
+                            <p class="text-sm">No active incidents</p>
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Right Panel -->
-            <div class="space-y-6">
-                <!-- Incident Detail -->
-                <div class="card" x-show="selectedIncident">
-                    <div class="p-4 border-b border-gray-800">
-                        <h2 class="text-lg font-semibold">Incident Details</h2>
-                    </div>
-                    <div class="p-4" x-show="selectedIncident">
-                        <div class="mb-4">
-                            <span 
-                                class="status-badge"
-                                :class="{
-                                    'bg-red-500/20 text-red-400': selectedIncident?.severity === 'CRITICAL',
-                                    'bg-orange-500/20 text-orange-400': selectedIncident?.severity === 'HIGH',
-                                    'bg-yellow-500/20 text-yellow-400': selectedIncident?.severity === 'MEDIUM'
-                                }"
-                                x-text="selectedIncident?.severity"
-                            ></span>
+
+                <!-- Right Panel -->
+                <div class="space-y-4">
+                    <!-- Incident Detail -->
+                    <div class="card" x-show="selectedIncident">
+                        <div class="p-4 border-b border-zinc-800">
+                            <h2 class="text-sm font-semibold text-zinc-300">Incident Detail</h2>
                         </div>
-                        <h3 class="text-xl font-bold mb-2" x-text="selectedIncident?.title"></h3>
-                        
-                        <div class="space-y-3 text-sm">
-                            <!-- Incident ID - prominently displayed -->
-                            <div class="bg-gray-800/60 rounded-lg p-2 mb-2">
-                                <span class="text-gray-500 text-xs uppercase tracking-wide">Incident ID</span>
-                                <p class="font-mono text-xs text-cyan-400 mt-1 break-all" x-text="selectedIncident?.id || selectedIncident?.incident_id || 'N/A'"></p>
+                        <div class="p-4 space-y-3">
+                            <span class="severity-badge"
+                                  :class="{
+                                      'bg-red-500/20 text-red-400': selectedIncident?.severity === 'CRITICAL',
+                                      'bg-orange-500/20 text-orange-400': selectedIncident?.severity === 'HIGH',
+                                      'bg-yellow-500/20 text-yellow-400': selectedIncident?.severity === 'MEDIUM',
+                                      'bg-emerald-500/20 text-emerald-400': selectedIncident?.severity === 'LOW'
+                                  }"
+                                  x-text="selectedIncident?.severity"></span>
+                            <h3 class="text-base font-semibold" x-text="selectedIncident?.title"></h3>
+
+                            <div class="space-y-2 text-xs">
+                                <div class="flex justify-between"><span class="text-zinc-500">Attack</span><span class="font-mono" x-text="selectedIncident?.attack_type"></span></div>
+                                <div class="flex justify-between"><span class="text-zinc-500">Confidence</span><span x-text="((selectedIncident?.confidence || 0) * 100).toFixed(0) + '%'"></span></div>
+                                <div class="flex justify-between"><span class="text-zinc-500">Loss</span><span class="text-red-400 font-medium" x-text="formatUSD(selectedIncident?.total_loss_usd)"></span></div>
+                                <div class="flex justify-between"><span class="text-zinc-500">Chains</span><span x-text="selectedIncident?.affected_chains?.join(', ')"></span></div>
+                                <div class="flex justify-between"><span class="text-zinc-500">Latency</span><span x-text="(selectedIncident?.detection_latency_blocks || 0) + ' blocks'"></span></div>
                             </div>
-                            
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Attack Type</span>
-                                <span class="font-mono" x-text="selectedIncident?.attack_type"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Confidence</span>
-                                <span x-text="(selectedIncident?.confidence * 100).toFixed(0) + '%'"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Total Loss</span>
-                                <span class="text-red-400 font-semibold" x-text="formatUSD(selectedIncident?.total_loss_usd)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Chains</span>
-                                <span x-text="selectedIncident?.affected_chains?.join(', ')"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Detection Latency</span>
-                                <span x-text="selectedIncident?.detection_latency_blocks + ' blocks'"></span>
-                            </div>
-                            
-                            <!-- Contract and Address Information -->
+
+                            <!-- Affected Contracts -->
                             <template x-if="selectedIncident?.affected_contracts?.length > 0">
-                                <div class="pt-3 border-t border-gray-700">
-                                    <span class="text-gray-400 text-xs uppercase tracking-wide">Affected Contracts</span>
+                                <div class="pt-2 border-t border-zinc-800">
+                                    <span class="text-[10px] uppercase tracking-wide text-zinc-500">Contracts</span>
                                     <div class="mt-1 space-y-1">
-                                        <template x-for="contract in selectedIncident.affected_contracts" :key="contract">
-                                            <div class="flex items-center justify-between bg-gray-800/50 rounded px-2 py-1">
-                                                <span class="font-mono text-xs text-purple-300 truncate" x-text="contract"></span>
-                                                <a 
-                                                    :href="getExplorerUrl(selectedIncident?.affected_chains?.[0], 'address', contract)"
-                                                    target="_blank"
-                                                    class="text-blue-400 hover:text-blue-300 text-xs ml-2"
-                                                    title="View on Explorer"
-                                                >
-                                                    🔗
-                                                </a>
-                                            </div>
+                                        <template x-for="c in selectedIncident.affected_contracts" :key="c">
+                                            <a :href="getExplorerUrl(selectedIncident?.affected_chains?.[0], 'address', c)" target="_blank"
+                                               class="block font-mono text-[11px] text-violet-400 hover:text-violet-300 truncate" x-text="c"></a>
                                         </template>
                                     </div>
                                 </div>
                             </template>
-                            
-                            <template x-if="selectedIncident?.affected_addresses?.length > 0">
-                                <div class="pt-3 border-t border-gray-700">
-                                    <span class="text-gray-400 text-xs uppercase tracking-wide">Affected Addresses (Deployers/Attackers)</span>
-                                    <div class="mt-1 space-y-1">
-                                        <template x-for="addr in selectedIncident.affected_addresses" :key="addr">
-                                            <div class="flex items-center justify-between bg-gray-800/50 rounded px-2 py-1">
-                                                <span class="font-mono text-xs text-orange-300 truncate" x-text="addr"></span>
-                                                <a 
-                                                    :href="getExplorerUrl(selectedIncident?.affected_chains?.[0], 'address', addr)"
-                                                    target="_blank"
-                                                    class="text-blue-400 hover:text-blue-300 text-xs ml-2"
-                                                    title="View on Explorer"
-                                                >
-                                                    🔗
-                                                </a>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-                            </template>
-                            
-                            <!-- Summary section -->
-                            <template x-if="selectedIncident?.summary">
-                                <div class="pt-3 border-t border-gray-700">
-                                    <span class="text-gray-400 text-xs uppercase tracking-wide">Summary</span>
-                                    <p class="mt-1 text-sm text-gray-300" x-text="selectedIncident.summary"></p>
-                                </div>
-                            </template>
-                            
-                            <!-- ML Analysis Section (for ML-triggered incidents) -->
+
+                            <!-- ML Analysis (single location) -->
                             <template x-if="mlAnalysisDetails">
-                                <div class="pt-3 border-t border-gray-700">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-purple-400 text-xs uppercase tracking-wide font-semibold">🤖 ML Detection Analysis</span>
-                                        <span class="text-xs text-gray-500">Why this was flagged</span>
-                                    </div>
-                                    
-                                    <!-- Threat Category -->
-                                    <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 mb-2">
-                                        <div class="flex items-center justify-between mb-2">
-                                            <span class="text-gray-400 text-xs">Threat Category</span>
-                                            <span class="px-2 py-1 rounded text-xs font-mono"
-                                                :class="{
-                                                    'bg-red-500/20 text-red-400': ['reentrancy_exploit', 'flash_loan_exploit', 'bridge_exploit'].includes(mlAnalysisDetails.threat_category),
-                                                    'bg-orange-500/20 text-orange-400': ['rug_pull', 'honeypot', 'price_manipulation'].includes(mlAnalysisDetails.threat_category),
-                                                    'bg-yellow-500/20 text-yellow-400': mlAnalysisDetails.threat_category === 'unknown_threat',
-                                                    'bg-green-500/20 text-green-400': mlAnalysisDetails.threat_category === 'safe'
-                                                }"
-                                                x-text="formatThreatCategory(mlAnalysisDetails.threat_category)">
-                                            </span>
+                                <div class="pt-2 border-t border-zinc-800">
+                                    <span class="text-[10px] uppercase tracking-wide text-violet-400">ML Analysis</span>
+                                    <div class="mt-2 space-y-2">
+                                        <div class="flex justify-between text-xs">
+                                            <span class="text-zinc-500">Threat</span>
+                                            <span class="font-mono" :class="{
+                                                'text-red-400': mlAnalysisDetails.risk_score >= 70,
+                                                'text-orange-400': mlAnalysisDetails.risk_score >= 40,
+                                                'text-emerald-400': mlAnalysisDetails.risk_score < 40
+                                            }" x-text="formatThreatCategory(mlAnalysisDetails.threat_category)"></span>
                                         </div>
-                                        
-                                        <!-- Risk Score -->
-                                        <div class="mb-2">
-                                            <div class="flex items-center justify-between text-xs mb-1">
-                                                <span class="text-gray-400">Risk Score</span>
-                                                <span class="font-mono" 
-                                                    :class="{
-                                                        'text-red-400': mlAnalysisDetails.risk_score >= 70,
-                                                        'text-orange-400': mlAnalysisDetails.risk_score >= 40 && mlAnalysisDetails.risk_score < 70,
-                                                        'text-yellow-400': mlAnalysisDetails.risk_score >= 20 && mlAnalysisDetails.risk_score < 40,
-                                                        'text-green-400': mlAnalysisDetails.risk_score < 20
-                                                    }"
-                                                    x-text="mlAnalysisDetails.risk_score?.toFixed(1) + '/100'">
-                                                </span>
-                                            </div>
-                                            <div class="w-full bg-gray-700 rounded-full h-2">
-                                                <div class="h-2 rounded-full transition-all duration-500"
-                                                    :class="{
-                                                        'bg-red-500': mlAnalysisDetails.risk_score >= 70,
-                                                        'bg-orange-500': mlAnalysisDetails.risk_score >= 40 && mlAnalysisDetails.risk_score < 70,
-                                                        'bg-yellow-500': mlAnalysisDetails.risk_score >= 20 && mlAnalysisDetails.risk_score < 40,
-                                                        'bg-green-500': mlAnalysisDetails.risk_score < 20
-                                                    }"
-                                                    :style="'width: ' + Math.min(mlAnalysisDetails.risk_score || 0, 100) + '%'">
-                                                </div>
-                                            </div>
+                                        <div class="w-full bg-zinc-800 rounded-full h-1.5">
+                                            <div class="h-1.5 rounded-full transition-all" :class="{
+                                                'bg-red-500': mlAnalysisDetails.risk_score >= 70,
+                                                'bg-orange-500': mlAnalysisDetails.risk_score >= 40,
+                                                'bg-emerald-500': mlAnalysisDetails.risk_score < 40
+                                            }" :style="'width:' + Math.min(mlAnalysisDetails.risk_score || 0, 100) + '%'"></div>
                                         </div>
-                                        
-                                        <!-- ML Confidence -->
-                                        <div class="mb-2">
-                                            <div class="flex items-center justify-between text-xs mb-1">
-                                                <span class="text-gray-400">ML Confidence</span>
-                                                <span class="font-mono text-purple-400" x-text="((mlAnalysisDetails.confidence || 0) * 100).toFixed(0) + '%'"></span>
-                                            </div>
-                                            <div class="w-full bg-gray-700 rounded-full h-2">
-                                                <div class="h-2 rounded-full bg-purple-500 transition-all duration-500"
-                                                    :style="'width: ' + ((mlAnalysisDetails.confidence || 0) * 100) + '%'">
-                                                </div>
-                                            </div>
+                                        <div class="flex justify-between text-xs">
+                                            <span class="text-zinc-500">Score</span>
+                                            <span class="font-mono" x-text="(mlAnalysisDetails.risk_score || 0).toFixed(1) + '/100'"></span>
                                         </div>
-                                        
-                                        <!-- Bytecode Size -->
-                                        <div class="flex items-center justify-between text-xs" x-show="mlAnalysisDetails.bytecode_size">
-                                            <span class="text-gray-400">Bytecode Size</span>
-                                            <span class="font-mono text-gray-300" x-text="(mlAnalysisDetails.bytecode_size || 0).toLocaleString() + ' bytes'"></span>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Detection Alerts/Reasons -->
-                                    <template x-if="mlAnalysisDetails.alerts?.length > 0">
-                                        <div class="bg-gray-800/50 rounded-lg p-3">
-                                            <span class="text-gray-400 text-xs uppercase tracking-wide">Detection Reasons</span>
-                                            <ul class="mt-2 space-y-1">
-                                                <template x-for="(alert, idx) in mlAnalysisDetails.alerts" :key="idx">
-                                                    <li class="flex items-start space-x-2 text-xs">
-                                                        <span class="text-yellow-400 mt-0.5">⚠️</span>
-                                                        <span class="text-gray-300" x-text="alert"></span>
-                                                    </li>
+                                        <template x-if="mlAnalysisDetails.alerts?.length > 0">
+                                            <ul class="space-y-1 mt-1">
+                                                <template x-for="a in mlAnalysisDetails.alerts" :key="a">
+                                                    <li class="text-[11px] text-zinc-400 pl-3 border-l-2 border-yellow-500/40" x-text="a"></li>
                                                 </template>
                                             </ul>
-                                        </div>
-                                    </template>
-                                    
-                                    <!-- Source -->
-                                    <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
-                                        <span>Source: <span class="font-mono" x-text="mlAnalysisDetails.source || 'ml_contract_scanner'"></span></span>
-                                        <span x-show="mlAnalysisDetails.is_threat" class="text-red-400">⚡ Flagged as Threat</span>
+                                        </template>
                                     </div>
                                 </div>
                             </template>
-                            
-                            <!-- Loading indicator for ML analysis -->
-                            <template x-if="loadingMlAnalysis">
-                                <div class="pt-3 border-t border-gray-700">
-                                    <div class="flex items-center space-x-2 text-purple-400 text-sm">
-                                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <span>Loading ML analysis details...</span>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                        
-                        <div class="mt-6 space-y-2">
-                            <button 
-                                class="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-2"
-                                @click="analyzeWithAI(selectedIncident)"
-                                :disabled="aiAnalyzing"
-                            >
-                                <span x-show="!aiAnalyzing">🤖 AI Analysis</span>
-                                <span x-show="aiAnalyzing" class="animate-pulse">⏳ Analyzing...</span>
-                            </button>
-                            <button 
-                                class="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-semibold transition"
-                                @click="emergencyPause(selectedIncident)"
-                                :disabled="pauseInProgress"
-                            >
-                                <span x-show="!pauseInProgress">🔴 Emergency Pause</span>
-                                <span x-show="pauseInProgress" class="animate-pulse">⏳ Pausing...</span>
-                            </button>
-                            <button 
-                                class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition"
-                                @click="viewExplanation(selectedIncident)"
-                            >
-                                📋 View Full Explanation
-                            </button>
-                            <button 
-                                class="w-full py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition"
-                                @click="acknowledgeIncident(selectedIncident)"
-                                :disabled="acknowledgeInProgress"
-                            >
-                                <span x-show="!acknowledgeInProgress">✅ Acknowledge</span>
-                                <span x-show="acknowledgeInProgress" class="animate-pulse">⏳ Processing...</span>
-                            </button>
-                        </div>
-                        
-                        <!-- Explanation Modal -->
-                        <div x-show="showExplanation" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @click.self="showExplanation = false">
-                            <div class="card max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
-                                <div class="flex items-center justify-between mb-4">
-                                    <h3 class="text-xl font-bold">Incident Explanation</h3>
-                                    <button @click="showExplanation = false" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-                                </div>
-                                <div class="space-y-4">
-                                    <div>
-                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Summary</h4>
-                                        <p class="text-sm" x-text="selectedIncident?.summary || selectedIncident?.title"></p>
-                                    </div>
-                                    <div>
-                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Attack Type</h4>
-                                        <p class="text-sm" x-text="selectedIncident?.attack_type"></p>
-                                    </div>
-                                    <div>
-                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Affected Chains</h4>
-                                        <div class="flex flex-wrap gap-2">
-                                            <template x-for="chain in (selectedIncident?.affected_chains || [])" :key="chain">
-                                                <span class="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs" x-text="chain"></span>
-                                            </template>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Confidence</h4>
-                                        <div class="flex items-center space-x-2">
-                                            <div class="flex-1 bg-gray-700 rounded-full h-2">
-                                                <div class="h-2 rounded-full bg-purple-500" :style="'width: ' + ((selectedIncident?.confidence || 0) * 100) + '%'"></div>
-                                            </div>
-                                            <span class="text-sm font-mono" x-text="((selectedIncident?.confidence || 0) * 100).toFixed(0) + '%'"></span>
-                                        </div>
-                                    </div>
-                                    <div x-show="selectedIncident?.recommended_actions?.length > 0">
-                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Recommended Actions</h4>
-                                        <ul class="space-y-1">
-                                            <template x-for="(action, i) in (selectedIncident?.recommended_actions || [])" :key="i">
-                                                <li class="text-sm flex items-start space-x-2">
-                                                    <span class="text-purple-400" x-text="(i+1) + '.'"></span>
-                                                    <span x-text="action"></span>
-                                                </li>
-                                            </template>
-                                        </ul>
-                                    </div>
-                                    
-                                    <!-- ML Analysis Details in Modal -->
-                                    <div x-show="mlAnalysisDetails" class="pt-4 border-t border-gray-700">
-                                        <h4 class="text-sm font-semibold text-purple-400 mb-3">🤖 ML Detection Analysis</h4>
-                                        <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4 space-y-3">
-                                            <div class="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <span class="text-xs text-gray-500">Threat Category</span>
-                                                    <p class="font-mono text-sm" 
-                                                        :class="{
-                                                            'text-red-400': ['reentrancy_exploit', 'flash_loan_exploit', 'bridge_exploit'].includes(mlAnalysisDetails?.threat_category),
-                                                            'text-orange-400': ['rug_pull', 'honeypot', 'price_manipulation'].includes(mlAnalysisDetails?.threat_category),
-                                                            'text-yellow-400': mlAnalysisDetails?.threat_category === 'unknown_threat',
-                                                            'text-green-400': mlAnalysisDetails?.threat_category === 'safe'
-                                                        }"
-                                                        x-text="formatThreatCategory(mlAnalysisDetails?.threat_category)">
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <span class="text-xs text-gray-500">Risk Score</span>
-                                                    <p class="font-mono text-sm"
-                                                        :class="{
-                                                            'text-red-400': mlAnalysisDetails?.risk_score >= 70,
-                                                            'text-orange-400': mlAnalysisDetails?.risk_score >= 40 && mlAnalysisDetails?.risk_score < 70,
-                                                            'text-yellow-400': mlAnalysisDetails?.risk_score >= 20 && mlAnalysisDetails?.risk_score < 40,
-                                                            'text-green-400': mlAnalysisDetails?.risk_score < 20
-                                                        }"
-                                                        x-text="(mlAnalysisDetails?.risk_score || 0).toFixed(1) + ' / 100'">
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <span class="text-xs text-gray-500">ML Confidence</span>
-                                                    <p class="font-mono text-sm text-purple-400" x-text="((mlAnalysisDetails?.confidence || 0) * 100).toFixed(0) + '%'"></p>
-                                                </div>
-                                                <div>
-                                                    <span class="text-xs text-gray-500">Bytecode Size</span>
-                                                    <p class="font-mono text-sm text-gray-300" x-text="(mlAnalysisDetails?.bytecode_size || 0).toLocaleString() + ' bytes'"></p>
-                                                </div>
-                                            </div>
-                                            
-                                            <div x-show="mlAnalysisDetails?.alerts?.length > 0">
-                                                <span class="text-xs text-gray-500">Detection Reasons</span>
-                                                <ul class="mt-1 space-y-1">
-                                                    <template x-for="(alert, idx) in (mlAnalysisDetails?.alerts || [])" :key="idx">
-                                                        <li class="flex items-start space-x-2 text-sm">
-                                                            <span class="text-yellow-400">⚠️</span>
-                                                            <span class="text-gray-300" x-text="alert"></span>
-                                                        </li>
-                                                    </template>
-                                                </ul>
-                                            </div>
-                                            
-                                            <div class="flex items-center justify-between text-xs pt-2 border-t border-purple-500/20">
-                                                <span class="text-gray-500">Source: <span class="font-mono" x-text="mlAnalysisDetails?.source || 'ml_contract_scanner'"></span></span>
-                                                <span x-show="mlAnalysisDetails?.is_threat" class="text-red-400 font-semibold">⚡ Flagged as Threat</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="pt-4 border-t border-gray-700">
-                                        <h4 class="text-sm font-semibold text-gray-400 mb-2">Incident ID</h4>
-                                        <p class="text-xs font-mono text-gray-500" x-text="selectedIncident?.id || selectedIncident?.incident_id"></p>
-                                    </div>
+
+                            <!-- Loading ML -->
+                            <div x-show="loadingMlAnalysis" class="flex items-center space-x-2 text-violet-400 text-xs pt-2">
+                                <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                                <span>Loading ML analysis...</span>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="pt-3 border-t border-zinc-800 space-y-2">
+                                <button class="w-full py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-xs font-medium transition"
+                                        @click="analyzeWithAI(selectedIncident)" :disabled="aiAnalyzing">
+                                    <span x-show="!aiAnalyzing">AI Analysis</span>
+                                    <span x-show="aiAnalyzing" class="animate-pulse">Analyzing...</span>
+                                </button>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button class="py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs transition"
+                                            @click="acknowledgeIncident(selectedIncident)" :disabled="acknowledgeInProgress">
+                                        <span x-show="!acknowledgeInProgress">Acknowledge</span>
+                                        <span x-show="acknowledgeInProgress" class="animate-pulse">...</span>
+                                    </button>
+                                    <button class="py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-xs transition"
+                                            @click="emergencyPause(selectedIncident)" :disabled="pauseInProgress">
+                                        <span x-show="!pauseInProgress">Emergency Pause</span>
+                                        <span x-show="pauseInProgress" class="animate-pulse">...</span>
+                                    </button>
                                 </div>
                             </div>
+
+                            <!-- ID -->
+                            <div class="text-[10px] font-mono text-zinc-700 truncate pt-1" x-text="'ID: ' + (selectedIncident?.id || '')"></div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- AI Analysis Panel -->
-                <div class="card" x-show="aiAnalysis">
-                    <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-                        <h2 class="text-lg font-semibold">🤖 AI Analysis</h2>
-                        <button @click="aiAnalysis = null" class="text-gray-500 hover:text-white">✕</button>
-                    </div>
-                    <div class="p-4 max-h-[400px] overflow-y-auto scrollbar-thin">
-                        <div class="mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                            <div class="flex items-center space-x-2 text-sm text-purple-400">
-                                <span>Backend:</span>
-                                <span class="font-mono" x-text="aiAnalysis?.backend"></span>
-                                <span>|</span>
-                                <span x-text="(aiAnalysis?.latency_seconds || 0).toFixed(2) + 's'"></span>
-                            </div>
+
+                    <!-- AI Analysis -->
+                    <div class="card" x-show="aiAnalysis">
+                        <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                            <h2 class="text-sm font-semibold text-zinc-300">AI Analysis</h2>
+                            <button @click="aiAnalysis = null" class="text-zinc-600 hover:text-zinc-400 text-sm">&times;</button>
                         </div>
-                        
-                        <div class="prose prose-invert prose-sm max-w-none">
-                            <div class="text-sm whitespace-pre-wrap" x-html="DOMPurify.sanitize(formatMarkdown(aiAnalysis?.analysis))"></div>
-                        </div>
-                        
-                        <div class="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg" x-show="aiAnalysis?.recommendations?.length > 0">
-                            <h4 class="text-sm font-semibold text-blue-400 mb-2">📋 Recommendations</h4>
-                            <ul class="text-sm space-y-1">
+                        <div class="p-4 max-h-[300px] overflow-y-auto scrollbar-thin">
+                            <div class="text-xs text-zinc-600 mb-3 font-mono" x-text="(aiAnalysis?.backend || '') + ' - ' + ((aiAnalysis?.latency_seconds || 0).toFixed(2)) + 's'"></div>
+                            <div class="text-sm text-zinc-300 whitespace-pre-wrap" x-html="DOMPurify.sanitize(formatMarkdown(aiAnalysis?.analysis))"></div>
+                            <div class="mt-3 space-y-1" x-show="aiAnalysis?.recommendations?.length > 0">
+                                <span class="text-[10px] uppercase tracking-wide text-blue-400">Recommendations</span>
                                 <template x-for="(rec, i) in aiAnalysis?.recommendations || []" :key="i">
-                                    <li class="flex items-start space-x-2">
-                                        <span class="text-blue-500" x-text="(i+1) + '.'"></span>
-                                        <span x-text="rec"></span>
-                                    </li>
+                                    <div class="text-xs text-zinc-400 pl-3 border-l-2 border-blue-500/30" x-text="rec"></div>
                                 </template>
-                            </ul>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Recent Events -->
-                <div class="card">
-                    <div class="p-4 border-b border-gray-800">
-                        <h2 class="text-lg font-semibold">🔴 Live Event Feed</h2>
-                    </div>
-                    <div class="p-4 max-h-[300px] overflow-y-auto scrollbar-thin space-y-2">
-                        <template x-for="event in recentEvents" :key="event.id || event.event_id">
-                            <div class="p-2 rounded bg-gray-800/50 text-sm">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span 
-                                        class="px-2 py-0.5 rounded text-xs font-semibold"
-                                        :class="{
-                                            'bg-red-500/20 text-red-400': (event.severity || '').toLowerCase() === 'critical',
-                                            'bg-orange-500/20 text-orange-400': (event.severity || '').toLowerCase() === 'high',
-                                            'bg-yellow-500/20 text-yellow-400': (event.severity || '').toLowerCase() === 'medium',
-                                            'bg-green-500/20 text-green-400': (event.severity || '').toLowerCase() === 'low' || (event.severity || '').toLowerCase() === 'info'
-                                        }"
-                                        x-text="event.event_type || 'event'"
-                                    ></span>
-                                    <span class="text-gray-500 text-xs uppercase" x-text="event.chain || event.chain_id"></span>
-                                </div>
-                                <div class="text-gray-400 font-mono text-xs truncate" x-text="'TX: ' + (event.tx_hash || '').substring(0, 20) + '...'"></div>
-                                <div class="text-gray-500 text-xs" x-text="'Block: ' + (event.block || event.block_number || 'N/A')"></div>
+
+                    <!-- Live Event Feed -->
+                    <div class="card">
+                        <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                            <h2 class="text-sm font-semibold text-zinc-300">Live Feed</h2>
+                            <div class="flex items-center space-x-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-green-500 pulse-dot"></span>
+                                <span class="text-[10px] text-zinc-600" x-text="recentEvents.length + ' events'"></span>
                             </div>
-                        </template>
-                        
-                        <div x-show="recentEvents.length === 0" class="text-center py-8 text-gray-500">
-                            <p>Waiting for events...</p>
-                            <p class="text-xs mt-1">Events will appear here in real-time</p>
+                        </div>
+                        <div class="divide-y divide-zinc-800/30 max-h-[280px] overflow-y-auto scrollbar-thin">
+                            <template x-for="event in recentEvents" :key="event.id || event.event_id">
+                                <div class="px-4 py-2">
+                                    <div class="flex items-center justify-between mb-0.5">
+                                        <span class="text-xs font-medium"
+                                              :class="{
+                                                  'text-red-400': (event.severity || '').toLowerCase() === 'critical',
+                                                  'text-orange-400': (event.severity || '').toLowerCase() === 'high',
+                                                  'text-yellow-400': (event.severity || '').toLowerCase() === 'medium',
+                                                  'text-zinc-400': (event.severity || '').toLowerCase() === 'low' || (event.severity || '').toLowerCase() === 'info'
+                                              }"
+                                              x-text="event.event_type || 'event'"></span>
+                                        <span class="text-[10px] text-zinc-600 uppercase" x-text="event.chain || event.chain_id"></span>
+                                    </div>
+                                    <div class="text-[11px] font-mono text-zinc-600 truncate" x-text="(event.tx_hash || '').substring(0, 24) + '...'"></div>
+                                </div>
+                            </template>
+                            <div x-show="recentEvents.length === 0" class="text-center py-8 text-zinc-600 text-xs">
+                                Waiting for events...
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </main>
-    
+</div><!-- /app -->
+
     <script>
-        function dashboard() {
-            return {
-                stats: {
-                    activeIncidents: 0,
-                    criticalIncidents: 0,
-                    totalEvents: 0,
-                    chainsMonitored: 3,
-                    highAlerts: 0,
-                    mediumAlerts: 0,
-                    blocksScanned: 0,
-                    uptime: 0
-                },
-                graphStats: {
-                    nodes: '11K+',
-                    relationships: '740+',
-                    hackers: '15',
-                    attackVectors: '8'
-                },
-                attackTypeTrends: {},
-                chainDistribution: {},
-                incidents: [],
-                recentEvents: [],
-                selectedIncident: null,
-                aiAnalysis: null,
-                aiAnalyzing: false,
-                pauseInProgress: false,
-                acknowledgeInProgress: false,
-                showExplanation: false,
-                mlAnalysisDetails: null,
-                loadingMlAnalysis: false,
-                filters: {
-                    severity: ''
-                },
-                
-                get filteredIncidents() {
-                    if (!this.filters.severity) return this.incidents;
-                    return this.incidents.filter(i => i.severity.toUpperCase() === this.filters.severity);
-                },
-                
-                async init() {
-                    // Load initial data
-                    await this.loadAll();
-                    
-                    // Load graph stats
-                    await this.loadGraphStats();
-                    
-                    // Load charts data
-                    await this.loadChartsData();
-                    
-                    // Try WebSocket for real-time updates, fallback to polling
-                    this.connectWebSocket();
-                    
-                    // Fallback polling every 5 seconds (WebSocket will disable this if connected)
-                    this.pollInterval = setInterval(() => {
-                        if (!this.wsConnected) {
-                            this.loadAll();
-                        }
-                    }, 5000);
-                    
-                    // Update charts every 30 seconds
-                    setInterval(() => this.loadChartsData(), 30000);
-                },
-                
-                async loadChartsData() {
-                    try {
-                        // Load incidents for analysis
-                        const res = await fetch(`${window.SENTINEL3_API_BASE}/api/incidents?limit=500`);
-                        const data = await res.json();
-                        const incidents = Array.isArray(data) ? data : (data.incidents || []);
-                        
-                        // Calculate attack type trends
-                        const attackCounts = {};
-                        const chainCounts = {};
-                        
-                        incidents.forEach(inc => {
-                            // Attack types
-                            const type = inc.attack_type || 'unknown_threat';
-                            if (!attackCounts[type]) attackCounts[type] = { count: 0 };
-                            attackCounts[type].count++;
-                            
-                            // Chains
-                            (inc.affected_chains || []).forEach(chain => {
-                                if (!chainCounts[chain]) chainCounts[chain] = { total: 0, critical: 0, high: 0 };
-                                chainCounts[chain].total++;
-                                if (inc.severity === 'critical') chainCounts[chain].critical++;
-                                if (inc.severity === 'high') chainCounts[chain].high++;
-                            });
-                        });
-                        
-                        // Calculate percentages for attack types
-                        const maxCount = Math.max(...Object.values(attackCounts).map(a => a.count), 1);
-                        Object.keys(attackCounts).forEach(type => {
-                            attackCounts[type].percentage = Math.round((attackCounts[type].count / maxCount) * 100);
-                        });
-                        
-                        // Sort attack types by count and take top 6
-                        const sortedAttacks = Object.entries(attackCounts)
-                            .sort((a, b) => b[1].count - a[1].count)
-                            .slice(0, 6);
-                        this.attackTypeTrends = Object.fromEntries(sortedAttacks);
-                        
-                        // Sort chains by total and take top 6
-                        const sortedChains = Object.entries(chainCounts)
-                            .sort((a, b) => b[1].total - a[1].total)
-                            .slice(0, 6);
-                        this.chainDistribution = Object.fromEntries(sortedChains);
-                        
-                    } catch (e) {
-                        console.error('Failed to load charts data:', e);
-                    }
-                },
-                
-                formatAttackType(type) {
-                    if (!type) return 'Unknown';
-                    return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                },
-                
-                getChainEmoji(chain) {
-                    const emojis = {
-                        'ethereum': '⟠',
-                        'polygon': '🟣',
-                        'arbitrum': '🔵',
-                        'optimism': '🔴',
-                        'avalanche': '🔺',
-                        'bsc': '🟡',
-                        'base': '🔷'
+    function dashboard() {
+        return {
+            stats: { activeIncidents: 0, criticalIncidents: 0, totalEvents: 0, chainsMonitored: 0, blocksScanned: 0, uptime: 0 },
+            attackTypeTrends: {},
+            chainDistribution: {},
+            incidents: [],
+            recentEvents: [],
+            selectedIncident: null,
+            aiAnalysis: null,
+            aiAnalyzing: false,
+            pauseInProgress: false,
+            acknowledgeInProgress: false,
+            mlAnalysisDetails: null,
+            loadingMlAnalysis: false,
+            wsConnected: false,
+            ws: null,
+            currentUser: null,
+            filters: { severity: '' },
+
+            get filteredIncidents() {
+                if (!this.filters.severity) return this.incidents;
+                return this.incidents.filter(i => i.severity.toUpperCase() === this.filters.severity);
+            },
+
+            async init() {
+                try { const u = JSON.parse(localStorage.getItem('xdr_user')); this.currentUser = u?.username; } catch {}
+                await this.loadAll();
+                await this.loadChartsData();
+                this.connectWebSocket();
+                this.pollInterval = setInterval(() => { if (!this.wsConnected) this.loadAll(); }, 5000);
+                setInterval(() => this.loadChartsData(), 30000);
+            },
+
+            async loadAll() {
+                await Promise.all([this.loadStats(), this.loadIncidents(), this.loadEvents()]);
+            },
+
+            async loadStats() {
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
+                    if (!res.ok) return;
+                    const d = await res.json();
+                    this.stats = {
+                        activeIncidents: d.active_incidents || d.total_incidents || 0,
+                        criticalIncidents: d.critical_alerts || 0,
+                        totalEvents: d.total_events || 0,
+                        chainsMonitored: Object.keys(d.events_by_chain || {}).length || 0,
+                        blocksScanned: d.blocks_scanned || 0,
+                        uptime: d.uptime_seconds || 0
                     };
-                    return emojis[chain?.toLowerCase()] || '⛓️';
-                },
-                
-                async loadGraphStats() {
-                    try {
-                        const res = await fetch(`${window.SENTINEL3_API_BASE}/api/graph/health`);
+                } catch {}
+            },
+
+            async loadIncidents() {
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents');
+                    let confirmed = [];
+                    if (res.ok) {
                         const data = await res.json();
-                        
-                        if (data.status === 'healthy') {
-                            const nodeCounts = data.node_counts || {};
-                            const relCounts = data.relationship_counts || {};
-                            
-                            const totalNodes = Object.values(nodeCounts).reduce((a, b) => a + b, 0);
-                            const totalRels = Object.values(relCounts).reduce((a, b) => a + b, 0);
-                            
-                            this.graphStats = {
-                                nodes: totalNodes > 1000 ? Math.round(totalNodes / 1000) + 'K+' : totalNodes.toString(),
-                                relationships: totalRels.toString() + '+',
-                                hackers: '15',
-                                attackVectors: nodeCounts['AttackVector'] || '8'
-                            };
-                        }
-                    } catch (e) {
-                        console.error('Failed to load graph stats:', e);
+                        confirmed = data.map(inc => ({ ...inc, severity: (inc.severity || 'low').toUpperCase(), is_predicted: false }));
                     }
-                },
-                
-                wsConnected: false,
-                ws: null,
-                
-                connectWebSocket() {
+                    let predicted = [];
                     try {
-                        const wsBase = (window.SENTINEL3_API_BASE || '').replace('https://', 'wss://').replace('http://', 'ws://');
-                        const wsUrl = wsBase + '/ws';
-                        
-                        console.log('🔌 Connecting to WebSocket:', wsUrl);
-                        this.ws = new WebSocket(wsUrl);
-                        
-                        this.ws.onopen = () => {
-                            console.log('✅ WebSocket connected');
-                            this.wsConnected = true;
-                        };
-                        
-                        this.ws.onmessage = (event) => {
-                            try {
-                                const data = JSON.parse(event.data);
-                                this.handleWebSocketMessage(data);
-                            } catch (e) {
-                                console.error('WebSocket message parse error:', e);
-                            }
-                        };
-                        
-                        this.ws.onclose = () => {
-                            console.log('❌ WebSocket disconnected, falling back to polling');
-                            this.wsConnected = false;
-                            // Reconnect after 5 seconds
-                            setTimeout(() => this.connectWebSocket(), 5000);
-                        };
-                        
-                        this.ws.onerror = (error) => {
-                            console.error('WebSocket error:', error);
-                            this.wsConnected = false;
-                        };
-                    } catch (e) {
-                        console.log('WebSocket not available, using polling');
-                    }
-                },
-                
-                handleWebSocketMessage(data) {
-                    switch (data.type) {
-                        case 'event':
-                            // Add new event to the feed
-                            if (data.data) {
-                                this.recentEvents.unshift(data.data);
-                                if (this.recentEvents.length > 20) {
-                                    this.recentEvents.pop();
-                                }
-                            }
-                            break;
-                        
-                        case 'incident':
-                            // Update or add incident
-                            if (data.data) {
-                                const idx = this.incidents.findIndex(i => i.id === data.data.id);
-                                if (idx >= 0) {
-                                    this.incidents[idx] = data.data;
-                                } else {
-                                    this.incidents.unshift(data.data);
-                                }
-                            }
-                            break;
-                        
-                        case 'stats':
-                            // Update stats
-                            if (data.data) {
-                                this.stats = {
-                                    ...this.stats,
-                                    ...data.data
-                                };
-                            }
-                            break;
-                        
-                        case 'alert':
-                            // Show notification for new alert
-                            if (data.data) {
-                                this.showNotification(
-                                    `🚨 New Alert: ${data.data.title || 'Security Alert'}`,
-                                    data.data.severity === 'critical' ? 'error' : 'warning'
-                                );
-                            }
-                            break;
-                        
-                        case 'connected':
-                            console.log('📡 WebSocket channel:', data.channel);
-                            break;
-                    }
-                },
-                
-                async loadAll() {
-                    await Promise.all([
-                        this.loadStats(),
-                        this.loadIncidents(),
-                        this.loadEvents()
-                    ]);
-                },
-                
-                async loadStats() {
-                    try {
-                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
-                        if (!res.ok) throw new Error('API error');
-                        const data = await res.json();
-                        this.stats = {
-                            activeIncidents: data.active_incidents || data.total_incidents || 0,
-                            criticalIncidents: data.critical_alerts || 0,
-                            highAlerts: data.high_alerts || 0,
-                            mediumAlerts: data.medium_alerts || 0,
-                            totalEvents: data.total_events || 0,
-                            chainsMonitored: Object.keys(data.events_by_chain || {}).length || 3,
-                            blocksScanned: data.blocks_scanned || 0,
-                            uptime: data.uptime_seconds || 0
-                        };
-                    } catch (e) {
-                        console.log('Stats API not ready');
-                    }
-                },
-                
-                async loadIncidents() {
-                    try {
-                        // Load confirmed incidents
-                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents');
-                        let confirmedIncidents = [];
-                        if (res.ok) {
-                            const data = await res.json();
-                            confirmedIncidents = data.map(inc => ({
-                                ...inc,
-                                severity: (inc.severity || 'low').toUpperCase(),
-                                is_predicted: false
+                        const r = await fetch((window.SENTINEL3_API_BASE || '') + '/api/runtime/predicted-incidents?status=OPEN&limit=50');
+                        if (r.ok) {
+                            predicted = (await r.json()).map(inc => ({
+                                id: inc.id, title: '[PREDICTED] ' + (inc.predicted_type || 'Security Threat'),
+                                severity: (inc.severity || 'medium').toUpperCase(), status: 'PREDICTED',
+                                attack_type: inc.predicted_type || 'UNKNOWN', confidence: inc.confidence || 0.5,
+                                total_loss_usd: null, affected_chains: [inc.chain_id], created_at: inc.created_at,
+                                is_predicted: true, explanation_json: inc.explanation_json
                             }));
                         }
-                        
-                        // Load predicted incidents
-                        let predictedIncidents = [];
-                        try {
-                            const predRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/runtime/predicted-incidents?status=OPEN&limit=50');
-                            if (predRes.ok) {
-                                const predData = await predRes.json();
-                                predictedIncidents = predData.map(inc => ({
-                                    id: inc.id,
-                                    incident_id: inc.id,
-                                    title: `[PREDICTED] ${inc.predicted_type || 'Security Threat'}`,
-                                    summary: inc.explanation_json?.summary || 'Simulation-based prediction',
-                                    severity: (inc.severity || 'medium').toUpperCase(),
-                                    status: 'PREDICTED',
-                                    attack_type: inc.predicted_type || 'UNKNOWN',
-                                    confidence: inc.confidence || 0.5,
-                                    total_loss_usd: null,
-                                    affected_chains: [inc.chain_id],
-                                    created_at: inc.created_at,
-                                    tx_hash: inc.tx_hash,
-                                    is_predicted: true,
-                                    predicted_type: inc.predicted_type,
-                                    explanation_json: inc.explanation_json
-                                }));
-                            }
-                        } catch (e) {
-                            console.log('Predicted incidents API not available');
-                        }
-                        
-                        // Merge and sort by created_at
-                        this.incidents = [...confirmedIncidents, ...predictedIncidents]
-                            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                    } catch (e) {
-                        console.log('Incidents API not ready');
-                    }
-                },
-                
-                async loadEvents() {
-                    try {
-                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/events?limit=20');
-                        if (!res.ok) throw new Error('API error');
-                        const data = await res.json();
-                        // API returns { events: [...], returned: N } - extract the events array
-                        this.recentEvents = data.events || data || [];
-                        console.log('Loaded events:', this.recentEvents.length);
-                    } catch (e) {
-                        console.log('Events API not ready:', e);
-                    }
-                },
-                
-                selectIncident(incident) {
-                    this.selectedIncident = incident;
-                    this.aiAnalysis = null;
-                    this.showExplanation = false;
-                    this.mlAnalysisDetails = null;
-                    
-                    // Load ML analysis details if this is an ML-triggered incident
-                    const incidentId = incident?.id || incident?.incident_id || '';
-                    if (incidentId.startsWith('inc_ml_') || incident?.attack_type?.includes('Malicious Contract')) {
-                        this.loadMlAnalysisDetails(incidentId);
-                    }
-                },
-                
-                async loadMlAnalysisDetails(incidentId) {
-                    if (!incidentId) return;
-                    
-                    this.loadingMlAnalysis = true;
-                    this.mlAnalysisDetails = null;
-                    
-                    try {
-                        const res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/debug/incident/${encodeURIComponent(incidentId)}`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            
-                            // Extract ML analysis from the response
-                            if (data.ml_analysis) {
-                                this.mlAnalysisDetails = data.ml_analysis;
-                            } else if (data.associated_events?.length > 0) {
-                                // Try to extract from event raw_data
-                                for (const evt of data.associated_events) {
-                                    if (evt.raw_data && (evt.raw_data.threat_category || evt.raw_data.risk_score)) {
-                                        this.mlAnalysisDetails = {
-                                            threat_category: evt.raw_data.threat_category,
-                                            risk_score: evt.raw_data.risk_score,
-                                            confidence: evt.raw_data.confidence,
-                                            is_threat: evt.raw_data.is_threat,
-                                            alerts: evt.raw_data.alerts || [],
-                                            bytecode_size: evt.raw_data.bytecode_size,
-                                            source: evt.raw_data.source || 'ml_contract_scanner'
-                                        };
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            // If still no ML analysis, try to parse from incident data
-                            if (!this.mlAnalysisDetails && data.incident) {
-                                const summary = data.incident.summary || '';
-                                // Try to extract details from summary text
-                                const threatMatch = summary.match(/classified as '([^']+)'/);
-                                const confidenceMatch = summary.match(/(\d+\.?\d*)% confidence/);
-                                const riskMatch = summary.match(/risk score of (\d+\.?\d*)/);
-                                
-                                if (threatMatch || confidenceMatch || riskMatch) {
-                                    this.mlAnalysisDetails = {
-                                        threat_category: threatMatch ? threatMatch[1] : 'unknown_threat',
-                                        confidence: confidenceMatch ? parseFloat(confidenceMatch[1]) / 100 : 0.5,
-                                        risk_score: riskMatch ? parseFloat(riskMatch[1]) : 50,
-                                        is_threat: true,
-                                        alerts: [],
-                                        source: 'ml_contract_scanner'
-                                    };
-                                }
-                            }
-                            
-                            console.log('ML Analysis loaded:', this.mlAnalysisDetails);
-                        }
-                    } catch (e) {
-                        console.error('Failed to load ML analysis:', e);
-                    } finally {
-                        this.loadingMlAnalysis = false;
-                    }
-                },
-                
-                formatThreatCategory(category) {
-                    if (!category) return 'Unknown';
-                    // Convert snake_case to Title Case
-                    return category
-                        .split('_')
-                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                        .join(' ');
-                },
-                
-                viewExplanation(incident) {
-                    if (!incident) return;
-                    this.showExplanation = true;
-                },
-                
-                async acknowledgeIncident(incident) {
-                    if (!incident) return;
-                    
-                    this.acknowledgeInProgress = true;
-                    try {
-                        const incidentId = incident.id || incident.incident_id;
-                        
-                        // Try the acknowledge endpoint
-                        let res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/incidents/${incidentId}/acknowledge`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': 'Bearer ' + localStorage.getItem('xdr_token')
-                            }
+                    } catch {}
+                    this.incidents = [...confirmed, ...predicted].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                } catch {}
+            },
+
+            async loadEvents() {
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/events?limit=20');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    this.recentEvents = data.events || data || [];
+                } catch {}
+            },
+
+            async loadChartsData() {
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents?limit=500');
+                    const data = await res.json();
+                    const incidents = Array.isArray(data) ? data : (data.incidents || []);
+                    const attacks = {}, chains = {};
+                    incidents.forEach(inc => {
+                        const t = inc.attack_type || 'unknown_threat';
+                        attacks[t] = attacks[t] || { count: 0 };
+                        attacks[t].count++;
+                        (inc.affected_chains || []).forEach(c => {
+                            chains[c] = chains[c] || { total: 0, critical: 0, high: 0 };
+                            chains[c].total++;
+                            if (inc.severity === 'critical') chains[c].critical++;
+                            if (inc.severity === 'high') chains[c].high++;
                         });
-                        
-                        // If endpoint doesn't exist, try updating status directly
-                        if (res.status === 404 || res.status === 405) {
-                            res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/incidents/${incidentId}/status`, {
-                                method: 'PUT',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': 'Bearer ' + localStorage.getItem('xdr_token')
-                                },
-                                body: JSON.stringify({ status: 'acknowledged' })
-                            });
-                        }
-                        
-                        if (res.ok) {
-                            // Update local state
-                            incident.status = 'ACKNOWLEDGED';
-                            this.showNotification('✅ Incident acknowledged successfully', 'success');
-                            // Refresh incidents
-                            await this.loadIncidents();
-                        } else {
-                            // Even if API fails, mark locally
-                            incident.status = 'ACKNOWLEDGED';
-                            this.showNotification('✅ Incident acknowledged (locally)', 'warning');
-                        }
-                    } catch (e) {
-                        console.error('Acknowledge error:', e);
-                        // Mark locally even on error
-                        incident.status = 'ACKNOWLEDGED';
-                        this.showNotification('✅ Incident acknowledged (locally)', 'warning');
-                    } finally {
-                        this.acknowledgeInProgress = false;
-                    }
-                },
-                
-                async emergencyPause(incident) {
-                    if (!incident) return;
-                    
-                    // Confirm before pausing
-                    const confirmed = confirm(
-                        '⚠️ EMERGENCY PAUSE\n\n' +
-                        'This will attempt to pause affected protocols.\n\n' +
-                        'Incident: ' + incident.title + '\n' +
-                        'Chains: ' + (incident.affected_chains || []).join(', ') + '\n\n' +
-                        'Are you sure you want to proceed?'
-                    );
-                    
-                    if (!confirmed) return;
-                    
-                    this.pauseInProgress = true;
-                    try {
-                        // Try to pause via Guardian API
-                        const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/guardian/emergency-pause', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': 'Bearer ' + localStorage.getItem('xdr_token')
-                            },
-                            body: JSON.stringify({
-                                incident_id: incident.id || incident.incident_id,
-                                chains: incident.affected_chains || [],
-                                reason: 'Emergency pause triggered from dashboard for: ' + incident.title
-                            })
-                        });
-                        
-                        if (res.ok) {
-                            const result = await res.json();
-                            alert('🔴 Emergency pause initiated!\n\n' + 
-                                  'Status: ' + (result.status || 'Pending') + '\n' +
-                                  'Protocols affected: ' + (result.protocols_paused || 0));
-                        } else {
-                            const error = await res.json().catch(() => ({}));
-                            alert('❌ Pause failed: ' + (error.detail || 'Guardian API not available'));
-                        }
-                    } catch (e) {
-                        console.error('Emergency pause error:', e);
-                        alert('❌ Emergency pause failed. Guardian system may not be configured.');
-                    } finally {
-                        this.pauseInProgress = false;
-                    }
-                },
-                
-                async analyzeWithAI(incident) {
-                    if (!incident) return;
-                    
-                    this.aiAnalyzing = true;
-                    try {
-                        const res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/ai/analyze/${incident.id}`);
-                        if (res.ok) {
-                            this.aiAnalysis = await res.json();
-                        } else {
-                            console.error('AI analysis failed');
-                        }
-                    } catch (e) {
-                        console.error('AI analysis error:', e);
-                    } finally {
-                        this.aiAnalyzing = false;
-                    }
-                },
-                
-                formatMarkdown(text) {
-                    if (!text) return '';
-                    // Simple markdown to HTML conversion
-                    return text
-                        .replace(/^## (.*$)/gm, '<h2 class="text-lg font-bold text-white mt-4 mb-2">$1</h2>')
-                        .replace(/^### (.*$)/gm, '<h3 class="text-md font-semibold text-gray-300 mt-3 mb-1">$1</h3>')
-                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
-                        .replace(/^\- (.*$)/gm, '<li class="ml-4 text-gray-400">• $1</li>')
-                        .replace(/^(\d+)\. (.*$)/gm, '<div class="ml-4 text-gray-400"><span class="text-blue-400">$1.</span> $2</div>')
-                        .replace(/\n\n/g, '<br><br>')
-                        .replace(/\n/g, '<br>');
-                },
-                
-                formatTime(iso) {
-                    if (!iso) return '';
-                    // API returns UTC timestamps without 'Z', so append it
-                    let dateStr = iso;
-                    if (!iso.endsWith('Z') && !iso.includes('+')) {
-                        dateStr = iso + 'Z';  // Treat as UTC
-                    }
-                    const date = new Date(dateStr);
-                    // Format as local time with IST indicator
-                    return date.toLocaleTimeString('en-IN', { 
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        hour12: true,
-                        timeZoneName: 'short'
                     });
-                },
-                
-                formatUSD(amount) {
-                    if (!amount || amount <= 0) return 'Unknown';
-                    // Cap display at $10B (unrealistic values are likely bugs)
-                    if (amount > 10000000000) return 'Unknown';
-                    if (amount >= 1000000000) return '$' + (amount / 1000000000).toFixed(1) + 'B';
-                    if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M';
-                    if (amount >= 1000) return '$' + (amount / 1000).toFixed(0) + 'K';
-                    return '$' + amount.toFixed(0);
-                },
-                
-                getExplorerUrl(chain, type, value) {
-                    // Map chain names to block explorers
-                    const explorers = {
-                        'ethereum': 'https://etherscan.io',
-                        'polygon': 'https://polygonscan.com',
-                        'arbitrum': 'https://arbiscan.io',
-                        'optimism': 'https://optimistic.etherscan.io',
-                        'base': 'https://basescan.org',
-                        'bsc': 'https://bscscan.com',
-                        'avalanche': 'https://snowtrace.io',
-                        'fantom': 'https://ftmscan.com',
-                    };
-                    const baseUrl = explorers[chain?.toLowerCase()] || explorers['ethereum'];
-                    if (type === 'address') {
-                        return `${baseUrl}/address/${value}`;
-                    } else if (type === 'tx') {
-                        return `${baseUrl}/tx/${value}`;
-                    }
-                    return baseUrl;
-                },
-                
-                formatUptime(seconds) {
-                    if (!seconds) return '0s';
-                    if (seconds < 60) return seconds + 's';
-                    if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
-                    return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
-                },
-                
-                checkAuth() {
-                    const token = localStorage.getItem('xdr_token');
-                    if (!token) {
-                        window.location.href = '/frontend/login.html';
-                        return;
-                    }
-                    // Verify token is valid
-                    fetch((window.SENTINEL3_API_BASE || '') + '/api/auth/verify', {
-                        headers: { 'Authorization': 'Bearer ' + token }
-                    }).then(res => {
-                        if (!res.ok) {
-                            localStorage.removeItem('xdr_token');
-                            window.location.href = '/frontend/login.html';
-                        }
-                    }).catch(() => {
-                        // If verify endpoint doesn't exist, token is considered valid
-                    });
-                },
-                
-                logout() {
-                    localStorage.removeItem('xdr_token');
-                    window.location.href = '/frontend/login.html';
-                },
-                
-                showNotification(message, type = 'info') {
-                    // Create notification element
-                    const notification = document.createElement('div');
-                    notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-x-0 ${
-                        type === 'success' ? 'bg-green-600' :
-                        type === 'error' ? 'bg-red-600' :
-                        type === 'warning' ? 'bg-yellow-600' :
-                        'bg-blue-600'
-                    }`;
-                    // XSS Protection: Sanitize message before rendering
-                    notification.innerHTML = `<span class="text-white font-medium">${DOMPurify.sanitize(message)}</span>`;
-                    document.body.appendChild(notification);
-                    
-                    // Auto-remove after 3 seconds
-                    setTimeout(() => {
-                        notification.style.opacity = '0';
-                        notification.style.transform = 'translateX(100%)';
-                        setTimeout(() => notification.remove(), 300);
-                    }, 3000);
+                    const max = Math.max(...Object.values(attacks).map(a => a.count), 1);
+                    Object.keys(attacks).forEach(t => { attacks[t].percentage = Math.round((attacks[t].count / max) * 100); });
+                    this.attackTypeTrends = Object.fromEntries(Object.entries(attacks).sort((a, b) => b[1].count - a[1].count).slice(0, 8));
+                    this.chainDistribution = Object.fromEntries(Object.entries(chains).sort((a, b) => b[1].total - a[1].total).slice(0, 8));
+                } catch {}
+            },
+
+            connectWebSocket() {
+                try {
+                    const base = (window.SENTINEL3_API_BASE || '').replace('https://', 'wss://').replace('http://', 'ws://');
+                    this.ws = new WebSocket((base || ('ws://' + location.host)) + '/ws');
+                    this.ws.onopen = () => { this.wsConnected = true; };
+                    this.ws.onmessage = (e) => { try { this.handleWsMsg(JSON.parse(e.data)); } catch {} };
+                    this.ws.onclose = () => { this.wsConnected = false; setTimeout(() => this.connectWebSocket(), 5000); };
+                    this.ws.onerror = () => { this.wsConnected = false; };
+                } catch {}
+            },
+
+            handleWsMsg(data) {
+                if (data.type === 'event' && data.data) {
+                    this.recentEvents.unshift(data.data);
+                    if (this.recentEvents.length > 20) this.recentEvents.pop();
+                } else if (data.type === 'incident' && data.data) {
+                    const idx = this.incidents.findIndex(i => i.id === data.data.id);
+                    if (idx >= 0) this.incidents[idx] = data.data; else this.incidents.unshift(data.data);
+                } else if (data.type === 'stats' && data.data) {
+                    this.stats = { ...this.stats, ...data.data };
                 }
+            },
+
+            selectIncident(incident) {
+                this.selectedIncident = incident;
+                this.aiAnalysis = null;
+                this.mlAnalysisDetails = null;
+                const id = incident?.id || '';
+                if (id.startsWith('inc_ml_') || incident?.attack_type?.includes('Malicious Contract')) {
+                    this.loadMlAnalysis(id);
+                }
+            },
+
+            async loadMlAnalysis(incidentId) {
+                if (!incidentId) return;
+                this.loadingMlAnalysis = true;
+                this.mlAnalysisDetails = null;
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/debug/incident/' + encodeURIComponent(incidentId));
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.ml_analysis) {
+                        this.mlAnalysisDetails = data.ml_analysis;
+                    } else if (data.associated_events?.length > 0) {
+                        for (const evt of data.associated_events) {
+                            if (evt.raw_data && (evt.raw_data.threat_category || evt.raw_data.risk_score)) {
+                                this.mlAnalysisDetails = {
+                                    threat_category: evt.raw_data.threat_category, risk_score: evt.raw_data.risk_score,
+                                    confidence: evt.raw_data.confidence, is_threat: evt.raw_data.is_threat,
+                                    alerts: evt.raw_data.alerts || [], source: evt.raw_data.source || 'ml_contract_scanner'
+                                };
+                                break;
+                            }
+                        }
+                    }
+                } catch {} finally { this.loadingMlAnalysis = false; }
+            },
+
+            async analyzeWithAI(incident) {
+                if (!incident) return;
+                this.aiAnalyzing = true;
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/ai/analyze/' + incident.id);
+                    if (res.ok) this.aiAnalysis = await res.json();
+                } catch {} finally { this.aiAnalyzing = false; }
+            },
+
+            async acknowledgeIncident(incident) {
+                if (!incident) return;
+                this.acknowledgeInProgress = true;
+                try {
+                    const id = incident.id || incident.incident_id;
+                    let res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents/' + id + '/acknowledge', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('xdr_token') ? 'Bearer ' + localStorage.getItem('xdr_token') : '' }
+                    });
+                    if (res.status === 404 || res.status === 405) {
+                        res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents/' + id + '/status', {
+                            method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('xdr_token') ? 'Bearer ' + localStorage.getItem('xdr_token') : '' },
+                            body: JSON.stringify({ status: 'acknowledged' })
+                        });
+                    }
+                    incident.status = 'ACKNOWLEDGED';
+                    this.notify(res.ok ? 'Incident acknowledged' : 'Acknowledged locally', res.ok ? 'success' : 'warning');
+                    if (res.ok) await this.loadIncidents();
+                } catch { incident.status = 'ACKNOWLEDGED'; this.notify('Acknowledged locally', 'warning'); }
+                finally { this.acknowledgeInProgress = false; }
+            },
+
+            async emergencyPause(incident) {
+                if (!incident || !confirm('Emergency Pause\n\nThis will attempt to pause affected protocols.\n\nIncident: ' + incident.title + '\nChains: ' + (incident.affected_chains || []).join(', ') + '\n\nProceed?')) return;
+                this.pauseInProgress = true;
+                try {
+                    const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/guardian/emergency-pause', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': localStorage.getItem('xdr_token') ? 'Bearer ' + localStorage.getItem('xdr_token') : '' },
+                        body: JSON.stringify({ incident_id: incident.id, chains: incident.affected_chains || [], reason: 'Dashboard emergency pause: ' + incident.title })
+                    });
+                    if (res.ok) { const r = await res.json(); alert('Pause initiated. Protocols affected: ' + (r.protocols_paused || 0)); }
+                    else { const e = await res.json().catch(() => ({})); alert('Pause failed: ' + (e.detail || 'Guardian unavailable')); }
+                } catch { alert('Emergency pause failed. Guardian may not be configured.'); }
+                finally { this.pauseInProgress = false; }
+            },
+
+            // Helpers
+            formatAttackType(t) { return t ? t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'; },
+            formatThreatCategory(c) { return c ? c.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Unknown'; },
+            getChainEmoji(c) { return { ethereum: '\u27e0', polygon: '\ud83d\udfe3', arbitrum: '\ud83d\udfe5', optimism: '\ud83d\udd34', avalanche: '\ud83d\udd3a', bsc: '\ud83d\udfe1', base: '\ud83d\udd37' }[c?.toLowerCase()] || '\u26d3\ufe0f'; },
+            formatTime(iso) {
+                if (!iso) return '';
+                let s = iso; if (!s.endsWith('Z') && !s.includes('+')) s += 'Z';
+                return new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZoneName: 'short' });
+            },
+            formatUSD(a) {
+                if (!a || a <= 0 || a > 10000000000) return 'Unknown';
+                if (a >= 1e9) return '$' + (a / 1e9).toFixed(1) + 'B';
+                if (a >= 1e6) return '$' + (a / 1e6).toFixed(1) + 'M';
+                if (a >= 1e3) return '$' + (a / 1e3).toFixed(0) + 'K';
+                return '$' + a.toFixed(0);
+            },
+            formatUptime(s) {
+                if (!s) return '0s';
+                if (s < 60) return s + 's';
+                if (s < 3600) return Math.floor(s / 60) + 'm';
+                return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+            },
+            formatMarkdown(text) {
+                if (!text) return '';
+                return text.replace(/^## (.*$)/gm, '<h2 class="text-base font-bold text-white mt-3 mb-1">$1</h2>')
+                    .replace(/^### (.*$)/gm, '<h3 class="text-sm font-semibold text-zinc-300 mt-2 mb-1">$1</h3>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                    .replace(/^\- (.*$)/gm, '<li class="ml-3 text-zinc-400 text-xs">$1</li>')
+                    .replace(/\n\n/g, '<br>').replace(/\n/g, '<br>');
+            },
+            getExplorerUrl(chain, type, val) {
+                const e = { ethereum: 'https://etherscan.io', polygon: 'https://polygonscan.com', arbitrum: 'https://arbiscan.io', optimism: 'https://optimistic.etherscan.io', base: 'https://basescan.org', bsc: 'https://bscscan.com', avalanche: 'https://snowtrace.io' };
+                const b = e[chain?.toLowerCase()] || e.ethereum;
+                return type === 'address' ? b + '/address/' + val : type === 'tx' ? b + '/tx/' + val : b;
+            },
+            checkAuth() {
+                const token = localStorage.getItem('xdr_token');
+                if (!token) { window.location.href = '/frontend/login.html'; return; }
+                fetch((window.SENTINEL3_API_BASE || '') + '/api/auth/verify', { headers: { 'Authorization': 'Bearer ' + token } })
+                    .then(r => { if (!r.ok) { localStorage.removeItem('xdr_token'); window.location.href = '/frontend/login.html'; } }).catch(() => {});
+            },
+            logout() { localStorage.removeItem('xdr_token'); localStorage.removeItem('xdr_user'); window.location.href = '/frontend/login.html'; },
+            notify(msg, type = 'info') {
+                const el = document.createElement('div');
+                el.className = 'fixed top-4 right-4 px-5 py-2.5 rounded-lg shadow-lg z-50 text-sm font-medium text-white ' +
+                    (type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-600' : type === 'warning' ? 'bg-amber-600' : 'bg-blue-600');
+                el.textContent = msg;
+                document.body.appendChild(el);
+                setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 3000);
             }
         }
+    }
     </script>
 </body>
 </html>
-

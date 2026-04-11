@@ -620,18 +620,20 @@ class EVMListener(ChainListener):
             if len(log.topics) >= 3:
                 dest_address = "0x" + log.topics[2].hex()[-40:] if hasattr(log.topics[2], 'hex') else ""
             
-            # Try to extract amount from data
+            # Try to extract amount from data using correct token decimals
             amount = Decimal("0")
+            decimals = self._price_feed.get_token_decimals(self.chain_id, token_address)
             if log.data and len(log.data) >= 32:
                 try:
                     data_hex = log.data.hex() if hasattr(log.data, 'hex') else str(log.data)
                     if data_hex.startswith("0x"):
                         data_hex = data_hex[2:]
                     if len(data_hex) >= 64:
-                        amount = Decimal(int(data_hex[:64], 16)) / Decimal(10**18)
+                        raw_amount = int(data_hex[:64], 16)
+                        amount = Decimal(raw_amount) / Decimal(10**decimals)
                 except:
                     pass
-            
+
             # Calculate USD value
             amount_usd = Decimal("0")
             try:
@@ -685,18 +687,20 @@ class EVMListener(ChainListener):
             contract_address = log.address.lower() if hasattr(log.address, 'lower') else str(log.address).lower()
             tx_hash = log.transactionHash.hex() if hasattr(log.transactionHash, 'hex') else str(log.transactionHash)
             
-            # Try to extract amount from data
+            # Try to extract amount from data using correct token decimals
             amount = Decimal("0")
+            decimals = self._price_feed.get_token_decimals(self.chain_id, contract_address)
             if log.data and len(log.data) >= 32:
                 try:
                     data_hex = log.data.hex() if hasattr(log.data, 'hex') else str(log.data)
                     if data_hex.startswith("0x"):
                         data_hex = data_hex[2:]
                     if len(data_hex) >= 64:
-                        amount = Decimal(int(data_hex[:64], 16)) / Decimal(10**18)
+                        raw_amount = int(data_hex[:64], 16)
+                        amount = Decimal(raw_amount) / Decimal(10**decimals)
                 except:
                     pass
-            
+
             # Calculate USD value
             amount_usd = Decimal("0")
             try:
@@ -846,7 +850,8 @@ class EVMListener(ChainListener):
             if len(log.topics) >= 3:
                 dest_address = "0x" + log.topics[2].hex()[-40:]
             if log.data and len(log.data) >= 32:
-                amount = Decimal(int(log.data[:66].hex(), 16)) / Decimal(10**18)
+                decimals = self._price_feed.get_token_decimals(self.chain_id, contract_address)
+                amount = Decimal(int(log.data[:66].hex(), 16)) / Decimal(10**decimals)
             if len(log.topics) >= 4:
                 message_hash = log.topics[3].hex()
             

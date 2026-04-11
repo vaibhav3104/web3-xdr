@@ -40,22 +40,27 @@ class ClassificationResult:
 class ContractThreatClassifier:
     """
     ML-based contract threat classifier
-    
+
     Uses a combination of:
     1. Rule-based heuristics (fast, interpretable)
     2. Feature-based ML model (learned patterns)
     3. Similarity matching (known exploits)
+
+    Supports hot-reload: call reload_model() after retraining to pick up
+    new weights without restarting the process.
     """
-    
+
     def __init__(self, model_path: Optional[str] = None):
         self.extractor = BytecodeExtractor()
         self.model = None
         self.known_exploits: Dict[str, Dict] = {}
-        
+        self._model_path = model_path
+        self._model_loaded_at: Optional[float] = None
+
         # Load model if provided
         if model_path and Path(model_path).exists():
             self.load_model(model_path)
-        
+
         # Initialize with rule-based classifier
         self._init_rule_weights()
     
@@ -300,11 +305,33 @@ class ContractThreatClassifier:
     
     def load_model(self, path: str):
         """Load the model from disk"""
+        import os
         with open(path, 'rb') as f:
             data = pickle.load(f)
             self.model = data.get('model')
             self.known_exploits = data.get('known_exploits', {})
             self.rule_weights = data.get('rule_weights', self.rule_weights)
+        self._model_path = path
+        self._model_loaded_at = os.path.getmtime(path)
+
+    def reload_model(self) -> bool:
+        """Hot-reload model from disk if the file has been updated."""
+        if not self._model_path or not Path(self._model_path).exists():
+            return False
+        import os
+        current_mtime = os.path.getmtime(self._model_path)
+        if self._model_loaded_at is None or current_mtime > self._model_loaded_at:
+            self.load_model(self._model_path)
+            return True
+        return False
+
+    def check_for_update(self) -> bool:
+        """Check if the model file on disk is newer than the loaded version."""
+        if not self._model_path or not Path(self._model_path).exists():
+            return False
+        import os
+        current_mtime = os.path.getmtime(self._model_path)
+        return self._model_loaded_at is None or current_mtime > self._model_loaded_at
 
 # Training utilities
 class ContractClassifierTrainer:

@@ -26,15 +26,23 @@ rules:
       conditions:
         - field: amount
           operator: gt
-          value: 100  # > 100 tokens (lowered for testing)
-    
+          value: 1000  # > 1000 tokens (raised from 100 — too noisy)
+
     thresholds:
-      min_amount_usd: 10000  # $10K+ (lowered for testing)
-    
+      min_amount_usd: 50000  # $50K+ (raised from $10K — $10-50K transfers are routine, not whale-grade)
+
+    # Known whale/institutional addresses — suppress repeat alerts
+    exclusions:
+      addresses:
+        - "0xfcd3f5ca230e7c1bd5b415eb85d5186346de0fec"  # Recurring Base whale (3x repeat)
+        - "0x1e90cb21b770d170821c0ebf56ce6ffd2942e5d4"  # Recurring Base whale counterparty
+        - "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb"  # Morpho protocol address
+        - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet
+
     rate_limit:
-      max_alerts: 5
+      max_alerts: 3
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -77,10 +85,10 @@ rules:
     description: |
       Monitors swap events for large trades that could indicate
       market manipulation or attack preparation.
-    
+
     severity: medium
     confidence: 0.65
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — $5K threshold too low, normal DEX volume
     
     detection:
       type: event
@@ -115,10 +123,10 @@ rules:
     description: |
       Monitors large liquidity removal events which could indicate
       rug pull preparation or protocol drain.
-    
+
     severity: high
     confidence: 0.75
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — $10K threshold too low, routine LP operations
     
     detection:
       type: event
@@ -233,11 +241,11 @@ rules:
       Critical monitoring for ownership and admin changes.
       Could indicate protocol takeover or legitimate governance.
       NOTE: These are always critical regardless of amount.
-    
+
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -248,11 +256,15 @@ rules:
         - Upgraded
         - admin_changed
       chain: any
-    
-    # No amount threshold - admin changes are always important
-    # But rate limit to prevent spam
+
+    # Exclude known deployer/factory addresses that generate routine admin events
+    exclusions:
+      addresses:
+        - "0x000100abaad02f1cfc8bbe32bd5a564817339e72"  # Base deployer/factory — routine governance
+
+    # Rate limit tightened: 5/hr prevents spam from batch deployments
     rate_limit:
-      max_alerts: 10
+      max_alerts: 5
       period: 1h
     
     actions:
@@ -267,10 +279,10 @@ rules:
     name: Large Bridge Transfer
     description: |
       Monitors large cross-chain bridge events for suspicious patterns.
-    
+
     severity: high
     confidence: 0.75
-    enabled: true
+    enabled: false  # DISABLED 2026-04-11: 100% FP — overlaps with large-bridge-transfer-101, $10K too low
     
     detection:
       type: event
@@ -306,18 +318,23 @@ rules:
     name: New Contract Deployment
     description: |
       Monitors new contract deployments for potential malicious contracts.
-    
+
     severity: high
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: event
       event_types:
         - ContractDeploy
         - contract_deploy
       chain: any
-    
+
+    # Rate limit to avoid noise from factory contracts batch-deploying
+    rate_limit:
+      max_alerts: 3
+      period: 1h
+
     actions:
       - type: alert
         channels: [slack]
@@ -391,17 +408,18 @@ rules:
     description: |
       Detects spike in unknown event types which could indicate
       new attack vectors or unclassified protocol activity.
-    
+      DISABLED: No event_type filter — counts ALL events, trivially exceeds threshold.
+
     severity: medium
     confidence: 0.50
-    enabled: true
-    
+    enabled: false
+
     detection:
       type: velocity
       metric: unknown_events_per_minute
       chain: any
       threshold: 50
-    
+
     time_window: 5m
     
     actions:
@@ -417,16 +435,17 @@ rules:
     description: |
       Detects rapid sequential transactions from same address
       indicating automated trading or potential MEV activity.
-    
+      DISABLED: No per-address grouping — counts ALL events globally, trivially exceeds threshold.
+
     severity: medium
     confidence: 0.65
-    enabled: true
-    
+    enabled: false
+
     detection:
       type: velocity
       metric: txs_per_address_per_minute
       threshold: 20
-    
+
     time_window: 1m
     
     actions:

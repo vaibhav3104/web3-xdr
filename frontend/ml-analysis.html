@@ -3,59 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Contract Scanner | Sentinel3</title>
-    <script src="config.js"></script>
+    <title>ML Analysis | Sentinel3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0a0f1c;
-            --bg-secondary: #111827;
-            --bg-card: #1a2332;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent-blue: #3b8aff;
+            --accent-purple: #8a3bff;
+            --accent-green: #3bff7e;
+            --accent-red: #ff3b3b;
+            --accent-orange: #ff8a3b;
+            --accent-yellow: #ffd93b;
             --accent-cyan: #06b6d4;
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border-color: #2a2a3a;
         }
         body {
+            font-family: 'Space Grotesk', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
         }
         .gradient-bg {
             background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%);
         }
         .card {
-            background: var(--bg-card);
-            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
         }
-        .risk-critical { color: #ef4444; }
-        .risk-high { color: #f59e0b; }
-        .risk-medium { color: #eab308; }
-        .risk-low { color: #10b981; }
-        .risk-safe { color: #22c55e; }
-        .bg-critical { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
-        .bg-high { background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; }
-        .bg-medium { background: rgba(234, 179, 8, 0.2); border-color: #eab308; }
-        .bg-low { background: rgba(16, 185, 129, 0.2); border-color: #10b981; }
-        .bg-safe { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; }
-        textarea {
-            background: var(--bg-secondary);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            color: var(--text-primary);
-            font-family: 'Fira Code', monospace;
+        .card:hover {
+            border-color: rgba(138, 59, 255, 0.3);
         }
-        textarea:focus {
+        .risk-critical { color: var(--accent-red); }
+        .risk-high { color: var(--accent-orange); }
+        .risk-medium { color: var(--accent-yellow); }
+        .risk-low { color: var(--accent-green); }
+        .risk-safe { color: #22c55e; }
+        .bg-critical { background: rgba(255, 59, 59, 0.15); border-color: var(--accent-red); }
+        .bg-high { background: rgba(255, 138, 59, 0.15); border-color: var(--accent-orange); }
+        .bg-medium { background: rgba(255, 217, 59, 0.15); border-color: var(--accent-yellow); }
+        .bg-low { background: rgba(59, 255, 126, 0.15); border-color: var(--accent-green); }
+        .bg-safe { background: rgba(59, 255, 126, 0.15); border-color: var(--accent-green); }
+        textarea, .code-input {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        textarea:focus, .code-input:focus {
             outline: none;
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 3px rgba(138, 59, 255, 0.2);
+        }
+        input[type="text"] {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 3px rgba(138, 59, 255, 0.2);
         }
         .pulse {
             animation: pulse 2s infinite;
@@ -74,52 +94,35 @@
     </style>
 </head>
 <body class="min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-gray-900 border-b border-gray-800">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center space-x-4">
-                    <span class="text-2xl">🛡️</span>
-                    <span class="font-bold text-xl">Sentinel3</span>
-                    <span class="text-gray-500">|</span>
-                    <span class="text-gray-400">Smart Contract Scanner</span>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/frontend/index.html" class="text-gray-400 hover:text-white">
-                        <i class="fas fa-home mr-2"></i>Dashboard
-                    </a>
-                    <a href="/frontend/admin.html" class="text-gray-400 hover:text-white">
-                        <i class="fas fa-cog mr-2"></i>Admin
-                    </a>
-                </div>
+    <div id="app" style="flex:1;min-width:0;">
+    <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
+        <div class="flex items-center justify-between">
+            <h1 class="text-lg font-semibold">ML Analysis</h1>
+            <div class="flex items-center gap-4 text-sm text-[#a0a0b0]">
+                <span><i class="fas fa-database mr-1"></i>Known Exploits: <span id="knownExploits" class="text-white font-medium">0</span></span>
+                <span><i class="fas fa-bell mr-1"></i>Alerts: <span id="alertsCount" class="text-white font-medium">0</span></span>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <div class="max-w-7xl mx-auto px-4 py-8">
+    <div class="max-w-7xl mx-auto px-6 py-8">
         <!-- Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold mb-2">
-                <i class="fas fa-brain text-purple-500 mr-3"></i>
+                <i class="fas fa-brain text-purple-400 mr-3"></i>
                 AI Contract Threat Analysis
             </h1>
-            <p class="text-gray-400">
+            <p class="text-[#a0a0b0]">
                 Analyze smart contract bytecode for potential threats using ML-powered detection
             </p>
         </div>
 
         <!-- ML Status -->
         <div id="mlStatus" class="card p-4 mb-6">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div class="w-3 h-3 rounded-full bg-green-500 pulse"></div>
-                    <span class="text-gray-400">ML System Status:</span>
-                    <span id="statusText" class="font-semibold text-green-400">Loading...</span>
-                </div>
-                <div class="flex items-center space-x-6 text-sm text-gray-400">
-                    <span><i class="fas fa-database mr-2"></i>Known Exploits: <span id="knownExploits">0</span></span>
-                    <span><i class="fas fa-bell mr-2"></i>Alerts: <span id="alertsCount">0</span></span>
-                </div>
+            <div class="flex items-center gap-4">
+                <div class="w-3 h-3 rounded-full bg-green-500 pulse"></div>
+                <span class="text-[#a0a0b0]">ML System Status:</span>
+                <span id="statusText" class="font-semibold text-green-400">Loading...</span>
             </div>
         </div>
 
@@ -132,7 +135,7 @@
                 </h2>
                 
                 <div class="mb-4">
-                    <label class="block text-gray-400 mb-2">Paste contract bytecode (hex)</label>
+                    <label class="block text-[#a0a0b0] mb-2">Paste contract bytecode (hex)</label>
                     <textarea 
                         id="bytecodeInput" 
                         rows="10" 
@@ -142,11 +145,11 @@
                 </div>
 
                 <div class="mb-4">
-                    <label class="block text-gray-400 mb-2">Contract Address (optional)</label>
-                    <input 
-                        type="text" 
+                    <label class="block text-[#a0a0b0] mb-2">Contract Address (optional)</label>
+                    <input
+                        type="text"
                         id="contractAddress"
-                        class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none"
+                        class="w-full p-3 rounded-lg font-mono text-sm"
                         placeholder="0x..."
                     >
                 </div>
@@ -161,7 +164,7 @@
                     </button>
                     <button 
                         onclick="loadSampleExploit()" 
-                        class="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition"
+                        class="px-6 py-3 bg-[#1a1a24] border border-[#2a2a3a] text-white rounded-lg hover:bg-[#2a2a3a] transition"
                     >
                         <i class="fas fa-flask mr-2"></i>
                         Load Sample
@@ -170,7 +173,7 @@
 
                 <!-- Quick Samples -->
                 <div class="mt-6">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Quick Test Samples:</h3>
+                    <h3 class="text-sm font-semibold text-[#a0a0b0] mb-3">Quick Test Samples:</h3>
                     <div class="flex flex-wrap gap-2">
                         <button onclick="loadSample('flash_loan')" class="px-3 py-1 bg-red-900/30 border border-red-500/50 rounded text-red-400 text-sm hover:bg-red-900/50">
                             Flash Loan
@@ -195,7 +198,7 @@
                     Analysis Results
                 </h2>
 
-                <div id="resultsContainer" class="text-center py-12 text-gray-500">
+                <div id="resultsContainer" class="text-center py-12 text-[#a0a0b0]">
                     <i class="fas fa-microscope text-4xl mb-4"></i>
                     <p>Enter bytecode and click Analyze to see results</p>
                 </div>
@@ -205,7 +208,7 @@
                     <div id="threatHeader" class="p-4 rounded-lg border mb-4">
                         <div class="flex items-center justify-between">
                             <div>
-                                <span class="text-sm text-gray-400">Threat Category</span>
+                                <span class="text-sm text-[#a0a0b0]">Threat Category</span>
                                 <h3 id="threatCategory" class="text-2xl font-bold">-</h3>
                             </div>
                             <div id="threatBadge" class="threat-badge">
@@ -216,43 +219,43 @@
 
                     <!-- Metrics -->
                     <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div class="bg-gray-800 rounded-lg p-4">
-                            <span class="text-sm text-gray-400">Risk Score</span>
+                        <div class="bg-[#1a1a24] rounded-lg p-4">
+                            <span class="text-sm text-[#a0a0b0]">Risk Score</span>
                             <div class="flex items-center mt-1">
                                 <span id="riskScore" class="text-3xl font-bold">-</span>
-                                <span class="text-gray-500 ml-1">/100</span>
+                                <span class="text-[#a0a0b0] ml-1">/100</span>
                             </div>
-                            <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
+                            <div class="w-full bg-[#2a2a3a] rounded-full h-2 mt-2">
                                 <div id="riskBar" class="h-2 rounded-full bg-red-500" style="width: 0%"></div>
                             </div>
                         </div>
-                        <div class="bg-gray-800 rounded-lg p-4">
-                            <span class="text-sm text-gray-400">Confidence</span>
+                        <div class="bg-[#1a1a24] rounded-lg p-4">
+                            <span class="text-sm text-[#a0a0b0]">Confidence</span>
                             <div class="flex items-center mt-1">
                                 <span id="confidence" class="text-3xl font-bold">-</span>
-                                <span class="text-gray-500 ml-1">%</span>
+                                <span class="text-[#a0a0b0] ml-1">%</span>
                             </div>
-                            <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
+                            <div class="w-full bg-[#2a2a3a] rounded-full h-2 mt-2">
                                 <div id="confidenceBar" class="h-2 rounded-full bg-blue-500" style="width: 0%"></div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Risk Factors -->
-                    <div class="bg-gray-800 rounded-lg p-4 mb-4">
-                        <span class="text-sm text-gray-400">Risk Factors</span>
+                    <div class="bg-[#1a1a24] rounded-lg p-4 mb-4">
+                        <span class="text-sm text-[#a0a0b0]">Risk Factors</span>
                         <ul id="riskFactors" class="mt-2 space-y-2">
                         </ul>
                     </div>
 
                     <!-- Recommendation -->
                     <div id="recommendationBox" class="rounded-lg p-4 border">
-                        <span class="text-sm text-gray-400">Recommendation</span>
+                        <span class="text-sm text-[#a0a0b0]">Recommendation</span>
                         <p id="recommendation" class="mt-1 font-medium"></p>
                     </div>
 
                     <!-- Analysis Time -->
-                    <div class="mt-4 text-center text-sm text-gray-500">
+                    <div class="mt-4 text-center text-sm text-[#a0a0b0]">
                         Analysis completed in <span id="analysisTime">-</span>ms
                     </div>
                 </div>
@@ -266,7 +269,7 @@
                     <i class="fas fa-database text-yellow-500 mr-2"></i>
                     Historical Attack Database
                 </h2>
-                <div id="attackStats" class="text-sm text-gray-400">
+                <div id="attackStats" class="text-sm text-[#a0a0b0]">
                     Loading...
                 </div>
             </div>
@@ -296,28 +299,28 @@
 
             <!-- Stats Row -->
             <div class="grid grid-cols-4 gap-4 mb-6">
-                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                <div class="bg-[#1a1a24] rounded-lg p-4 text-center">
                     <div id="totalAnalyzed" class="text-2xl font-bold text-blue-400">0</div>
-                    <div class="text-xs text-gray-500">Analyzed</div>
+                    <div class="text-xs text-[#a0a0b0]">Analyzed</div>
                 </div>
-                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                <div class="bg-[#1a1a24] rounded-lg p-4 text-center">
                     <div id="totalThreats" class="text-2xl font-bold text-red-400">0</div>
-                    <div class="text-xs text-gray-500">Threats</div>
+                    <div class="text-xs text-[#a0a0b0]">Threats</div>
                 </div>
-                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                <div class="bg-[#1a1a24] rounded-lg p-4 text-center">
                     <div id="activeAlerts" class="text-2xl font-bold text-yellow-400">0</div>
-                    <div class="text-xs text-gray-500">Active</div>
+                    <div class="text-xs text-[#a0a0b0]">Active</div>
                 </div>
-                <div class="bg-gray-800 rounded-lg p-4 text-center">
+                <div class="bg-[#1a1a24] rounded-lg p-4 text-center">
                     <div id="last24h" class="text-2xl font-bold text-green-400">0</div>
-                    <div class="text-xs text-gray-500">Last 24h</div>
+                    <div class="text-xs text-[#a0a0b0]">Last 24h</div>
                 </div>
             </div>
 
             <!-- Alerts Table -->
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
-                    <thead class="text-gray-400 border-b border-gray-700">
+                    <thead class="text-[#a0a0b0] border-b border-[#2a2a3a]">
                         <tr>
                             <th class="text-left py-3 px-2">Time</th>
                             <th class="text-left py-3 px-2">Chain</th>
@@ -330,7 +333,7 @@
                     </thead>
                     <tbody id="contractAlertsList">
                         <tr>
-                            <td colspan="7" class="text-center py-8 text-gray-500">
+                            <td colspan="7" class="text-center py-8 text-[#a0a0b0]">
                                 <i class="fas fa-satellite-dish text-3xl mb-2 opacity-50"></i>
                                 <p>Waiting for contract deployments...</p>
                                 <p class="text-xs mt-1">New contracts will appear here as they're deployed and analyzed</p>
@@ -348,14 +351,15 @@
                 Recent ML Alerts
             </h2>
             <div id="alertsList" class="space-y-3">
-                <p class="text-gray-500 text-center py-8">No alerts yet</p>
+                <p class="text-[#a0a0b0] text-center py-8">No alerts yet</p>
             </div>
         </div>
     </div>
+    </div><!-- /app -->
 
     <script>
         const API_BASE = window.SENTINEL3_API_BASE || '';
-        
+
         // Sample bytecodes for testing
         const sampleBytecodes = {
             flash_loan: '608060405263c3924ed6000000000000000000f1f1f155555555000000000000000000000000000000000000000000000000000000000000000000000000',
@@ -488,7 +492,7 @@
                     riskFactors.appendChild(li);
                 });
             } else {
-                riskFactors.innerHTML = '<li class="text-gray-500 text-sm">No specific risk factors detected</li>';
+                riskFactors.innerHTML = '<li class="text-[#a0a0b0] text-sm">No specific risk factors detected</li>';
             }
 
             // Update recommendation
@@ -529,7 +533,7 @@
 
                 attacksData.attacks.forEach(attack => {
                     const card = document.createElement('div');
-                    card.className = 'bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition cursor-pointer';
+                    card.className = 'bg-[#1a1a24] rounded-lg p-4 hover:bg-[#2a2a3a] transition cursor-pointer';
                     card.innerHTML = `
                         <div class="flex items-center justify-between mb-2">
                             <span class="font-bold">${attack.name}</span>
@@ -540,10 +544,10 @@
                         <div class="text-red-400 font-bold text-lg mb-1">
                             $${(attack.loss_usd / 1e6).toFixed(0)}M
                         </div>
-                        <div class="text-gray-500 text-sm mb-2">
+                        <div class="text-[#a0a0b0] text-sm mb-2">
                             ${attack.protocol} | ${attack.date}
                         </div>
-                        <div class="text-xs text-gray-500">
+                        <div class="text-xs text-[#a0a0b0]">
                             <i class="fas fa-bug mr-1"></i>${attack.attack_type.replace(/_/g, ' ')}
                         </div>
                     `;
@@ -565,7 +569,7 @@
                     alertsList.innerHTML = '';
                     data.alerts.forEach(alert => {
                         const div = document.createElement('div');
-                        div.className = 'bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition';
+                        div.className = 'bg-[#1a1a24] rounded-lg p-4 hover:bg-[#2a2a3a] transition';
                         
                         // Safely access nested properties
                         const threatCategory = alert.classification?.threat_category || 'unknown';
@@ -593,13 +597,13 @@
                                     <span class="font-bold ${threatColor}">${threatCategory.replace(/_/g, ' ').toUpperCase()}</span>
                                     <span class="px-2 py-0.5 bg-purple-900/50 text-purple-400 rounded text-xs">${chain}</span>
                                 </div>
-                                <span class="text-sm text-gray-500">${alertTime}</span>
+                                <span class="text-sm text-[#a0a0b0]">${alertTime}</span>
                             </div>
                             <div class="flex items-center justify-between">
-                                <p class="text-sm text-gray-400 font-mono">${contractAddress.substring(0, 20)}...</p>
+                                <p class="text-sm text-[#a0a0b0] font-mono">${contractAddress.substring(0, 20)}...</p>
                                 <div class="flex items-center space-x-4 text-xs">
-                                    <span class="text-gray-500">Confidence: <span class="text-white">${(confidence * 100).toFixed(0)}%</span></span>
-                                    <span class="text-gray-500">Risk: <span class="text-white">${typeof riskScore === 'number' ? riskScore.toFixed(0) : riskScore}/100</span></span>
+                                    <span class="text-[#a0a0b0]">Confidence: <span class="text-white">${(confidence * 100).toFixed(0)}%</span></span>
+                                    <span class="text-[#a0a0b0]">Risk: <span class="text-white">${typeof riskScore === 'number' ? riskScore.toFixed(0) : riskScore}/100</span></span>
                                 </div>
                             </div>
                         `;
@@ -607,7 +611,7 @@
                     });
                 } else {
                     alertsList.innerHTML = `
-                        <div class="text-center py-8 text-gray-500">
+                        <div class="text-center py-8 text-[#a0a0b0]">
                             <i class="fas fa-shield-alt text-4xl mb-3 text-green-500/50"></i>
                             <p class="font-semibold text-green-400">No Active Threats</p>
                             <p class="text-sm mt-1">ML scanner is monitoring for malicious contracts</p>
@@ -617,7 +621,7 @@
             } catch (error) {
                 console.error('Failed to load alerts:', error);
                 document.getElementById('alertsList').innerHTML = `
-                    <div class="text-center py-8 text-gray-500">
+                    <div class="text-center py-8 text-[#a0a0b0]">
                         <i class="fas fa-exclamation-triangle text-4xl mb-3 text-yellow-500/50"></i>
                         <p>Failed to load alerts</p>
                         <p class="text-xs mt-1">${error.message}</p>
@@ -653,7 +657,7 @@
                 if (alerts.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="7" class="text-center py-8 text-gray-500">
+                            <td colspan="7" class="text-center py-8 text-[#a0a0b0]">
                                 <i class="fas fa-satellite-dish text-3xl mb-2 opacity-50"></i>
                                 <p>Waiting for contract deployments...</p>
                                 <p class="text-xs mt-1">New contracts will appear here as they're deployed and analyzed</p>
@@ -668,8 +672,8 @@
                     const statusColor = getStatusColor(alert.status);
                     
                     return `
-                        <tr class="border-b border-gray-800 hover:bg-gray-800/50">
-                            <td class="py-3 px-2 text-gray-400 text-xs">
+                        <tr class="border-b border-gray-800 hover:bg-[#1a1a24]">
+                            <td class="py-3 px-2 text-[#a0a0b0] text-xs">
                                 ${formatTime(alert.timestamp)}
                             </td>
                             <td class="py-3 px-2">
@@ -690,11 +694,11 @@
                             </td>
                             <td class="py-3 px-2">
                                 <div class="flex items-center">
-                                    <div class="w-16 bg-gray-700 rounded-full h-2 mr-2">
+                                    <div class="w-16 bg-[#2a2a3a] rounded-full h-2 mr-2">
                                         <div class="h-2 rounded-full ${threatColor.includes('red') ? 'bg-red-500' : threatColor.includes('yellow') ? 'bg-yellow-500' : 'bg-green-500'}" 
                                              style="width: ${alert.confidence * 100}%"></div>
                                     </div>
-                                    <span class="text-xs text-gray-400">${(alert.confidence * 100).toFixed(0)}%</span>
+                                    <span class="text-xs text-[#a0a0b0]">${(alert.confidence * 100).toFixed(0)}%</span>
                                 </div>
                             </td>
                             <td class="py-3 px-2">
@@ -730,7 +734,7 @@
                 'low': 'bg-blue-900/50 text-blue-400',
                 'safe': 'bg-green-900/50 text-green-400'
             };
-            return colors[level] || 'bg-gray-900/50 text-gray-400';
+            return colors[level] || 'bg-[#12121a]/50 text-[#a0a0b0]';
         }
 
         function getStatusColor(status) {
@@ -738,9 +742,9 @@
                 'active': 'bg-red-900/50 text-red-400',
                 'investigating': 'bg-yellow-900/50 text-yellow-400',
                 'resolved': 'bg-green-900/50 text-green-400',
-                'false_positive': 'bg-gray-900/50 text-gray-400'
+                'false_positive': 'bg-[#12121a]/50 text-[#a0a0b0]'
             };
-            return colors[status] || 'bg-gray-900/50 text-gray-400';
+            return colors[status] || 'bg-[#12121a]/50 text-[#a0a0b0]';
         }
 
         function formatThreat(category) {
@@ -777,68 +781,68 @@
                 const modal = document.createElement('div');
                 modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50';
                 modal.innerHTML = `
-                    <div class="bg-gray-900 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                    <div class="bg-[#12121a] rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
                         <div class="flex justify-between items-center mb-6">
                             <h3 class="text-xl font-bold">
                                 <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
                                 Contract Threat Alert
                             </h3>
-                            <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-white">
+                            <button onclick="this.closest('.fixed').remove()" class="text-[#a0a0b0] hover:text-white">
                                 <i class="fas fa-times text-xl"></i>
                             </button>
                         </div>
                         
                         <div class="space-y-4">
                             <div class="grid grid-cols-2 gap-4">
-                                <div class="bg-gray-800 rounded p-3">
-                                    <span class="text-xs text-gray-500">Chain</span>
+                                <div class="bg-[#1a1a24] rounded p-3">
+                                    <span class="text-xs text-[#a0a0b0]">Chain</span>
                                     <p class="font-bold text-purple-400">${alert.chain_id}</p>
                                 </div>
-                                <div class="bg-gray-800 rounded p-3">
-                                    <span class="text-xs text-gray-500">Block</span>
+                                <div class="bg-[#1a1a24] rounded p-3">
+                                    <span class="text-xs text-[#a0a0b0]">Block</span>
                                     <p class="font-bold">#${alert.block_number}</p>
                                 </div>
                             </div>
                             
-                            <div class="bg-gray-800 rounded p-3">
-                                <span class="text-xs text-gray-500">Contract Address</span>
+                            <div class="bg-[#1a1a24] rounded p-3">
+                                <span class="text-xs text-[#a0a0b0]">Contract Address</span>
                                 <p class="font-mono text-sm text-blue-400 break-all">${alert.contract_address}</p>
                             </div>
                             
-                            <div class="bg-gray-800 rounded p-3">
-                                <span class="text-xs text-gray-500">Deployer</span>
+                            <div class="bg-[#1a1a24] rounded p-3">
+                                <span class="text-xs text-[#a0a0b0]">Deployer</span>
                                 <p class="font-mono text-sm text-orange-400 break-all">${alert.deployer_address}</p>
                             </div>
                             
-                            <div class="bg-gray-800 rounded p-3">
-                                <span class="text-xs text-gray-500">Transaction</span>
+                            <div class="bg-[#1a1a24] rounded p-3">
+                                <span class="text-xs text-[#a0a0b0]">Transaction</span>
                                 <p class="font-mono text-sm break-all">${alert.tx_hash}</p>
                             </div>
                             
                             <div class="grid grid-cols-3 gap-4">
                                 <div class="bg-red-900/30 border border-red-500/50 rounded p-3">
-                                    <span class="text-xs text-gray-500">Threat</span>
+                                    <span class="text-xs text-[#a0a0b0]">Threat</span>
                                     <p class="font-bold text-red-400">${formatThreat(alert.threat_category)}</p>
                                 </div>
-                                <div class="bg-gray-800 rounded p-3">
-                                    <span class="text-xs text-gray-500">Confidence</span>
+                                <div class="bg-[#1a1a24] rounded p-3">
+                                    <span class="text-xs text-[#a0a0b0]">Confidence</span>
                                     <p class="font-bold">${(alert.confidence * 100).toFixed(1)}%</p>
                                 </div>
-                                <div class="bg-gray-800 rounded p-3">
-                                    <span class="text-xs text-gray-500">Risk Score</span>
+                                <div class="bg-[#1a1a24] rounded p-3">
+                                    <span class="text-xs text-[#a0a0b0]">Risk Score</span>
                                     <p class="font-bold">${alert.risk_score.toFixed(0)}/100</p>
                                 </div>
                             </div>
                             
-                            <div class="bg-gray-800 rounded p-3">
-                                <span class="text-xs text-gray-500">Risk Factors</span>
+                            <div class="bg-[#1a1a24] rounded p-3">
+                                <span class="text-xs text-[#a0a0b0]">Risk Factors</span>
                                 <ul class="mt-2 space-y-1">
                                     ${alert.risk_factors.map(f => `<li class="text-sm text-yellow-400"><i class="fas fa-exclamation-circle mr-2"></i>${f}</li>`).join('')}
                                 </ul>
                             </div>
                             
                             <div class="bg-red-900/20 border border-red-500/50 rounded p-3">
-                                <span class="text-xs text-gray-500">Recommendation</span>
+                                <span class="text-xs text-[#a0a0b0]">Recommendation</span>
                                 <p class="mt-1 text-red-300">${alert.recommendation}</p>
                             </div>
                         </div>

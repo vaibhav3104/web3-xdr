@@ -12,7 +12,7 @@ SECURITY: All write operations require admin API key authentication.
 These endpoints control critical security actions (pause, unpause, approve).
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -25,9 +25,14 @@ from ..response.guardian import (
     ResponseAction,
     ResponseStatus
 )
+from ..response.policy import PausePolicy, PausePolicyConfig, PauseDecision
+from ..database.audit import AuditLogger, ActionType
 
 # Import API key authentication
 from .middleware.security import require_api_key
+
+# Shared policy instance for manual-pause safety checks
+_pause_policy = PausePolicy()
 
 router = APIRouter(prefix="/api/guardian", tags=["Guardian"])
 logger = structlog.get_logger(__name__)
@@ -56,6 +61,7 @@ class ManualPauseRequest(BaseModel):
     protocol_id: str
     reason: str
     initiated_by: str
+    override_policy: bool = False  # Skip cooldown check (logged as OVERRIDE)
 
 
 class ApproveResponseRequest(BaseModel):
@@ -143,7 +149,19 @@ async def register_protocol(
     )
     
     guardian.register_protocol(request.protocol_id, config)
-    
+
+    AuditLogger.log(
+        action_type=ActionType.CHAIN_ADD,
+        actor_id=client.get("name", "unknown"),
+        resource_id=request.protocol_id,
+        details={
+            "protocol_name": request.protocol_name,
+            "chain_id": request.chain_id,
+            "main_contract": request.main_contract,
+            "auto_pause_on_critical": request.auto_pause_on_critical,
+        },
+    )
+
     return {
         "status": "registered",
         "protocol_id": request.protocol_id,
@@ -162,7 +180,14 @@ async def unregister_protocol(
         raise HTTPException(status_code=404, detail="Protocol not found")
     
     del guardian.protocols[protocol_id]
-    
+
+    AuditLogger.log(
+        action_type=ActionType.CHAIN_REMOVE,
+        actor_id=client.get("name", "unknown"),
+        resource_id=protocol_id,
+        details={"action": "unregister_protocol"},
+    )
+
     return {"status": "unregistered", "protocol_id": protocol_id}
 
 
@@ -195,15 +220,26 @@ async def approve_response(
     client: dict = Depends(require_api_key(["admin"]))
 ):
     """Approve a pending response action. Requires admin API key."""
-    logger.info("guardian_approve_response", response_id=request.response_id, approved_by=request.approved_by, client=client.get("name", "unknown"))
+    client_name = client.get("name", "unknown")
+    logger.info("guardian_approve_response", response_id=request.response_id, approved_by=request.approved_by, client=client_name)
     record = await guardian.approve_response(
         response_id=request.response_id,
         approved_by=request.approved_by
     )
-    
+
     if not record:
         raise HTTPException(status_code=404, detail="Response not found")
-    
+
+    AuditLogger.log_guardian_pause(
+        incident_id=record.incident_id,
+        protocol_id=record.protocol,
+        contract_address=record.contract_address,
+        success=record.status == ResponseStatus.SUCCESS,
+        actor_id=request.approved_by,
+        tx_hash=record.tx_hash,
+        error=record.error,
+    )
+
     return {
         "status": "approved",
         "response_id": record.id,
@@ -219,16 +255,28 @@ async def reject_response(
     client: dict = Depends(require_api_key(["admin"]))
 ):
     """Reject a pending response action. Requires admin API key."""
-    logger.info("guardian_reject_response", response_id=request.response_id, rejected_by=request.rejected_by, client=client.get("name", "unknown"))
+    client_name = client.get("name", "unknown")
+    logger.info("guardian_reject_response", response_id=request.response_id, rejected_by=request.rejected_by, client=client_name)
     success = await guardian.reject_response(
         response_id=request.response_id,
         rejected_by=request.rejected_by,
         reason=request.reason
     )
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Response not found")
-    
+
+    AuditLogger.log(
+        action_type=ActionType.GUARDIAN_PAUSE_FAILED,
+        actor_id=request.rejected_by,
+        resource_id=request.response_id,
+        details={
+            "action": "reject",
+            "reason": request.reason,
+            "client": client_name,
+        },
+    )
+
     return {"status": "rejected", "response_id": request.response_id}
 
 
@@ -239,39 +287,101 @@ async def manual_pause(
 ):
     """
     Manually trigger a pause action. Requires admin API key.
-    
-    Use this for emergency situations where you want to pause
-    a protocol without waiting for incident detection.
+
+    Safety: Still enforces cooldown policy check unless override_policy=True.
+    All manual pauses are audit-logged (override actions logged separately).
     """
-    logger.warning("guardian_manual_pause_triggered", protocol_id=request.protocol_id, reason=request.reason, initiated_by=request.initiated_by, client=client.get("name", "unknown"))
+    client_name = client.get("name", "unknown")
+    logger.warning(
+        "guardian_manual_pause_triggered",
+        protocol_id=request.protocol_id,
+        reason=request.reason,
+        initiated_by=request.initiated_by,
+        override_policy=request.override_policy,
+        client=client_name,
+    )
+
     if request.protocol_id not in guardian.protocols:
         raise HTTPException(status_code=404, detail="Protocol not registered")
-    
+
     config = guardian.protocols[request.protocol_id]
-    
+
+    # Policy check: enforce cooldown even for manual pauses
+    last_attempt = _pause_policy._last_pause_attempts.get(request.protocol_id)
+    if last_attempt and not request.override_policy:
+        elapsed = (datetime.now(timezone.utc) - last_attempt).total_seconds()
+        if elapsed < _pause_policy.config.cooldown_seconds:
+            remaining = int(_pause_policy.config.cooldown_seconds - elapsed)
+            AuditLogger.log(
+                action_type=ActionType.GUARDIAN_PAUSE_FAILED,
+                actor_id=request.initiated_by,
+                resource_id=request.protocol_id,
+                details={
+                    "reason": "cooldown_active",
+                    "remaining_seconds": remaining,
+                    "manual_trigger": True,
+                },
+            )
+            raise HTTPException(
+                status_code=429,
+                detail=f"Cooldown active: {remaining}s remaining. Use override_policy=true to bypass."
+            )
+
+    # Log override if used
+    if request.override_policy:
+        AuditLogger.log(
+            action_type=ActionType.GUARDIAN_PAUSE_OVERRIDE,
+            actor_id=request.initiated_by,
+            resource_id=request.protocol_id,
+            details={
+                "reason": request.reason,
+                "client": client_name,
+                "manual_trigger": True,
+                "override_policy": True,
+            },
+        )
+
+    # Record this attempt in the policy cooldown tracker
+    _pause_policy._last_pause_attempts[request.protocol_id] = datetime.now(timezone.utc)
+
     # Create a manual incident
     record = await guardian.handle_incident(
         incident_id=f"manual-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         severity="critical",
         attack_type="manual_trigger",
         affected_protocol=config.protocol_name,
-        estimated_loss_usd=0,  # Manual, bypass approval
+        estimated_loss_usd=0,  # Manual, bypass approval threshold
         affected_chain=config.chain_id,
-        contract_address=config.main_contract
+        contract_address=config.main_contract,
     )
-    
+
     if not record:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create pause action"
+        AuditLogger.log(
+            action_type=ActionType.GUARDIAN_PAUSE_FAILED,
+            actor_id=request.initiated_by,
+            resource_id=request.protocol_id,
+            details={"reason": request.reason, "error": "handle_incident returned None"},
         )
-    
+        raise HTTPException(status_code=500, detail="Failed to create pause action")
+
+    # Audit log the attempt result
+    AuditLogger.log_guardian_pause(
+        incident_id=record.incident_id,
+        protocol_id=request.protocol_id,
+        contract_address=config.main_contract,
+        success=record.status == ResponseStatus.SUCCESS,
+        actor_id=request.initiated_by,
+        tx_hash=record.tx_hash,
+        error=record.error,
+    )
+
     return {
         "status": "pause_initiated",
         "response_id": record.id,
         "execution_status": record.status.value,
         "tx_hash": record.tx_hash,
-        "error": record.error
+        "error": record.error,
+        "policy_overridden": request.override_policy,
     }
 
 
@@ -285,12 +395,23 @@ class EmergencyPauseRequest(BaseModel):
 async def emergency_pause(request: EmergencyPauseRequest):
     """
     Emergency pause triggered from an incident.
-    
+
     This endpoint is called from the dashboard when a user clicks
-    "Emergency Pause" on an incident.
+    "Emergency Pause" on an incident. All actions are audit-logged.
     """
     from ..database.service import DatabaseService
-    
+
+    AuditLogger.log(
+        action_type=ActionType.GUARDIAN_PAUSE_ATTEMPT,
+        actor_id="dashboard_user",
+        resource_id=request.incident_id,
+        details={
+            "action": "emergency_pause",
+            "chains": request.chains,
+            "reason": request.reason,
+        },
+    )
+
     # Try to get incident details
     incident = None
     try:
@@ -301,17 +422,16 @@ async def emergency_pause(request: EmergencyPauseRequest):
             }
     except Exception as e:
         pass
-    
+
     # Find matching protocols for the affected chains
     affected_protocols = []
     chains_to_pause = request.chains or (incident.get('affected_chains', []) if incident else [])
-    
+
     for protocol_id, config in guardian.protocols.items():
         if not chains_to_pause or config.chain_id in chains_to_pause:
             affected_protocols.append((protocol_id, config))
-    
+
     if not affected_protocols:
-        # No registered protocols - simulate the pause
         return {
             "status": "simulated",
             "message": "No protocols registered for guardian protection. In production, this would pause affected contracts.",
@@ -319,7 +439,7 @@ async def emergency_pause(request: EmergencyPauseRequest):
             "chains": chains_to_pause,
             "action_required": "Register protocols via /api/guardian/protocols/register to enable real pausing"
         }
-    
+
     # Execute pause for each affected protocol
     results = []
     for protocol_id, config in affected_protocols:
@@ -333,12 +453,21 @@ async def emergency_pause(request: EmergencyPauseRequest):
                 affected_chain=config.chain_id,
                 contract_address=config.main_contract
             )
+            success = record and record.status == ResponseStatus.SUCCESS
             results.append({
                 "protocol": config.protocol_name,
                 "chain": config.chain_id,
                 "status": record.status.value if record else "failed",
                 "tx_hash": record.tx_hash if record else None
             })
+            AuditLogger.log_guardian_pause(
+                incident_id=request.incident_id,
+                protocol_id=protocol_id,
+                contract_address=config.main_contract,
+                success=success,
+                actor_id="dashboard_user",
+                tx_hash=record.tx_hash if record else None,
+            )
         except Exception as e:
             results.append({
                 "protocol": config.protocol_name,
@@ -346,13 +475,58 @@ async def emergency_pause(request: EmergencyPauseRequest):
                 "status": "error",
                 "error": str(e)
             })
-    
+            AuditLogger.log_guardian_pause(
+                incident_id=request.incident_id,
+                protocol_id=protocol_id,
+                contract_address=config.main_contract,
+                success=False,
+                actor_id="dashboard_user",
+                error=str(e),
+            )
+
     return {
         "status": "pause_initiated",
         "incident_id": request.incident_id,
         "protocols_affected": len(results),
         "results": results
     }
+
+
+class DryRunPauseRequest(BaseModel):
+    protocol_id: str
+
+
+@router.post("/dry-run-pause")
+async def dry_run_pause(
+    request: DryRunPauseRequest,
+    client: dict = Depends(require_api_key(["admin"]))
+):
+    """
+    Simulate a pause via eth_call without broadcasting a transaction.
+
+    Returns estimated gas and whether the pause() call would succeed or revert
+    (e.g. missing PAUSER_ROLE, contract already paused, etc.).
+    """
+    client_name = client.get("name", "unknown")
+    logger.info("guardian_dry_run_pause", protocol_id=request.protocol_id, client=client_name)
+
+    if request.protocol_id not in guardian.protocols:
+        raise HTTPException(status_code=404, detail="Protocol not registered")
+
+    result = await guardian.simulate_pause(request.protocol_id)
+
+    AuditLogger.log(
+        action_type=ActionType.GUARDIAN_PAUSE_ATTEMPT,
+        actor_id=client_name,
+        resource_id=request.protocol_id,
+        details={"action": "dry_run_pause", "result": result},
+    )
+
+    status_code = 200 if result.get("success") else 422
+    if not result.get("success"):
+        raise HTTPException(status_code=status_code, detail=result)
+
+    return result
 
 
 @router.get("/history")

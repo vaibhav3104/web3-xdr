@@ -605,3 +605,33 @@ class PredictedIncidentModel(Base):
     def __repr__(self):
         return f"<PredictedIncident {self.id} [{self.chain_id}] {self.predicted_type} status={self.status}>"
 
+
+class IncidentAuditLog(Base):
+    """
+    Immutable audit trail for every incident status change.
+    Tracks who changed what, when, and why.
+    """
+    __tablename__ = "incident_audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    incident_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)  # ACKNOWLEDGE, INVESTIGATE, RESOLVE, CLOSE, FEEDBACK_TP, FEEDBACK_FP
+    previous_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    analyst_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_audit_incident_time", "incident_id", "created_at"),
+    )
+

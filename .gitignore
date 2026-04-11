@@ -86,6 +86,7 @@ Thumbs.db
 *.pem
 *.key
 secrets.yaml
+.env
 .env.local
 .env.production
 
