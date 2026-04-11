@@ -409,6 +409,14 @@
                                                 @click="resolveIncident(incident)"
                                                 class="px-2 py-1 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition"
                                                 title="Resolve">✔</button>
+                                        <button x-show="!incident.feedbackSubmitted && incident.status !== 'false_positive'"
+                                                @click="submitFeedback(incident, true)"
+                                                class="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 rounded text-xs transition"
+                                                title="Mark True Positive">TP</button>
+                                        <button x-show="!incident.feedbackSubmitted && incident.status !== 'false_positive'"
+                                                @click="submitFeedback(incident, false)"
+                                                class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition"
+                                                title="Mark False Positive">FP</button>
                                     </div>
                                 </td>
                             </tr>

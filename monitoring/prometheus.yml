@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "sentinel3-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8080"]
+        labels:
+          service: "api"
+
+  - job_name: "sentinel3-worker"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:9090"]
+        labels:
+          service: "worker"
+
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis:6379"]
+    # Redis exporter would go here if added later
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

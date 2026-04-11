@@ -35,6 +35,8 @@ class IncidentSummary(BaseModel):
     affected_addresses: Optional[List[str]] = None
     summary: Optional[str] = None
     recommended_actions: Optional[List[str]] = None
+    rule_ids: Optional[List[str]] = None
+    cluster_key: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -198,6 +200,8 @@ async def list_incidents(
                 affected_addresses=getattr(i, 'affected_addresses', None),
                 summary=getattr(i, 'summary', None),
                 recommended_actions=getattr(i, 'recommended_actions', None),
+                rule_ids=getattr(i, 'rule_ids', None),
+                cluster_key=getattr(i, 'cluster_key', None),
             ))
     
     # 2. Get incidents from database (worker-created)
@@ -224,6 +228,8 @@ async def list_incidents(
                     affected_addresses=inc.get("affected_addresses"),
                     summary=inc.get("summary"),
                     recommended_actions=inc.get("recommended_actions"),
+                    rule_ids=inc.get("rule_ids"),
+                    cluster_key=inc.get("cluster_key"),
                 ))
     except Exception as e:
         logger.warning("db_incidents_fetch_failed", error=str(e))

@@ -1,0 +1,35 @@
+{
+  "total_samples": 1916,
+  "feature_dims": 16,
+  "threat_types": [
+    "oracle_manipulation",
+    "rug_pull",
+    "flash_loan_attack",
+    "access_control",
+    "reentrancy",
+    "safe",
+    "bridge_exploit",
+    "governance_attack",
+    "honeypot"
+  ],
+  "threat_type_mapping": {
+    "oracle_manipulation": 0,
+    "rug_pull": 1,
+    "flash_loan_attack": 2,
+    "access_control": 3,
+    "reentrancy": 4,
+    "safe": 5,
+    "bridge_exploit": 6,
+    "governance_attack": 7,
+    "honeypot": 8
+  },
+  "class_distribution": {
+    "threats": 1916,
+    "safe": 0
+  },
+  "sources": {
+    "defillama": 196,
+    "internal": 1720
+  },
+  "updated_at": "2026-01-28T13:48:41.308141"
+}

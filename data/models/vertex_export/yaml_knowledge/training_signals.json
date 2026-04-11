@@ -1,0 +1,11 @@
+{
+  "severity_weights": {
+    "critical": 1.0,
+    "high": 0.8,
+    "medium": 0.5,
+    "low": 0.3,
+    "info": 0.1
+  },
+  "category_mappings": {},
+  "threshold_signals": []
+}

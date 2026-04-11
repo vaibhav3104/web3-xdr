@@ -1,0 +1,138 @@
+{
+  "contract": {
+    "address": "0xcb020aa291759647dfe32d0c03903d09a4f33cac",
+    "chain": "polygon",
+    "deployer": "0xe673621b36984cb1f74a876b4ba26c4f6ca4e25f",
+    "tx_hash": "0x20dc19e6de245ef0fb1a4d5211804594894eaad47b16a9c1029baf9afb2aab7a",
+    "block_number": 85380560,
+    "timestamp": "2026-04-11T09:49:17",
+    "bytecode_length": 5500,
+    "gas_used": 1471570
+  },
+  "analysis": {
+    "risk_score": 1.0,
+    "threat_category": "reentrancy_exploit",
+    "confidence": 0.8777777777777778,
+    "is_threat": true,
+    "alerts": [
+      "Potential reentrancy pattern detected",
+      "Contains SELFDESTRUCT opcode",
+      "[CRITICAL] Integer Overflow Vulnerability (Truebit-style)",
+      "[HIGH] Integer Underflow Vulnerability",
+      "[CRITICAL] Reentrancy Vulnerability",
+      "[CRITICAL] Reentrancy Vulnerability",
+      "[MEDIUM] Unchecked External Call",
+      "[MEDIUM] Weak Randomness",
+      "[INFO] Unknown Solidity Version",
+      "[MEDIUM] Potential Oracle Manipulation",
+      "[INFO] Sensitive Function: transfer()",
+      "[INFO] Sensitive Function: transferFrom()"
+    ],
+    "analyzed_at": "2026-04-11T04:19:21.825453"
+  },
+  "features": {
+    "bytecode_length": 5499,
+    "bytecode_length_normalized": 0.21996,
+    "call_count": 2,
+    "delegatecall_count": 1,
+    "staticcall_count": 2,
+    "selfdestruct_count": 35,
+    "sstore_count": 24,
+    "sload_count": 50,
+    "balance_count": 3,
+    "extcode_count": 4,
+    "has_flash_loan_callback": false,
+    "has_reentrancy_pattern": true,
+    "has_delegatecall_pattern": true,
+    "has_selfdestruct": true,
+    "has_mint_function": false,
+    "has_admin_functions": true,
+    "has_proxy_pattern": false,
+    "unique_opcodes": 195,
+    "jumps_count": 235,
+    "push_count": 850,
+    "known_signatures_count": 4,
+    "flash_loan_signatures": 0,
+    "admin_signatures": 2,
+    "call_count_normalized": 0.04,
+    "delegatecall_count_normalized": 0.1,
+    "sstore_count_normalized": 0.24,
+    "sload_count_normalized": 0.5,
+    "risk_score": 0.55,
+    "scanner_vulnerabilities": [
+      {
+        "type": "integer_overflow",
+        "severity": "critical",
+        "title": "Integer Overflow Vulnerability (Truebit-style)",
+        "confidence": 0.85,
+        "description": "Contract uses arithmetic operations (142 ADD, 2 MUL) without overflow protection. Solidity version unknown does not have built-in overflow checks, and no SafeMath pattern detected."
+      },
+      {
+        "type": "integer_underflow",
+        "severity": "high",
+        "title": "Integer Underflow Vulnerability",
+        "confidence": 0.75,
+        "description": "Contract uses 28 SUB operations without underflow protection."
+      },
+      {
+        "type": "reentrancy",
+        "severity": "critical",
+        "title": "Reentrancy Vulnerability",
+        "confidence": 0.75,
+        "description": "External call found before state update. An attacker could re-enter the contract before state is updated."
+      },
+      {
+        "type": "reentrancy",
+        "severity": "critical",
+        "title": "Reentrancy Vulnerability",
+        "confidence": 0.75,
+        "description": "External call found before state update. An attacker could re-enter the contract before state is updated."
+      },
+      {
+        "type": "unchecked_call",
+        "severity": "medium",
+        "title": "Unchecked External Call",
+        "confidence": 0.7,
+        "description": "External call return value is not checked. Failed calls will not revert."
+      },
+      {
+        "type": "weak_randomness",
+        "severity": "medium",
+        "title": "Weak Randomness",
+        "confidence": 0.6,
+        "description": "Contract may use weak randomness sources: block.timestamp, block.coinbase, block.number. These are predictable by miners."
+      },
+      {
+        "type": "outdated_compiler",
+        "severity": "info",
+        "title": "Unknown Solidity Version",
+        "confidence": 0.5,
+        "description": "Could not determine Solidity version from bytecode."
+      },
+      {
+        "type": "oracle_manipulation",
+        "severity": "medium",
+        "title": "Potential Oracle Manipulation",
+        "confidence": 0.5,
+        "description": "Contract fetches external price data without apparent use of trusted oracle (Chainlink). May be vulnerable to manipulation."
+      },
+      {
+        "type": "unprotected_function",
+        "severity": "info",
+        "title": "Sensitive Function: transfer()",
+        "confidence": 0.9,
+        "description": "Contract contains transfer() function. Token transfer"
+      },
+      {
+        "type": "unprotected_function",
+        "severity": "info",
+        "title": "Sensitive Function: transferFrom()",
+        "confidence": 0.9,
+        "description": "Contract contains transferFrom() function. Token transfer from"
+      }
+    ],
+    "scanner_risk_score": 1.0,
+    "source_verified": false,
+    "combined_risk_score": 1.0
+  }
+}

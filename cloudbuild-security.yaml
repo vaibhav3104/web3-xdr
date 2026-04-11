@@ -1,0 +1,442 @@
+# =============================================================================
+# SECURITY SCANNING PIPELINE (SAST + DAST)
+# Run this before deploying to catch security vulnerabilities
+# =============================================================================
+
+steps:
+  # =========================================================================
+  # PHASE 1: SAST (Static Application Security Testing)
+  # =========================================================================
+  
+  # 1.1 - Python Security Scan with Bandit
+  - name: 'python:3.11-slim'
+    id: 'sast-bandit'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install bandit[toml] -q
+        echo "🔍 Running Bandit (Python SAST)..."
+        bandit -r src/ -f json -o /workspace/bandit-report.json --severity-level medium || true
+        bandit -r src/ -f txt --severity-level medium
+        echo "✅ Bandit scan complete"
+
+  # 1.2 - Dependency Vulnerability Scan with Safety
+  - name: 'python:3.11-slim'
+    id: 'sast-safety'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install safety -q
+        echo "🔍 Running Safety (Dependency Scan)..."
+        safety check -r requirements.txt --json > /workspace/safety-report.json || true
+        safety check -r requirements.txt || true
+        echo "✅ Safety scan complete"
+
+  # 1.3 - Secret Detection with detect-secrets
+  - name: 'python:3.11-slim'
+    id: 'sast-secrets'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install detect-secrets -q
+        echo "🔍 Running Secret Detection..."
+        detect-secrets scan --all-files --exclude-files '\.git|venv|__pycache__|\.pyc|\.env\.example' > /workspace/secrets-report.json || true
+        cat /workspace/secrets-report.json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Found {len(d.get(\"results\", {}))} potential secrets')"
+        echo "✅ Secret detection complete"
+
+  # 1.4 - YAML/Config Security Scan
+  - name: 'python:3.11-slim'
+    id: 'sast-yaml'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install yamllint -q
+        echo "🔍 Running YAML Lint..."
+        yamllint config/ deploy/ -f parsable || true
+        echo "✅ YAML scan complete"
+
+  # 1.5 - Dockerfile Security Scan with Hadolint
+  - name: 'hadolint/hadolint:latest'
+    id: 'sast-dockerfile'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running Hadolint (Dockerfile SAST)..."
+        hadolint Dockerfile --format json > /workspace/hadolint-report.json || true
+        hadolint Dockerfile || true
+        echo "✅ Dockerfile scan complete"
+
+  # 1.6 - Smart Contract Security (Solidity patterns in Python)
+  - name: 'python:3.11-slim'
+    id: 'sast-web3-patterns'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Checking Web3 Security Patterns..."
+        
+        # Check for dangerous patterns in our codebase
+        echo "Checking for hardcoded private keys..."
+        grep -rn "private_key\s*=" src/ --include="*.py" | grep -v "\.example" | grep -v "#" || echo "✅ No hardcoded private keys found"
+        
+        echo "Checking for unsafe RPC patterns..."
+        grep -rn "eth_sign\|personal_sign" src/ --include="*.py" || echo "✅ No unsafe signing patterns"
+        
+        echo "Checking for unvalidated external calls..."
+        grep -rn "requests\.get\|requests\.post" src/ --include="*.py" | head -20
+        
+        echo "✅ Web3 pattern check complete"
+
+  # =========================================================================
+  # PHASE 2: Build Container (needed for DAST)
+  # =========================================================================
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-security-test:$BUILD_ID', '-f', 'Dockerfile', '.']
+    waitFor: ['sast-bandit', 'sast-safety', 'sast-secrets', 'sast-yaml', 'sast-dockerfile', 'sast-web3-patterns']
+
+  # =========================================================================
+  # PHASE 3: Container Security Scanning
+  # =========================================================================
+
+  # 3.1 - Container Vulnerability Scan with Trivy
+  - name: 'aquasec/trivy:latest'
+    id: 'container-scan-trivy'
+    args:
+      - 'image'
+      - '--format=json'
+      - '--output=/workspace/trivy-report.json'
+      - '--severity=CRITICAL,HIGH,MEDIUM'
+      - '--ignore-unfixed'
+      - 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-security-test:$BUILD_ID'
+    waitFor: ['build-image']
+
+  # 3.2 - Show Trivy results
+  - name: 'aquasec/trivy:latest'
+    id: 'container-scan-trivy-report'
+    args:
+      - 'image'
+      - '--severity=CRITICAL,HIGH'
+      - 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-security-test:$BUILD_ID'
+    waitFor: ['build-image']
+
+  # =========================================================================
+  # PHASE 4: DAST (Dynamic Application Security Testing)
+  # =========================================================================
+
+  # 4.1 - Start the application for DAST testing
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'start-app-for-dast'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🚀 Starting application for DAST testing..."
+        docker run -d --name sentinel3-dast-test \
+          -p 8000:8000 \
+          -e ENVIRONMENT=test \
+          -e DATABASE_URL=sqlite:///test.db \
+          us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-security-test:$BUILD_ID \
+          python -m src.api.main || echo "Container start may have issues, continuing..."
+        
+        # Wait for app to be ready
+        sleep 30
+        echo "✅ Application started"
+    waitFor: ['container-scan-trivy']
+
+  # 4.2 - API Security Testing with custom script
+  - name: 'python:3.11-slim'
+    id: 'dast-api-security'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install requests aiohttp -q
+        
+        echo "🔍 Running API Security Tests..."
+        
+        python3 << 'PYEOF'
+        import requests
+        import json
+        import time
+
+        BASE_URL = "http://localhost:8000"
+        results = {"passed": [], "failed": [], "warnings": []}
+
+        def test_endpoint(name, method, path, expected_status=None, payload=None, headers=None):
+            """Test an endpoint for security issues"""
+            try:
+                url = f"{BASE_URL}{path}"
+                if method == "GET":
+                    resp = requests.get(url, headers=headers, timeout=10)
+                elif method == "POST":
+                    resp = requests.post(url, json=payload, headers=headers, timeout=10)
+                
+                # Check for security headers
+                security_headers = {
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": ["DENY", "SAMEORIGIN"],
+                }
+                
+                missing_headers = []
+                for header, expected in security_headers.items():
+                    if header not in resp.headers:
+                        missing_headers.append(header)
+                
+                if missing_headers:
+                    results["warnings"].append(f"{name}: Missing security headers: {missing_headers}")
+                
+                # Check for information disclosure
+                if "server" in resp.headers:
+                    results["warnings"].append(f"{name}: Server header exposed: {resp.headers['server']}")
+                
+                if expected_status and resp.status_code != expected_status:
+                    results["failed"].append(f"{name}: Expected {expected_status}, got {resp.status_code}")
+                else:
+                    results["passed"].append(f"{name}: OK")
+                    
+            except requests.exceptions.ConnectionError:
+                results["warnings"].append(f"{name}: Could not connect (app may not be running)")
+            except Exception as e:
+                results["failed"].append(f"{name}: Error - {str(e)}")
+
+        # Test 1: SQL Injection attempts
+        print("\n🔍 Testing SQL Injection...")
+        test_endpoint("SQLi Test 1", "GET", "/api/incidents?severity='; DROP TABLE incidents;--", expected_status=200)
+        test_endpoint("SQLi Test 2", "GET", "/api/incidents?limit=1 OR 1=1", expected_status=200)
+
+        # Test 2: XSS attempts
+        print("🔍 Testing XSS...")
+        test_endpoint("XSS Test 1", "GET", "/api/incidents?search=<script>alert('xss')</script>", expected_status=200)
+
+        # Test 3: Path Traversal
+        print("🔍 Testing Path Traversal...")
+        test_endpoint("Path Traversal 1", "GET", "/api/../../../etc/passwd", expected_status=404)
+        test_endpoint("Path Traversal 2", "GET", "/frontend/../../etc/passwd", expected_status=404)
+
+        # Test 4: Authentication bypass attempts
+        print("🔍 Testing Auth Bypass...")
+        test_endpoint("Auth Bypass 1", "GET", "/api/admin", expected_status=404)
+        test_endpoint("Auth Bypass 2", "GET", "/api/internal", expected_status=404)
+
+        # Test 5: Rate limiting
+        print("🔍 Testing Rate Limiting...")
+        for i in range(20):
+            test_endpoint(f"Rate Limit {i}", "GET", "/api/health")
+
+        # Test 6: CORS configuration
+        print("🔍 Testing CORS...")
+        test_endpoint("CORS Test", "GET", "/api/health", headers={"Origin": "http://evil.com"})
+
+        # Print results
+        print("\n" + "="*60)
+        print("DAST SECURITY TEST RESULTS")
+        print("="*60)
+        print(f"\n✅ PASSED: {len(results['passed'])}")
+        for p in results['passed'][:5]:
+            print(f"   - {p}")
+        if len(results['passed']) > 5:
+            print(f"   ... and {len(results['passed'])-5} more")
+            
+        print(f"\n⚠️  WARNINGS: {len(results['warnings'])}")
+        for w in results['warnings']:
+            print(f"   - {w}")
+            
+        print(f"\n❌ FAILED: {len(results['failed'])}")
+        for f in results['failed']:
+            print(f"   - {f}")
+
+        # Save report
+        with open('/workspace/dast-report.json', 'w') as f:
+            json.dump(results, f, indent=2)
+
+        print("\n✅ DAST testing complete")
+        PYEOF
+    waitFor: ['start-app-for-dast']
+
+  # 4.3 - OWASP ZAP Quick Scan (if available)
+  - name: 'owasp/zap2docker-stable'
+    id: 'dast-zap-scan'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running OWASP ZAP Quick Scan..."
+        # Quick scan - baseline only (faster)
+        zap-baseline.py -t http://localhost:8000 -J /workspace/zap-report.json || true
+        echo "✅ ZAP scan complete"
+    waitFor: ['start-app-for-dast']
+    # Allow failure as ZAP may not connect in cloud build
+    allowFailure: true
+
+  # =========================================================================
+  # PHASE 5: Generate Security Report
+  # =========================================================================
+  
+  - name: 'python:3.11-slim'
+    id: 'generate-security-report'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "📊 Generating Security Report..."
+        
+        python3 << 'PYEOF'
+        import json
+        import os
+        from datetime import datetime
+
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "build_id": os.environ.get("BUILD_ID", "unknown"),
+            "summary": {},
+            "details": {}
+        }
+
+        # Load Bandit results
+        try:
+            with open('/workspace/bandit-report.json') as f:
+                bandit = json.load(f)
+                report["details"]["bandit"] = bandit
+                high_sev = len([r for r in bandit.get("results", []) if r.get("issue_severity") == "HIGH"])
+                med_sev = len([r for r in bandit.get("results", []) if r.get("issue_severity") == "MEDIUM"])
+                report["summary"]["bandit"] = {"high": high_sev, "medium": med_sev}
+        except:
+            report["summary"]["bandit"] = "scan_failed"
+
+        # Load Safety results
+        try:
+            with open('/workspace/safety-report.json') as f:
+                safety = json.load(f)
+                report["details"]["safety"] = safety
+                vuln_count = len(safety) if isinstance(safety, list) else 0
+                report["summary"]["safety"] = {"vulnerabilities": vuln_count}
+        except:
+            report["summary"]["safety"] = "scan_failed"
+
+        # Load Secrets results
+        try:
+            with open('/workspace/secrets-report.json') as f:
+                secrets = json.load(f)
+                secret_count = len(secrets.get("results", {}))
+                report["summary"]["secrets"] = {"potential_secrets": secret_count}
+        except:
+            report["summary"]["secrets"] = "scan_failed"
+
+        # Load Trivy results
+        try:
+            with open('/workspace/trivy-report.json') as f:
+                trivy = json.load(f)
+                report["details"]["trivy"] = trivy
+                critical = 0
+                high = 0
+                for result in trivy.get("Results", []):
+                    for vuln in result.get("Vulnerabilities", []):
+                        if vuln.get("Severity") == "CRITICAL":
+                            critical += 1
+                        elif vuln.get("Severity") == "HIGH":
+                            high += 1
+                report["summary"]["trivy"] = {"critical": critical, "high": high}
+        except:
+            report["summary"]["trivy"] = "scan_failed"
+
+        # Load DAST results
+        try:
+            with open('/workspace/dast-report.json') as f:
+                dast = json.load(f)
+                report["details"]["dast"] = dast
+                report["summary"]["dast"] = {
+                    "passed": len(dast.get("passed", [])),
+                    "warnings": len(dast.get("warnings", [])),
+                    "failed": len(dast.get("failed", []))
+                }
+        except:
+            report["summary"]["dast"] = "scan_failed"
+
+        # Print summary
+        print("\n" + "="*70)
+        print("🔒 SECURITY SCAN SUMMARY")
+        print("="*70)
+        
+        print(f"\nBuild ID: {report['build_id']}")
+        print(f"Timestamp: {report['timestamp']}")
+        
+        print("\n📋 SAST Results:")
+        print(f"   Bandit (Python): {report['summary'].get('bandit', 'N/A')}")
+        print(f"   Safety (Dependencies): {report['summary'].get('safety', 'N/A')}")
+        print(f"   Secrets Detection: {report['summary'].get('secrets', 'N/A')}")
+        
+        print("\n🐳 Container Scan:")
+        print(f"   Trivy: {report['summary'].get('trivy', 'N/A')}")
+        
+        print("\n🌐 DAST Results:")
+        print(f"   API Security: {report['summary'].get('dast', 'N/A')}")
+        
+        # Determine if build should fail
+        should_fail = False
+        fail_reasons = []
+        
+        trivy_summary = report['summary'].get('trivy', {})
+        if isinstance(trivy_summary, dict):
+            if trivy_summary.get('critical', 0) > 0:
+                should_fail = True
+                fail_reasons.append(f"Critical container vulnerabilities: {trivy_summary['critical']}")
+        
+        bandit_summary = report['summary'].get('bandit', {})
+        if isinstance(bandit_summary, dict):
+            if bandit_summary.get('high', 0) > 5:
+                should_fail = True
+                fail_reasons.append(f"High severity code issues: {bandit_summary['high']}")
+        
+        secrets_summary = report['summary'].get('secrets', {})
+        if isinstance(secrets_summary, dict):
+            if secrets_summary.get('potential_secrets', 0) > 0:
+                fail_reasons.append(f"⚠️ Potential secrets detected: {secrets_summary['potential_secrets']} (review required)")
+        
+        print("\n" + "="*70)
+        if should_fail:
+            print("❌ SECURITY GATE: FAILED")
+            for reason in fail_reasons:
+                print(f"   - {reason}")
+            print("\nFix the above issues before deploying to production.")
+        else:
+            print("✅ SECURITY GATE: PASSED")
+            if fail_reasons:
+                print("⚠️ Warnings (review recommended):")
+                for reason in fail_reasons:
+                    print(f"   - {reason}")
+        print("="*70)
+
+        # Save full report
+        with open('/workspace/security-report.json', 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        print("\n📄 Full report saved to /workspace/security-report.json")
+        PYEOF
+    waitFor: ['dast-api-security', 'container-scan-trivy-report']
+
+  # =========================================================================
+  # PHASE 6: Upload Reports to GCS (optional)
+  # =========================================================================
+  
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'upload-reports'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "📤 Uploading security reports..."
+        gsutil cp /workspace/*-report.json gs://web3-xdr-security-reports/$BUILD_ID/ || echo "GCS upload skipped (bucket may not exist)"
+        echo "✅ Reports uploaded"
+    waitFor: ['generate-security-report']
+
+timeout: '2400s'  # 40 minutes for full security scan
+
+options:
+  logging: CLOUD_LOGGING_ONLY

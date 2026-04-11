@@ -1,0 +1,11 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/threat-detector-serving:v2', '-f', 'Dockerfile', '.']
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/threat-detector-serving:v2']
+
+images:
+  - 'us-central1-docker.pkg.dev/web3-xdr/sentinel3/threat-detector-serving:v2'
+
+timeout: '600s'

@@ -150,6 +150,13 @@ async def register_protocol(
     
     guardian.register_protocol(request.protocol_id, config)
 
+    # Auto-initialize Web3 connections if not already done
+    if not guardian._is_initialized:
+        try:
+            await guardian.initialize()
+        except Exception as e:
+            logger.warning("guardian_auto_init_failed", error=str(e))
+
     AuditLogger.log(
         action_type=ActionType.CHAIN_ADD,
         actor_id=client.get("name", "unknown"),

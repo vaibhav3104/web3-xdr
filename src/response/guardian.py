@@ -502,14 +502,23 @@ class GuardianSystem:
         return None
     
     def _get_rpc_url(self, chain_id: str) -> Optional[str]:
-        """Get RPC URL for chain (would load from config in production)."""
-        # This would be loaded from chains.yaml in production
-        rpc_urls = {
-            "ethereum": "https://mainnet.infura.io/v3/YOUR_KEY",
-            "polygon": "https://polygon-mainnet.infura.io/v3/YOUR_KEY",
-            "arbitrum": "https://arbitrum-mainnet.infura.io/v3/YOUR_KEY",
+        """Get RPC URL for chain from environment variables."""
+        import os
+        # Map chain_id to env var name (same convention as worker)
+        env_map = {
+            "ethereum": "ETHEREUM_RPC_URL",
+            "polygon": "POLYGON_RPC_URL",
+            "arbitrum": "ARBITRUM_RPC_URL",
+            "optimism": "OPTIMISM_RPC_URL",
+            "avalanche": "AVALANCHE_RPC_URL",
+            "bsc": "BSC_RPC_URL",
+            "base": "BASE_RPC_URL",
         }
-        return rpc_urls.get(chain_id)
+        env_var = env_map.get(chain_id.lower())
+        if env_var:
+            return os.getenv(env_var) or None
+        # Fallback: try CHAINID_RPC_URL pattern
+        return os.getenv(f"{chain_id.upper()}_RPC_URL") or None
     
     async def simulate_pause(self, protocol_id: str) -> Dict[str, Any]:
         """

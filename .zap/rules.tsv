@@ -1,0 +1,38 @@
+# OWASP ZAP Rules Configuration for Sentinel3
+# Format: rule_id	action	description
+# Actions: IGNORE, WARN, FAIL
+
+# Informational alerts - IGNORE
+10021	IGNORE	X-Content-Type-Options Header Missing
+10036	IGNORE	Server Leaks Version Information
+10037	IGNORE	Server Leaks Information via "X-Powered-By"
+10038	IGNORE	Content Security Policy (CSP) Header Not Set
+10063	IGNORE	Feature Policy Header Not Set
+
+# Low severity - WARN only
+10020	WARN	X-Frame-Options Header Not Set
+10035	WARN	Strict-Transport-Security Header Not Set
+10098	WARN	Cross-Domain Misconfiguration
+
+# Medium severity - WARN
+40014	WARN	Cross Site Scripting (Persistent)
+40016	WARN	Cross Site Scripting (Reflected)
+40017	WARN	Cross Site Scripting (DOM Based)
+
+# High/Critical severity - FAIL
+40012	FAIL	Cross Site Scripting (Reflected)
+40018	FAIL	SQL Injection
+40019	FAIL	SQL Injection - MySQL
+40020	FAIL	SQL Injection - Hypersonic SQL
+40021	FAIL	SQL Injection - Oracle
+40022	FAIL	SQL Injection - PostgreSQL
+40024	FAIL	SQL Injection - SQLite
+90019	FAIL	Server Side Include
+90020	FAIL	Remote OS Command Injection
+90021	FAIL	XPath Injection
+90023	FAIL	XML External Entity Attack
+90024	FAIL	Generic Padding Oracle
+90025	FAIL	Expression Language Injection
+90026	FAIL	SOAP Action Spoofing
+90028	FAIL	Insecure HTTP Method
+90029	FAIL	SOAP XML Injection

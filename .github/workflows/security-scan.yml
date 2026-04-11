@@ -1,0 +1,297 @@
+# =============================================================================
+# SAST + DAST Security Pipeline for Sentinel3
+# Runs on every push and pull request
+# =============================================================================
+
+name: Security Scan (SAST + DAST)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly security scan
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ===========================================================================
+  # SAST: Static Application Security Testing
+  # ===========================================================================
+  sast:
+    name: SAST Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # -----------------------------------------------------------------------
+      # Bandit - Python Security Linter
+      # -----------------------------------------------------------------------
+      - name: Run Bandit (Python SAST)
+        run: |
+          pip install bandit[toml]
+          bandit -r src/ -f sarif -o bandit-results.sarif --severity-level medium || true
+          bandit -r src/ -f txt --severity-level medium
+
+      - name: Upload Bandit SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: bandit-results.sarif
+          category: bandit
+
+      # -----------------------------------------------------------------------
+      # Safety - Dependency Vulnerability Scanner
+      # -----------------------------------------------------------------------
+      - name: Run Safety (Dependency Scan)
+        run: |
+          pip install safety
+          safety check -r requirements.txt --output json > safety-results.json || true
+          safety check -r requirements.txt || true
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Detect Secrets
+      # -----------------------------------------------------------------------
+      - name: Run detect-secrets
+        run: |
+          pip install detect-secrets
+          detect-secrets scan --all-files --exclude-files '\.git|venv|__pycache__|\.pyc|\.env\.example|\.md$' > secrets-baseline.json || true
+          python -c "import json; d=json.load(open('secrets-baseline.json')); print(f'Potential secrets found: {len(d.get(\"results\", {}))}')"
+
+      # -----------------------------------------------------------------------
+      # Semgrep - Advanced SAST
+      # -----------------------------------------------------------------------
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # CodeQL Analysis
+      # -----------------------------------------------------------------------
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      # -----------------------------------------------------------------------
+      # Hadolint - Dockerfile Linter
+      # -----------------------------------------------------------------------
+      - name: Run Hadolint (Dockerfile)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+
+      # -----------------------------------------------------------------------
+      # YAML Security Check
+      # -----------------------------------------------------------------------
+      - name: Run yamllint
+        run: |
+          pip install yamllint
+          yamllint config/ deploy/ -f github || true
+
+      # -----------------------------------------------------------------------
+      # Upload SAST Artifacts
+      # -----------------------------------------------------------------------
+      - name: Upload SAST Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-results
+          path: |
+            bandit-results.sarif
+            safety-results.json
+            secrets-baseline.json
+
+  # ===========================================================================
+  # Container Security Scanning
+  # ===========================================================================
+  container-scan:
+    name: Container Security
+    runs-on: ubuntu-latest
+    needs: sast
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t sentinel3-security-test:${{ github.sha }} .
+
+      # -----------------------------------------------------------------------
+      # Trivy - Container Vulnerability Scanner
+      # -----------------------------------------------------------------------
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'sentinel3-security-test:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      # -----------------------------------------------------------------------
+      # Grype - Alternative Container Scanner
+      # -----------------------------------------------------------------------
+      - name: Run Grype scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: 'sentinel3-security-test:${{ github.sha }}'
+          fail-build: false
+          severity-cutoff: critical
+
+      - name: Upload Container Scan Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-scan-results
+          path: trivy-results.sarif
+
+  # ===========================================================================
+  # DAST: Dynamic Application Security Testing
+  # ===========================================================================
+  dast:
+    name: DAST Scanning
+    runs-on: ubuntu-latest
+    needs: container-scan
+    services:
+      # Run the app as a service for DAST testing
+      sentinel3:
+        image: sentinel3-security-test:${{ github.sha }}
+        ports:
+          - 8000:8000
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: sqlite:///test.db
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Wait for service to be ready
+        run: |
+          echo "Waiting for application to start..."
+          sleep 30
+          curl -f http://localhost:8000/api/health || echo "Health check may have failed"
+
+      # -----------------------------------------------------------------------
+      # OWASP ZAP - Full DAST Scan
+      # -----------------------------------------------------------------------
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'http://localhost:8000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a -j'
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Custom API Security Tests
+      # -----------------------------------------------------------------------
+      - name: Run Custom API Security Tests
+        run: |
+          pip install requests
+          python scripts/security/api_security_test.py || true
+
+      # -----------------------------------------------------------------------
+      # Nuclei - Fast Vulnerability Scanner
+      # -----------------------------------------------------------------------
+      - name: Run Nuclei Scanner
+        uses: projectdiscovery/nuclei-action@main
+        with:
+          target: http://localhost:8000
+          templates: 'cves,vulnerabilities,misconfiguration'
+          output: nuclei-results.txt
+        continue-on-error: true
+
+      - name: Upload DAST Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-results
+          path: |
+            nuclei-results.txt
+            zap-report.html
+
+  # ===========================================================================
+  # Security Report Generation
+  # ===========================================================================
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [sast, container-scan, dast]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-results
+
+      - name: Generate Summary Report
+        run: |
+          echo "# 🔒 Security Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## 📊 Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST (Bandit) | ${{ needs.sast.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Scan | ${{ needs.container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| DAST | ${{ needs.dast.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## 📁 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Download the security artifacts for detailed reports." >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for Critical Issues
+        run: |
+          # This would parse the results and fail if critical issues found
+          echo "Checking for critical security issues..."
+          # Add logic to parse SARIF files and fail on critical findings
+          
+      - name: Post to Slack (optional)
+        if: failure()
+        run: |
+          echo "Would post security alert to Slack here"
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🚨 Security scan found issues in ${{ github.repository }}"}' \
+          #   ${{ secrets.SLACK_WEBHOOK }}

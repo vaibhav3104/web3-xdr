@@ -1,0 +1,8 @@
+{
+  "event_types": [],
+  "numeric_features": [],
+  "categorical_features": [],
+  "address_features": [],
+  "threshold_features": [],
+  "feature_importance": {}
+}

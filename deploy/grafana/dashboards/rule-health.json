@@ -1,0 +1,315 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Rules Suppressed (Auto-Suppression Active)",
+      "description": "Number of rules currently suppressed by the feedback loop due to high FP rates",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 8 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(web3_xdr_rule_suppressed == 1) or vector(0)",
+          "legendFormat": "Suppressed Rules",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "title": "Total Feedback (7d)",
+      "description": "Total TP + FP feedback events in the last 7 days",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(web3_xdr_rule_feedback_total[7d]))",
+          "legendFormat": "Total Feedback",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "title": "Overall FP Rate",
+      "description": "System-wide false positive rate across all rules",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.3 },
+              { "color": "orange", "value": 0.5 },
+              { "color": "red", "value": 0.8 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(web3_xdr_rule_feedback_total{verdict=\"fp\"}[7d])) / sum(increase(web3_xdr_rule_feedback_total[7d]))",
+          "legendFormat": "FP Rate",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "title": "False Positives Total (by rule)",
+      "description": "Cumulative false positives per rule — rising fast = noisy rule",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "expr": "sum(web3_xdr_false_positives_total) or vector(0)",
+          "legendFormat": "Total FP (All Time)",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "title": "FP Rate by Rule (Rolling 7d)",
+      "description": "Per-rule false positive rate from the feedback loop. Rules above 80% get auto-suppressed.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 0.8 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "options": {
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "expr": "web3_xdr_rule_fp_rate",
+          "legendFormat": "{{rule_id}}",
+          "refId": "A"
+        }
+      ],
+      "type": "bargauge"
+    },
+    {
+      "title": "Rule Suppression Status",
+      "description": "1 = suppressed, 0 = active. Suppressed rules are skipped during evaluation.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "text": "ACTIVE", "color": "green" } }, "type": "value" },
+            { "options": { "1": { "text": "SUPPRESSED", "color": "red" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "web3_xdr_rule_suppressed",
+          "legendFormat": "{{rule_id}}",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "title": "FP Rate Trend Over Time",
+      "description": "Per-rule FP rate over time — watch for upward drift indicating rule degradation",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 7,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "web3_xdr_rule_fp_rate > 0",
+          "legendFormat": "{{rule_id}}",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "title": "Feedback Events Over Time (TP vs FP)",
+      "description": "Rate of TP and FP feedback events — spikes indicate batch triage activity",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "FP" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "TP" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "id": 8,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(web3_xdr_rule_feedback_total{verdict=\"tp\"}[1h])) * 3600",
+          "legendFormat": "TP",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(web3_xdr_rule_feedback_total{verdict=\"fp\"}[1h])) * 3600",
+          "legendFormat": "FP",
+          "refId": "B"
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "title": "Rule Trigger Rate (Top 10)",
+      "description": "Which rules fire most often — high trigger rate + high FP = priority to tune",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 9,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (rule_id) (rate(web3_xdr_rule_triggers_total[1h])))",
+          "legendFormat": "{{rule_id}}",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["sentinel3", "rules", "feedback"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Sentinel3 - Rule Health & FP Drift",
+  "uid": "sentinel3-rule-health",
+  "version": 1
+}
