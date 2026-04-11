@@ -10,9 +10,7 @@ Performs pattern-based analysis on bytecode and source code to detect:
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set, Tuple
-from enum import Enum
-import hashlib
+from typing import List, Dict, Optional, Tuple
 import structlog
 
 logger = structlog.get_logger()
@@ -387,7 +385,7 @@ class StaticAnalyzer:
             List of offsets where sequence starts
         """
         matches = []
-        opcode_names = [op[1] for op in opcodes]
+        [op[1] for op in opcodes]
         
         for i, (offset, op) in enumerate(opcodes):
             if op == sequence[0]:

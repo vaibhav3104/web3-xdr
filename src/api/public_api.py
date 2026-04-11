@@ -11,12 +11,11 @@ REST API endpoints for external integrations:
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Header, Depends
 from pydantic import BaseModel, Field
 import structlog
 import hashlib
-import hmac
 import time
 
 logger = structlog.get_logger(__name__)
@@ -323,7 +322,6 @@ async def get_contract_threat(
     Use this to screen contracts before interaction.
     """
     from ..ai.graph_analysis import graph_analyzer
-    from ..database.service import DatabaseService
     
     # Check if we have analysis in database
     # For now, return mock analysis
@@ -364,7 +362,6 @@ async def get_transaction_analysis(
     - Participant risk scores
     - Alerts for suspicious patterns
     """
-    from ..ai.graph_analysis import graph_analyzer
     
     # Would fetch actual transaction data from RPC/database
     # For now, return mock analysis

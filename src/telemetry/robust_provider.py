@@ -28,7 +28,7 @@ import os
 import random
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Union
 from enum import Enum
@@ -37,7 +37,6 @@ from collections import deque
 import structlog
 
 # Web3.py imports
-from web3 import AsyncWeb3, Web3
 from web3.providers import AsyncHTTPProvider, HTTPProvider
 from web3.types import RPCEndpoint, RPCResponse
 

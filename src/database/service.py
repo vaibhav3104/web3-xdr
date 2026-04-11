@@ -4,24 +4,17 @@ Provides high-level async methods for CRUD operations.
 """
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
-import uuid
 import json
 import asyncio
 
 import structlog
-from sqlalchemy import select, func, delete, update, and_, or_, desc, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, delete, update, and_, text
 
 from .connection import DatabaseManager
 from .models import (
     EventModel,
     IncidentModel,
-    ViolationModel,
-    ChainStatsModel,
-    AlertRuleModel,
-    AuditLogModel,
 )
 
 logger = structlog.get_logger()
@@ -1137,44 +1130,6 @@ class DatabaseService:
             except Exception as e:
                 logger.error("get_incidents_error", error=str(e))
                 return []
-    
-    @staticmethod
-    async def update_incident_status(incident_id: str, status: str) -> bool:
-        """
-        Update the status of an incident.
-        Returns True if successful, False otherwise.
-        """
-        async with DatabaseManager.get_session() as session:
-            try:
-                # Find incident by incident_id
-                query = select(IncidentModel).where(IncidentModel.incident_id == incident_id)
-                result = await session.execute(query)
-                incident = result.scalar_one_or_none()
-                
-                if not incident:
-                    logger.warning("incident_not_found_for_update", incident_id=incident_id)
-                    return False
-                
-                # Update status
-                incident.status = status.upper()
-                incident.updated_at = datetime.now(timezone.utc)
-                
-                # If acknowledging, set acknowledged_at
-                if status.upper() == "ACKNOWLEDGED":
-                    incident.acknowledged_at = datetime.now(timezone.utc)
-                
-                # If resolving, set resolved_at
-                if status.upper() in ["RESOLVED", "CLOSED"]:
-                    incident.resolved_at = datetime.now(timezone.utc)
-                
-                await session.commit()
-                logger.info("incident_status_updated", incident_id=incident_id, status=status)
-                return True
-                
-            except Exception as e:
-                logger.error("update_incident_status_error", incident_id=incident_id, error=str(e))
-                await session.rollback()
-                return False
     
     @staticmethod
     async def write_audit_log(

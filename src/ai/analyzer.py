@@ -11,7 +11,6 @@ import os
 import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
-import asyncio
 
 import structlog
 import httpx
@@ -267,7 +266,7 @@ Estimated financial impact: ${loss:,.0f}
         for i, action in enumerate(pattern_info.get("immediate_actions", ["Monitor situation"]), 1):
             analysis += f"{i}. {action}\n"
         
-        analysis += f"""
+        analysis += """
 ## Confidence Level
 Analysis confidence: **HIGH** (based on known attack pattern matching)
 This analysis is generated using rule-based pattern matching. For enhanced analysis, configure an LLM API key.
@@ -278,7 +277,7 @@ This analysis is generated using rule-based pattern matching. For enhanced analy
     def _get_local_summary(self, incident: Dict[str, Any]) -> str:
         """Generate local summary without API."""
         attack_type = incident.get("attack_type", "unknown")
-        severity = incident.get("severity", "unknown")
+        incident.get("severity", "unknown")
         loss = incident.get("total_loss_usd", 0)
         
         pattern = ATTACK_PATTERNS.get(attack_type, {})

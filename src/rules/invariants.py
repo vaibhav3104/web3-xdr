@@ -12,11 +12,10 @@ Checks protocol invariants for security violations:
 - Oracle price validity
 """
 
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
-from decimal import Decimal
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -346,7 +345,7 @@ class InvariantEngine:
                     invariant_type=InvariantType.MINT_LOCK_PARITY,
                     protocol=event.get("bridge_id", "unknown"),
                     chain=event.get("chain_id", "unknown"),
-                    expected_value=f"minted ≈ locked",
+                    expected_value="minted ≈ locked",
                     actual_value=f"locked={locked}, minted={minted}",
                     deviation=deviation,
                     severity=config.severity,

@@ -26,7 +26,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 import structlog
 
@@ -961,7 +961,7 @@ class BridgeEventParser:
         block_number = event_data.get("blockNumber", 0)
         contract_address = event_data.get("address", "")
         topics = event_data.get("topics", [])
-        data = event_data.get("data", "0x")
+        event_data.get("data", "0x")
         
         # Defaults
         amount = 0.0

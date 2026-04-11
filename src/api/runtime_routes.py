@@ -14,16 +14,12 @@ import uuid
 from ..auth.jwt_handler import require_auth, require_role
 from ..auth.models import User
 from ..models.predicted_incidents import (
-    PredictedIncident,
     PredictedIncidentStatus,
-    SimulationRun,
-    SimulationMode,
 )
 from ..database.connection import DatabaseManager
 from ..database.models import PredictedIncidentModel, SimulationRunModel
 from ..database.audit import AuditLogger, ActionType
 from sqlalchemy import select, and_, desc
-from sqlalchemy.orm import selectinload
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/runtime", tags=["Runtime Security"])

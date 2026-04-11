@@ -12,7 +12,7 @@ SECURITY: All write operations require admin API key authentication.
 These endpoints control critical security actions (pause, unpause, approve).
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -21,11 +21,9 @@ import structlog
 from ..response.guardian import (
     guardian,
     ProtocolConfig,
-    ResponseRecord,
-    ResponseAction,
     ResponseStatus
 )
-from ..response.policy import PausePolicy, PausePolicyConfig, PauseDecision
+from ..response.policy import PausePolicy
 from ..database.audit import AuditLogger, ActionType
 
 # Import API key authentication
@@ -427,7 +425,7 @@ async def emergency_pause(request: EmergencyPauseRequest):
             incident = {
                 "affected_chains": incident_model.affected_chains or []
             }
-    except Exception as e:
+    except Exception:
         pass
 
     # Find matching protocols for the affected chains

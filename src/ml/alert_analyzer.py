@@ -14,11 +14,10 @@ Architecture:
 This reduces alert fatigue by filtering out ~30% false positives from YAML rules.
 """
 
-import json
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+from dataclasses import dataclass
 from enum import Enum
 import structlog
 

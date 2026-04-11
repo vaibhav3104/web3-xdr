@@ -18,9 +18,9 @@ Environment Variables:
 
 import asyncio
 import os
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional, Callable, Awaitable
-from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
 import threading
 from collections import deque
 from enum import Enum
@@ -267,7 +267,7 @@ class MonitorState:
             return
         
         try:
-            from .database.redis_manager import RedisStateManager, get_redis_manager
+            from .database.redis_manager import get_redis_manager
             
             self._redis_manager = await get_redis_manager()
             self._redis_initialized = self._redis_manager.is_connected

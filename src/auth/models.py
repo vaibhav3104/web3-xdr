@@ -2,7 +2,7 @@
 Authentication models for Sentinel3.
 """
 
-from typing import Optional, List
+from typing import Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 

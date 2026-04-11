@@ -11,10 +11,8 @@ Features:
 """
 
 import os
-import sys
 import json
 import asyncio
-import shutil
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
@@ -291,7 +289,7 @@ class ContinuousLearningSystem:
             # Alert
             if self.config.alert_on_threat and analysis.confidence >= self.config.min_threat_confidence:
                 print(f"\n{'🚨' * 20}")
-                print(f"   THREAT DETECTED!")
+                print("   THREAT DETECTED!")
                 print(f"   Contract: {analysis.contract.address}")
                 print(f"   Chain: {analysis.contract.chain}")
                 print(f"   Type: {analysis.threat_category}")
@@ -442,7 +440,6 @@ class ContinuousLearningSystem:
 
             # ── Fix 4: Notify running classifiers to reload ────────────
             try:
-                from .models.contract_classifier import ContractThreatClassifier
                 # Attempt to reload the global sklearn classifier if one exists
                 # (other components using ContractThreatClassifier will pick up
                 #  new weights on next check_for_update() call)
@@ -560,7 +557,7 @@ class ContinuousLearningSystem:
                 LIMIT 500
             """)
             db_count = 0
-            existing_ids = {s.get("address") for s in samples}
+            {s.get("address") for s in samples}
             for row in cursor.fetchall():
                 attack_type, severity, confidence, status, chains, raw_data = row
                 is_tp = status in ('RESOLVED', 'ACKNOWLEDGED')
@@ -621,14 +618,14 @@ class ContinuousLearningSystem:
         import random
 
         severity = (entry.get("severity") or "medium").upper()
-        confidence = float(entry.get("confidence") or 0.5)
+        float(entry.get("confidence") or 0.5)
         attack_type = entry.get("attack_type", "unknown")
 
         # Base feature vector (20 dims) — approximate from metadata
         # These are weaker signals than real bytecode, but provide
         # attack-type-correlated patterns for the model to learn from.
         sev_map = {"CRITICAL": 0.9, "HIGH": 0.7, "MEDIUM": 0.5, "LOW": 0.3, "INFO": 0.1}
-        sev_score = sev_map.get(severity, 0.4)
+        sev_map.get(severity, 0.4)
 
         # Build approximate feature vector based on attack type
         f = [0.0] * 20
@@ -637,21 +634,45 @@ class ContinuousLearningSystem:
 
         at_lower = attack_type.lower()
         if "flash" in at_lower:
-            f[1] = 0.5; f[11] = 1.0; f[19] = 0.4
+            f[1] = 0.5
+            f[11] = 1.0
+            f[19] = 0.4
         elif "reentranc" in at_lower:
-            f[1] = 0.6; f[5] = 0.5; f[6] = 0.4; f[12] = 1.0; f[19] = 0.3
+            f[1] = 0.6
+            f[5] = 0.5
+            f[6] = 0.4
+            f[12] = 1.0
+            f[19] = 0.3
         elif "oracle" in at_lower or "price" in at_lower:
-            f[1] = 0.7; f[3] = 0.6; f[6] = 0.8; f[7] = 0.4; f[8] = 0.3; f[19] = 0.5
+            f[1] = 0.7
+            f[3] = 0.6
+            f[6] = 0.8
+            f[7] = 0.4
+            f[8] = 0.3
+            f[19] = 0.5
         elif "rug" in at_lower:
-            f[4] = 0.8; f[15] = 1.0; f[16] = 1.0; f[19] = 0.1
+            f[4] = 0.8
+            f[15] = 1.0
+            f[16] = 1.0
+            f[19] = 0.1
         elif "honeypot" in at_lower:
-            f[4] = 0.5; f[13] = 0.8; f[14] = 1.0; f[19] = 0.1
+            f[4] = 0.5
+            f[13] = 0.8
+            f[14] = 1.0
+            f[19] = 0.1
         elif "bridge" in at_lower:
-            f[2] = 0.3; f[15] = 0.8; f[8] = 0.3; f[19] = 0.4
+            f[2] = 0.3
+            f[15] = 0.8
+            f[8] = 0.3
+            f[19] = 0.4
         elif "governance" in at_lower:
-            f[1] = 0.4; f[11] = 0.8; f[16] = 1.0; f[19] = 0.3
+            f[1] = 0.4
+            f[11] = 0.8
+            f[16] = 1.0
+            f[19] = 0.3
         else:
-            f[1] = 0.3; f[19] = 0.2
+            f[1] = 0.3
+            f[19] = 0.2
 
         # Add noise for variation
         f = [max(0.0, min(1.0, v + random.uniform(-0.05, 0.05))) for v in f]

@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Set
 from dataclasses import dataclass
 import os
-import hashlib
 import structlog
 
 from eth_account import Account
@@ -340,7 +339,6 @@ class KmsSigner(TransactionSigner):
 
     def _sign_gcp(self, msg_hash: bytes) -> bytes:
         """Sign a hash using GCP KMS."""
-        from google.cloud.kms import CryptoKeyVersion
         digest = {"sha256": msg_hash}
         response = self._client.asymmetric_sign(
             name=self.kms_key_id,
@@ -371,7 +369,6 @@ class KmsSigner(TransactionSigner):
 
     def _recover_v(self, msg_hash: bytes, r: int, s: int) -> int:
         """Determine v value (27 or 28) by trial recovery."""
-        from eth_account._utils.signing import to_standard_v
         from eth_keys import keys
 
         for v_candidate in (27, 28):

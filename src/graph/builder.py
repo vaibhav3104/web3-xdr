@@ -6,10 +6,8 @@ Builds and maintains the security graph from blockchain events.
 Converts raw events into graph nodes and relationships.
 """
 
-import asyncio
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional, Set
-from decimal import Decimal
+from typing import Dict, Any, Optional, Set
 import structlog
 
 from .schema import NodeType, RelationType, GraphSchema
@@ -114,7 +112,7 @@ class GraphBuilder:
             return {"status": "skipped", "reason": "already_processed"}
         
         event_type = event.get("event_type", "unknown")
-        chain_id = event.get("chain_id", "ethereum")
+        event.get("chain_id", "ethereum")
         
         updates = {
             "nodes_created": 0,
@@ -285,7 +283,7 @@ class GraphBuilder:
         protocol_addr = event.get("contract_address", "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
-        amount_usd = float(event.get("amount_usd", 0))
+        float(event.get("amount_usd", 0))
         
         # Create nodes
         await self._ensure_wallet_node(liquidator, chain_id, timestamp)

@@ -5,7 +5,6 @@ Slack Alerter - Sends alerts to Slack channels.
 from typing import List, Optional
 import structlog
 
-from ..models.events import Severity
 from ..models.incidents import Incident
 from ..explainability.explanation import Explanation
 

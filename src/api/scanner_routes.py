@@ -17,14 +17,11 @@ import asyncio
 import structlog
 
 from ..scanner.vulnerability_scanner import (
-    VulnerabilityScanner,
-    ScanResult,
     get_vulnerability_scanner
 )
-from ..scanner.static_analyzer import StaticAnalyzer
 from ..scanner.taint_tracker import TaintTracker
-from ..scanner.source_fetcher import SourceFetcher, get_source_fetcher, ContractSource
-from ..scanner.source_analyzer import SourceAnalyzer, get_source_analyzer, SourceVulnerability
+from ..scanner.source_fetcher import get_source_fetcher
+from ..scanner.source_analyzer import get_source_analyzer, SourceVulnerability
 
 logger = structlog.get_logger()
 
@@ -169,7 +166,7 @@ async def scan_contract(request: ScanRequest):
                     )
                     if bytecode:
                         executor = SymbolicExecutor()
-                        paths = executor.execute(bytecode)
+                        executor.execute(bytecode)
                         symbolic_vulns = executor.get_vulnerabilities()
                         
                         # Add to result

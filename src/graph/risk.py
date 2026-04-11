@@ -7,14 +7,12 @@ This is the "brain" that combines graph analysis with ML predictions.
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
-import math
 import structlog
 
 from .connection import Neo4jConnection
-from .schema import NodeType, RelationType
 
 logger = structlog.get_logger(__name__)
 
@@ -300,7 +298,7 @@ class GraphRiskScorer:
         transfer_count = result.get("transfer_count", 0)
         incoming_count = result.get("incoming_count", 0)
         transfer_values = [v for v in (result.get("transfer_values") or []) if v]
-        incoming_values = [v for v in (result.get("incoming_values") or []) if v]
+        [v for v in (result.get("incoming_values") or []) if v]
         
         # Pattern 1: One-directional flow (only outgoing = drain pattern)
         if transfer_count > 0 and incoming_count == 0:

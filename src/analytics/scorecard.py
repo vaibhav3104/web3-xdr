@@ -9,11 +9,10 @@ Provides ROI metrics to demonstrate value to users.
 import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import structlog
 
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
 
 from ..database.models import PredictedIncidentModel
 from ..database.connection import DatabaseManager
@@ -48,7 +47,7 @@ class ScorecardService:
         
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=timeframe_hours)
         
-        async with get_db_session() as session:
+        async with DatabaseManager.get_session() as session:
             query = select(
                 func.coalesce(func.sum(PredictedIncidentModel.potential_loss_usd), 0)
             ).where(

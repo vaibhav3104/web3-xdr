@@ -10,16 +10,12 @@ REST API endpoints for cross-chain correlation:
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 import structlog
 
 from ..correlation.cross_chain import (
-    cross_chain_correlator,
-    CrossChainViolation,
-    ViolationType,
-    CorrelationStatus
+    cross_chain_correlator
 )
 
 logger = structlog.get_logger(__name__)

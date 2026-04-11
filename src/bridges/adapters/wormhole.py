@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Optional
 import structlog
 
-from ...models.events import SecurityEvent, EventType
+from ...models.events import SecurityEvent
 from .base import (
     BridgeAdapter,
     BridgeProtocol,

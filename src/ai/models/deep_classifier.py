@@ -9,11 +9,8 @@ Models:
 """
 
 import os
-import json
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass
-from pathlib import Path
 import pickle
 
 # Check for PyTorch availability
@@ -837,7 +834,7 @@ if __name__ == "__main__":
         test_bytecode = "0x608060405234801561001057600080fd5b50610150806100206000396000f3fe608060405234801561001057600080fd5b50"
         
         result = classifier.classify(test_bytecode)
-        print(f"\nClassification Result:")
+        print("\nClassification Result:")
         print(f"  Category: {result.category}")
         print(f"  Risk Score: {result.risk_score:.2f}")
         print(f"  Confidence: {result.confidence:.2f}")

@@ -3,7 +3,6 @@ Analytics API Routes for Sentinel3.
 Provides historical data, charts, and risk scoring endpoints.
 """
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Query, HTTPException
@@ -645,7 +644,7 @@ async def get_attack_patterns(
                 # Create a dict for quick lookup
                 attacks_by_date = {}
                 for row in result.fetchall():
-                    date_str = row[0].strftime('%b %d') if hasattr(row[0], 'strftime') else str(row[0])
+                    row[0].strftime('%b %d') if hasattr(row[0], 'strftime') else str(row[0])
                     attacks_by_date[str(row[0])] = row[1]
                 
                 # Fill in all days (including zeros)

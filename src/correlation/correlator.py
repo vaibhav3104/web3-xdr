@@ -9,7 +9,7 @@ import structlog
 
 from ..models.events import SecurityEvent
 from ..models.invariants import InvariantResult
-from .entity_graph import EntityGraph, EntityGraphBuilder
+from .entity_graph import EntityGraphBuilder
 from .pattern_matcher import AttackPatternMatcher, PatternMatch
 from .incident_builder import IncidentBuilder, Incident, IncidentStatus
 

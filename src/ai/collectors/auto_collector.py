@@ -12,9 +12,9 @@ Features:
 import os
 import json
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Callable, Any
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 import aiohttp
 import structlog
 
@@ -546,7 +546,7 @@ class AutoContractCollector:
         try:
             # Extract features
             features = self.extractor.extract_features(contract.bytecode)
-            feature_vector = self.extractor.features_to_vector(features)
+            self.extractor.features_to_vector(features)
             
             # ================================================================
             # LAYER 1: ML Classifier (Threat Category)

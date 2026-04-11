@@ -13,7 +13,7 @@ Features:
 - Event aggregation
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
@@ -21,7 +21,7 @@ from enum import Enum
 import hashlib
 import structlog
 
-from ..models.events import SecurityEvent, EventStatus, Severity
+from ..models.events import SecurityEvent, Severity
 from ..models.invariants import InvariantResult
 
 logger = structlog.get_logger(__name__)

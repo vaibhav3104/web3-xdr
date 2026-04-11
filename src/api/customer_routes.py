@@ -9,20 +9,15 @@ REST API endpoints for:
 4. Usage statistics
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Body, Query
+from fastapi import APIRouter, HTTPException, Body, Query
 from pydantic import BaseModel, Field
-from typing import List, Optional, Set, Dict, Any
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import structlog
 
 from .api_keys import (
     api_key_manager,
-    APIKey,
-    Customer,
-    KeyScope,
-    KeyStatus,
-    verify_api_key,
-    require_scope
+    KeyScope
 )
 
 logger = structlog.get_logger(__name__)

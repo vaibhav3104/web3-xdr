@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 import structlog
 
 from ..models.events import SecurityEvent

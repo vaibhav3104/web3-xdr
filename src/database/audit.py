@@ -12,10 +12,8 @@ from enum import Enum
 import structlog
 
 from .models import AuditLogModel
-from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from contextlib import contextmanager
 import os
 
 logger = structlog.get_logger(__name__)

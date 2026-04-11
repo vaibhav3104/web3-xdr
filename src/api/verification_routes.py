@@ -6,8 +6,8 @@ Endpoints for verifying detections against known exploits
 and managing the daily monitoring job.
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from typing import Dict, List, Optional
+from fastapi import APIRouter, BackgroundTasks
+from typing import Dict, List
 import asyncio
 from datetime import datetime, timezone
 

@@ -3,12 +3,11 @@ Temporal Invariants - Sequence and timing invariants.
 """
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-from typing import List, Optional, Set
+from typing import List, Set
 import structlog
 
 from .base import Invariant, InvariantContext, InvariantRegistry
-from ..models.events import SecurityEvent, EventType, Severity
+from ..models.events import EventType, Severity
 from ..models.invariants import InvariantResult, InvariantType
 
 logger = structlog.get_logger()

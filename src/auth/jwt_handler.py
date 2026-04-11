@@ -7,11 +7,10 @@ import re
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any, Set
-from functools import wraps
+from typing import Optional, Dict, Any
 
 import jwt
-from fastapi import HTTPException, Security, Depends, Request, status
+from fastapi import HTTPException, Security, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import structlog
 

@@ -7,15 +7,12 @@ Manages a pool of Anvil instances for concurrent simulations.
 """
 
 import asyncio
-import json
 import os
 import subprocess
 import time
-from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Any, Tuple
 import structlog
-import aiohttp
 
 from web3 import Web3, AsyncWeb3
 from web3.types import TxParams
@@ -26,7 +23,6 @@ from ...models.predicted_incidents import (
     SimulationMode,
     SimulationStatus,
     StateDiffFingerprint,
-    ConfidenceReasons,
 )
 from ...runtime.intent_sources.base import PendingTx
 
@@ -235,7 +231,7 @@ class AnvilSimulator(Simulator):
                     logger.warning("snapshot_failed", error=str(e))
                 
                 # Step 2: Use eth_call for simulation (doesn't actually execute)
-                result = await asyncio.wait_for(
+                await asyncio.wait_for(
                     web3.eth.call(tx_params, block_identifier=fork_block or "latest"),
                     timeout=timeout_seconds
                 )
@@ -370,7 +366,7 @@ class AnvilSimulator(Simulator):
         # For production, we'd restart the instance or use a different approach
         # This is a simplified version
         
-        web3 = self._anvil_web3[port]
+        self._anvil_web3[port]
         
         # Reset to fork block (simplified - would need Anvil restart for true fork)
         # For now, we'll just record the fork state

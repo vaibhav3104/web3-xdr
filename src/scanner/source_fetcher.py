@@ -10,9 +10,8 @@ Fetches source code from multiple sources:
 import asyncio
 import aiohttp
 import json
-import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from enum import Enum
 import structlog
 

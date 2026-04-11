@@ -19,8 +19,8 @@ These features improve ML model accuracy for detecting:
 
 import re
 import math
-from collections import Counter, defaultdict
-from typing import Dict, List, Optional, Tuple, Set
+from collections import Counter
+from typing import Dict, List, Tuple
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import hashlib

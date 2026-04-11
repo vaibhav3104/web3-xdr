@@ -4,11 +4,9 @@ Automatically detects new contract deployments and analyzes them for threats
 """
 
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, asdict
-from decimal import Decimal
 import structlog
 
 from web3 import AsyncWeb3

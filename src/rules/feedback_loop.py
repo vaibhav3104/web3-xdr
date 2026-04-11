@@ -24,7 +24,6 @@ Integration:
 """
 
 import os
-import time
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from dataclasses import dataclass, field

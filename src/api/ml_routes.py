@@ -5,10 +5,9 @@ Endpoints for AI/ML contract analysis and threat detection
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import List, Optional
 from datetime import datetime
 import json
-import asyncio
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -520,8 +519,6 @@ async def train_model(background_tasks: BackgroundTasks):
         )
     
     def run_training():
-        import torch
-        from datetime import datetime
         
         print("🚀 Starting model training...")
         

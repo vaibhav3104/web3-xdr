@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import structlog
 
 from ..models.events import SecurityEvent, EventType
-from ..models.entities import Entity, EntityType, RiskLevel
+from ..models.entities import Entity, EntityType
 from ..models.incidents import AttackGraph, AttackGraphNode, AttackGraphEdge
 
 logger = structlog.get_logger()

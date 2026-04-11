@@ -13,7 +13,6 @@ Usage:
     # Returns: 3200.0 (USD)
 """
 
-import asyncio
 import aiohttp
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal

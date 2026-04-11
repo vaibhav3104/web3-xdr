@@ -3,9 +3,7 @@ ML Training Pipeline
 Orchestrates the complete training workflow
 """
 
-import os
 import json
-import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -24,12 +22,9 @@ except ImportError:
     print("Warning: scikit-learn not installed. ML training disabled.")
 
 from ..data.attack_database import (
-    HISTORICAL_ATTACKS, 
-    get_bridge_attacks, 
-    get_defi_attacks,
-    AttackType
+    HISTORICAL_ATTACKS
 )
-from ..data.bytecode_extractor import BytecodeExtractor, features_to_vector
+from ..data.bytecode_extractor import BytecodeExtractor
 
 # Try to import real bytecode collector
 try:
@@ -400,7 +395,7 @@ class TrainingPipeline:
             stratify=y_temp if use_val_stratify else None
         )
         
-        print(f"📊 Data split:")
+        print("📊 Data split:")
         print(f"   Training:   {len(X_train)} samples")
         print(f"   Validation: {len(X_val)} samples")
         print(f"   Test:       {len(X_test)} samples")
@@ -469,7 +464,7 @@ class TrainingPipeline:
         
         training_time = time.time() - start_time
         
-        print(f"\n📊 Training Results:")
+        print("\n📊 Training Results:")
         print(f"   Accuracy:  {accuracy:.2%}")
         print(f"   Precision: {precision:.2%}")
         print(f"   Recall:    {recall:.2%}")

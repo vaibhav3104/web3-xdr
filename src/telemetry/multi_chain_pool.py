@@ -25,10 +25,7 @@ from .aptos_listener import AptosListener, AptosConfig
 from .near_listener import NearListener, NearConfig
 from ..models.events import SecurityEvent
 from ..correlation.cross_chain import (
-    CrossChainCorrelator,
     BridgeEventParser,
-    CrossChainEvent,
-    CrossChainEventType,
     cross_chain_correlator
 )
 

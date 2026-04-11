@@ -24,11 +24,10 @@ Near-Specific Vulnerabilities:
 - Sharded execution timing
 """
 
-import asyncio
 import json
 import base64
 from datetime import datetime, timezone
-from typing import AsyncGenerator, Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
 import structlog

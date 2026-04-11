@@ -6,7 +6,6 @@ Main orchestration engine for the Runtime Security Plane.
 Coordinates intent sources, risk router, simulator, and incident creation.
 """
 
-import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Set
@@ -16,14 +15,12 @@ import hashlib
 from .intent_sources.base import PendingTxSource, PendingTx
 from .risk_router import RiskRouter, RouterDecision
 from .simulator.base import Simulator
-from .simulator.anvil import AnvilSimulator
 from ..models.predicted_incidents import (
     PredictedIncident,
     PredictedIncidentStatus,
     SimulationRun,
     SimulationMode,
     StateDiffFingerprint,
-    ConfidenceReasons,
 )
 from ..models.invariants import InvariantResult
 from ..invariants.engine import InvariantEngine
@@ -285,7 +282,7 @@ class RuntimeEngine:
         Creates synthetic SecurityEvents from the simulation and
         evaluates them through the invariant engine.
         """
-        from ..models.events import SecurityEvent, EventType, Severity as EventSeverity
+        from ..models.events import SecurityEvent, EventType
 
         # Build a synthetic SecurityEvent from the simulated transaction
         synthetic_event = SecurityEvent(

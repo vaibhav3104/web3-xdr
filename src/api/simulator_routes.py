@@ -3,7 +3,6 @@ Attack Simulator API routes.
 Allows triggering test attacks to demonstrate XDR detection capabilities.
 """
 
-from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
 

@@ -6,9 +6,8 @@ Refactored to be passive - no loops, no threading.
 Worker calls poll_logs(block_number) to get events.
 """
 
-import json
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 
 import structlog
@@ -132,7 +131,7 @@ class AptosListener(PassiveNonEVMListener):
         
         if self.config.chain_type == "aptos":
             # Aptos uses "version" instead of "block_number"
-            transactions = await self._make_request(f"transactions", {"start": str(block_number), "limit": "100"})
+            transactions = await self._make_request("transactions", {"start": str(block_number), "limit": "100"})
             if transactions:
                 for tx in transactions.get("result", []):
                     tx_events = self._parse_aptos_tx(tx, block_number)

@@ -4,11 +4,11 @@ Velocity Invariants - Rate and speed-based detection.
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List
 import structlog
 
 from .base import Invariant, InvariantContext, InvariantRegistry
-from ..models.events import EventType, Severity
+from ..models.events import Severity
 from ..models.invariants import InvariantResult, InvariantType
 
 logger = structlog.get_logger()

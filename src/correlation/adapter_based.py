@@ -5,7 +5,7 @@ Adapter-Based Cross-Chain Correlation
 Phase 3: Uses bridge adapters to extract correlation keys and build paths.
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import structlog

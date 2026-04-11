@@ -9,15 +9,12 @@ This is the "killer feature" - similar to Wiz's attack path analysis
 but for Web3/DeFi protocols.
 """
 
-import asyncio
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Set, Tuple
-from dataclasses import dataclass, field
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
 from enum import Enum
 import structlog
 
 from .connection import Neo4jConnection
-from .schema import NodeType, RelationType
 
 logger = structlog.get_logger(__name__)
 
@@ -187,7 +184,7 @@ class AttackPathAnalyzer:
         MATCH path = (admin:Wallet)-[:HAS_ADMIN_ACCESS*1..3]->(target:Contract)
         WHERE target.chain_id = $chain_id
         AND (target.risk_score > 0 OR target:Protocol)
-        """ + (f"AND target.address = $target_address" if target_address else "") + """
+        """ + ("AND target.address = $target_address" if target_address else "") + """
         WITH admin, target, path,
              [n IN nodes(path) WHERE n:Wallet] AS wallets_in_path
         
@@ -278,7 +275,7 @@ class AttackPathAnalyzer:
         query = """
         MATCH (protocol:Protocol)-[:USES_ORACLE]->(oracle:Oracle)
         WHERE protocol.chain_id = $chain_id
-        """ + (f"AND protocol.address = $target_address" if target_address else "") + """
+        """ + ("AND protocol.address = $target_address" if target_address else "") + """
         
         // Find protocols that depend on potentially manipulable oracles
         WITH protocol, oracle,
@@ -391,7 +388,7 @@ class AttackPathAnalyzer:
         query = """
         MATCH (protocol:Protocol)
         WHERE protocol.chain_id = $chain_id
-        """ + (f"AND protocol.address = $target_address" if target_address else "") + """
+        """ + ("AND protocol.address = $target_address" if target_address else "") + """
         
         // Find protocols with flash loan interactions
         OPTIONAL MATCH (protocol)<-[:FLASH_LOANED]-(borrower:Wallet)
@@ -550,7 +547,7 @@ class AttackPathAnalyzer:
         query = """
         MATCH (gov:Governor)-[:CONTROLS]->(target:Contract)
         WHERE target.chain_id = $chain_id
-        """ + (f"AND target.address = $target_address" if target_address else "") + """
+        """ + ("AND target.address = $target_address" if target_address else "") + """
         
         // Find governance with low quorum or short voting periods
         WITH gov, target,

@@ -9,7 +9,7 @@ Tracks Total Value Locked (TVL) for protocols to detect:
 """
 
 from typing import Dict, Optional, List, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import structlog

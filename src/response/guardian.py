@@ -14,7 +14,6 @@ IMPORTANT: This requires the protocol to:
 - Or use a timelock/multisig we can trigger
 """
 
-import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -574,7 +573,7 @@ class GuardianSystem:
                 'gasPrice': 0,  # Simulation, no real cost
             })
 
-            result = w3.eth.call({
+            w3.eth.call({
                 'from': caller,
                 'to': call_data['to'],
                 'data': call_data['data'],

@@ -17,7 +17,6 @@ HEALTH-FIRST PATTERN:
 """
 
 import asyncio
-import json
 import os
 import signal
 import sys
@@ -25,7 +24,7 @@ import yaml
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
@@ -165,19 +164,13 @@ from src.telemetry.metrics import (
     finality_confirmed_blocks,
     worker_uptime_seconds,
     worker_events_processed_total,
-    worker_processing_duration_seconds,
     rpc_latency_seconds,
     rpc_requests_total,
     incidents_created_total,
     invariant_violations_total,
-    invariant_checks_total,
     circuit_breaker_state,
-    circuit_breaker_trips_total,
     alerts_sent_total,
     alerts_failed_total,
-    db_operations_total,
-    db_operation_duration_seconds,
-    db_errors_total,
 )
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
@@ -344,7 +337,6 @@ class CircuitBreaker:
         self._states[chain_id] = self.CLOSED
 
     def record_failure(self, chain_id: str):
-        import time
         failures = self._failures.get(chain_id, 0) + 1
         self._failures[chain_id] = failures
 
@@ -1511,7 +1503,6 @@ class Sentinel3Worker:
         from decimal import Decimal
         
         # Standard ERC20 Transfer topic
-        TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
         
         try:
             # Get topics
@@ -2150,7 +2141,7 @@ class Sentinel3Worker:
         
         try:
             chain_id = event.chain_id
-            tx_hash = event.tx_hash[:16] if event.tx_hash else ""
+            event.tx_hash[:16] if event.tx_hash else ""
             contract_addr = event.contract_address[:10] if event.contract_address else "unknown"
             
             # ========================================
@@ -2507,8 +2498,7 @@ class Sentinel3Worker:
                     """
                     try:
                         from src.database.service import DatabaseService
-                        from src.models.events import EventType, Severity
-                        from src.models.incidents import IncidentStatus
+                        from src.models.events import Severity
                         import uuid
                         import json
                         
@@ -2560,8 +2550,6 @@ class Sentinel3Worker:
                         
                         # Confidence thresholds for incident creation
                         MIN_CONFIDENCE_FOR_INCIDENT = 0.25  # 25% minimum
-                        MIN_CONFIDENCE_FOR_CRITICAL = 0.50  # 50% for CRITICAL
-                        MIN_CONFIDENCE_FOR_HIGH = 0.35      # 35% for HIGH
                         
                         # Only process threats
                         if not analysis.is_threat:
@@ -2883,7 +2871,7 @@ async def main():
     
     try:
         # STEP 1: Create and bind HTTP server IMMEDIATELY (no blocking operations before this)
-        print(f"[WORKER] Creating aiohttp application...", flush=True)
+        print("[WORKER] Creating aiohttp application...", flush=True)
         logger.info("binding_health_server", port=WORKER_HEALTH_PORT, port_env=os.getenv("PORT"))
         
         app = web.Application()
@@ -2892,7 +2880,7 @@ async def main():
         app.router.add_get("/health", health_handler)
         app.router.add_get("/metrics", metrics_handler)
         
-        print(f"[WORKER] Setting up AppRunner...", flush=True)
+        print("[WORKER] Setting up AppRunner...", flush=True)
         # Create site and bind to port immediately
         runner = web.AppRunner(app)
         await runner.setup()
@@ -2928,16 +2916,16 @@ async def main():
                 await asyncio.sleep(0.5)
         
         # STEP 2: Start background initialization (non-blocking)
-        print(f"[WORKER] Starting background initialization...", flush=True)
+        print("[WORKER] Starting background initialization...", flush=True)
         init_task = asyncio.create_task(background_init())
         
         # STEP 3: Keep server running forever
-        print(f"[WORKER] Health server is running. Waiting for initialization...", flush=True)
+        print("[WORKER] Health server is running. Waiting for initialization...", flush=True)
         try:
             # Wait for initialization to complete (or fail) - but don't block server
             await asyncio.wait_for(init_task, timeout=None)
         except asyncio.TimeoutError:
-            print(f"[WORKER] Initialization timeout (this shouldn't happen)", flush=True)
+            print("[WORKER] Initialization timeout (this shouldn't happen)", flush=True)
         except Exception as e:
             print(f"[WORKER] Initialization error: {e}", flush=True)
             logger.error("unexpected_error_in_main", error=str(e), exc_info=True)
@@ -2967,7 +2955,7 @@ async def main():
         logger.error("critical_startup_error", error=str(e), exc_info=True)
         raise
     finally:
-        print(f"[WORKER] Shutting down...", flush=True)
+        print("[WORKER] Shutting down...", flush=True)
         try:
             await runner.cleanup()
         except:

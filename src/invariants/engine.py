@@ -2,8 +2,8 @@
 Invariant Engine - Orchestrates invariant evaluation.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Any, Callable, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Awaitable, Any, Callable, List, Optional
 import asyncio
 import structlog
 
@@ -229,7 +229,6 @@ def create_default_engine(config: dict) -> InvariantEngine:
         from .economic import (
             MintLockParityInvariant,
             UnbackedMintInvariant,
-            BurnUnlockParityInvariant,
         )
         
         engine.add_invariant(MintLockParityInvariant(

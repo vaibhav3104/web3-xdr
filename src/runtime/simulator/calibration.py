@@ -6,12 +6,13 @@ Simulates historical transactions and compares results to actual outcomes
 to compute calibration scores per chain/protocol.
 """
 
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
+
 from typing import Dict, List, Optional, Tuple
 import structlog
 
 from .base import Simulator
-from ...models.predicted_incidents import SimulationMode, SimulationStatus
+from ...models.predicted_incidents import SimulationMode, SimulationRun, SimulationStatus
 from ...telemetry.rpc_client import MultiRpcProvider
 from ...database.connection import DatabaseManager
 from ...database.models import EventModel

@@ -11,9 +11,8 @@ Features are derived from:
 """
 
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional, Tuple
-from decimal import Decimal
+from datetime import datetime, timezone
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 import numpy as np
 import structlog

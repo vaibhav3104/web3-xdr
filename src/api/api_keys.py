@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 from enum import Enum
-import asyncio
 
 logger = structlog.get_logger(__name__)
 

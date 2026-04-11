@@ -5,7 +5,6 @@ Telegram Alerter - Sends alerts to Telegram channels.
 from typing import Optional
 import structlog
 
-from ..models.events import Severity
 from ..models.incidents import Incident
 from ..explainability.explanation import Explanation
 

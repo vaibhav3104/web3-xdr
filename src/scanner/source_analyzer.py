@@ -17,15 +17,13 @@ Detects:
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set, Tuple
-from enum import Enum
+from typing import List, Dict, Optional, Tuple
 import structlog
 
 from .solidity_parser import (
-    SolidityParser, ParsedSource, ContractNode, FunctionNode, 
-    VariableNode, Visibility, Mutability, get_solidity_parser
+    ParsedSource, Visibility, Mutability, get_solidity_parser
 )
-from .vulnerability_scanner import Vulnerability, VulnerabilityType, Severity
+from .vulnerability_scanner import VulnerabilityType, Severity
 
 logger = structlog.get_logger()
 
@@ -297,7 +295,6 @@ class SourceAnalyzer:
     def _find_function_at_line(self, parsed: ParsedSource, line: int) -> Tuple[str, str]:
         """Find function and contract name at a given line"""
         for contract in parsed.contracts:
-            contract_start = contract.location.line if contract.location else 0
             
             for func in contract.functions:
                 func_line = func.location.line if func.location else 0

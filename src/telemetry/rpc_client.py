@@ -11,13 +11,10 @@ Provides reliable RPC access with:
 
 import asyncio
 import time
-import random
-from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
-import hashlib
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 import structlog

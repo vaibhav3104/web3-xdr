@@ -323,7 +323,7 @@ class RuleEngine:
         if self._enricher:
             try:
                 event = self._enricher.enrich_sync(event)
-            except Exception as e:
+            except Exception:
                 pass  # Continue with unenriched event
         
         # Check invariants if engine available
@@ -351,7 +351,7 @@ class RuleEngine:
                             "deviation": violation.deviation,
                         }
                     ))
-            except Exception as e:
+            except Exception:
                 pass
         
         for rule in self.rules:
@@ -495,7 +495,7 @@ class RuleEngine:
                     self._alert_history[dedup_key].add(event_id)
 
             # Parse time window from rule (default 5m)
-            window_str = getattr(rule, 'schedule', None)
+            getattr(rule, 'schedule', None)
             time_window_str = detection.get('time_window') or rule.__dict__.get('time_window', '5m') if hasattr(rule, '__dict__') else '5m'
             # Try to get time_window from the rule YAML (stored in raw data)
             window_seconds = 300  # default 5 min
@@ -514,7 +514,7 @@ class RuleEngine:
             ]
             # If timestamps were pruned, clear the dedup set to prevent unbounded growth
             if len(self._alert_history[velocity_key]) < old_len:
-                pruned = old_len - len(self._alert_history[velocity_key])
+                old_len - len(self._alert_history[velocity_key])
                 seen_set = self._alert_history.get(dedup_key, set())
                 if isinstance(seen_set, set) and len(seen_set) > 10000:
                     self._alert_history[dedup_key] = set()

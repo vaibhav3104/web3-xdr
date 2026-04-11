@@ -4,7 +4,7 @@ Extracts features from smart contract bytecode for ML classification
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import hashlib

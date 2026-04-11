@@ -4,7 +4,7 @@ Provides live updates for events, incidents, and alerts
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, List, Set
+from typing import Dict, Set
 import asyncio
 import json
 from datetime import datetime, timezone

@@ -6,7 +6,7 @@ Allows viewing and editing event parsers/normalizers.
 import os
 import yaml
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone
 

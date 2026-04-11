@@ -10,8 +10,7 @@ import structlog
 
 from .connection import DatabaseManager
 from .models import EventProcessingModel
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 logger = structlog.get_logger(__name__)
 

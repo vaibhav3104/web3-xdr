@@ -14,7 +14,6 @@ Factors:
 
 from decimal import Decimal
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
 import structlog
 
 from ..models.events import SecurityEvent, EventStatus

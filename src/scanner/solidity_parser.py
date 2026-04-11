@@ -16,7 +16,7 @@ Detects:
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set, Tuple, Any
+from typing import List, Dict, Optional, Any
 from enum import Enum
 import structlog
 
@@ -394,7 +394,7 @@ class SolidityParser:
         
         for match in self.EVENT_PATTERN.finditer(contract_body):
             event_name = match.group(1)
-            params_str = match.group(2)
+            match.group(2)
             
             line_num = base_line + contract_body[:match.start()].count('\n')
             

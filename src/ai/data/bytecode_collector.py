@@ -8,7 +8,7 @@ import json
 import asyncio
 import aiohttp
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from pathlib import Path
 import structlog
@@ -333,7 +333,7 @@ class BytecodeCollector:
                 await asyncio.sleep(0.5)
         
         print("\n" + "=" * 60)
-        print(f"✅ Collection complete!")
+        print("✅ Collection complete!")
         print(f"   Total collected: {self.stats['total_collected']}")
         print(f"   Exploits: {self.stats.get('exploits', 0)}")
         print(f"   Safe: {self.stats.get('safe', 0)}")
@@ -614,7 +614,7 @@ async def collect_training_bytecode():
     
     async with BytecodeCollector() as collector:
         await collector.collect_all_known_contracts()
-        output_file = collector.save_collected_data()
+        collector.save_collected_data()
         
         # Extract features for all collected contracts
         print("\n🔬 Extracting features from bytecode...")

@@ -6,12 +6,10 @@ Endpoints for accessing contract deployment alerts and ML analysis
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime
 import structlog
 
 from ..telemetry.contract_alerts import (
     contract_alert_store, 
-    ContractThreatAlert, 
     AlertStatus, 
     ThreatLevel
 )

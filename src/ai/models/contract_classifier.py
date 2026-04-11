@@ -3,7 +3,6 @@ Contract Threat Classifier
 ML model to classify smart contracts as safe or malicious
 """
 
-import json
 import pickle
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass

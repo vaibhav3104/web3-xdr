@@ -10,9 +10,9 @@ Detects MEV (Maximal Extractable Value) patterns:
 - Arbitrage
 """
 
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 from enum import Enum
 import structlog

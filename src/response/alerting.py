@@ -2,7 +2,7 @@
 Alert Router - Routes alerts based on severity and configuration.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 import asyncio

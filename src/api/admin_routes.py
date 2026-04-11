@@ -6,12 +6,10 @@ SECURITY: All write operations require API key authentication.
 Read operations are public for dashboard access.
 """
 
-import os
 import yaml
-from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Body, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from pathlib import Path
 import structlog
 
@@ -24,7 +22,7 @@ from ..auth.jwt_handler import require_role
 from ..auth.models import User
 
 # Import API key authentication
-from .middleware.security import require_api_key, validate_api_key
+from .middleware.security import require_api_key
 
 # Get config directory
 CONFIG_DIR = Path(__file__).parent.parent.parent / "config"

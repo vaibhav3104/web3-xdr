@@ -9,10 +9,8 @@ Supports:
 - Continuous learning from new incidents
 """
 
-import os
 import json
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 import numpy as np
@@ -179,7 +177,7 @@ class TrainingPipeline:
         # 1. Extract knowledge from YAML rules
         logger.info("extracting_yaml_knowledge")
         knowledge = self.yaml_converter.load_and_convert()
-        blueprint = self.yaml_converter.get_feature_blueprint()
+        self.yaml_converter.get_feature_blueprint()
         
         # 2. Load historical exploits
         if include_historical_exploits:
@@ -321,14 +319,6 @@ class TrainingPipeline:
         """Add events that matched YAML rules as weak labels."""
         # Query events that triggered rules
         try:
-            query = """
-            SELECT e.*, i.threat_category, i.severity
-            FROM events e
-            JOIN incidents i ON e.id = ANY(i.event_ids)
-            WHERE i.source = 'RULE_ENGINE'
-            ORDER BY e.created_at DESC
-            LIMIT 1000
-            """
             
             # This would be replaced with actual DB query
             # For now, we'll skip if no connection
@@ -348,14 +338,6 @@ class TrainingPipeline:
         """Add labeled incidents from database."""
         try:
             # Query confirmed incidents
-            query = """
-            SELECT i.*, e.raw_data
-            FROM incidents i
-            JOIN events e ON e.id = ANY(i.event_ids)
-            WHERE i.status IN ('resolved', 'acknowledged')
-            ORDER BY i.created_at DESC
-            LIMIT 500
-            """
             
             if not db_connection:
                 return

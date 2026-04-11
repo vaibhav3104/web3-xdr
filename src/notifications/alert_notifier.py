@@ -4,7 +4,6 @@ Sends alerts to Telegram, Slack, Email, and Dashboard
 """
 
 import os
-import json
 import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Optional

@@ -7,7 +7,6 @@ Supports both local and AuraDB (cloud) instances.
 """
 
 import os
-import asyncio
 from typing import Dict, List, Any, Optional
 from contextlib import asynccontextmanager
 import structlog

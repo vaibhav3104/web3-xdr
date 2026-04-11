@@ -5,10 +5,9 @@ Supports both direct connection and DATABASE_URL (for Cloud SQL).
 """
 
 import os
-import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import structlog
 
 try:

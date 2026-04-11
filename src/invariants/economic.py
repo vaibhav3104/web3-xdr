@@ -4,7 +4,6 @@ Economic Invariants - Core financial invariants for bridge security.
 
 from datetime import timedelta
 from decimal import Decimal
-from typing import Optional
 import structlog
 
 from .base import Invariant, InvariantContext, InvariantRegistry

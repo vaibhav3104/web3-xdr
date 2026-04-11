@@ -13,12 +13,10 @@ CRITICAL: This replaces in-memory dictionaries for production scaling.
 
 import os
 import json
-import hashlib
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Any, Set, Tuple
-from dataclasses import dataclass, asdict
-from enum import Enum
+from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass
 import structlog
 
 # Redis async client
@@ -615,7 +613,7 @@ class RedisStateManager:
             )
             
             status = result[0]
-            matched_id = result[1] if len(result) > 1 else None
+            result[1] if len(result) > 1 else None
             matched_data = json.loads(result[2]) if len(result) > 2 and result[2] else None
             
             # Update stats
@@ -674,7 +672,7 @@ class RedisStateManager:
             )
             
             status = result[0]
-            matched_id = result[1] if len(result) > 1 else None
+            result[1] if len(result) > 1 else None
             matched_data = json.loads(result[2]) if len(result) > 2 and result[2] else None
             
             # Update stats

@@ -6,7 +6,7 @@ Phase 6: Passive interface for non-EVM listeners.
 No threading, no loops - just poll_logs(block_number) -> List[SecurityEvent].
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import List, Optional
 import structlog
 

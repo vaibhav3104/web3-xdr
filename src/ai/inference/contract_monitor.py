@@ -7,8 +7,7 @@ import asyncio
 import json
 from typing import Dict, List, Optional, Callable
 from datetime import datetime, timezone
-from dataclasses import dataclass, asdict
-from pathlib import Path
+from dataclasses import dataclass
 
 try:
     from web3 import Web3
@@ -227,7 +226,7 @@ class ContractDeploymentMonitor:
         print(f"TX Hash:     {alert.deployment.tx_hash}")
         print(f"Confidence:  {alert.classification.confidence:.2%}")
         print(f"Risk Score:  {alert.classification.risk_score}/100")
-        print(f"Risk Factors:")
+        print("Risk Factors:")
         for factor in alert.classification.risk_factors:
             print(f"  - {factor}")
         print(f"\nRecommendation: {alert.classification.recommendation}")

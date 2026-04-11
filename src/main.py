@@ -13,7 +13,6 @@ import structlog
 import yaml
 
 from .telemetry.listener_pool import ListenerPool, create_listener_pool_from_config
-from .telemetry.base import ListenerConfig
 from .invariants.engine import InvariantEngine, create_default_engine
 from .correlation.correlator import XDRCorrelator
 from .explainability.engine import ExplainabilityEngine

@@ -6,7 +6,6 @@ import base64
 import json
 from datetime import datetime
 from typing import Optional, Tuple
-from uuid import UUID
 
 
 def encode_cursor(block_timestamp: datetime, event_id: str) -> str:

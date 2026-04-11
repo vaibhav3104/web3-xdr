@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import AsyncIterator, Dict, List, Optional, Set
 import asyncio
-import base64
-import struct
 import structlog
 
 from .base import ChainListener, ListenerConfig, BlockMetadata
@@ -176,7 +174,7 @@ class SolanaListener(ChainListener):
             self._processed_signatures = set(list(self._processed_signatures)[-5000:])
         
         # Parse inner instructions (includes token transfers)
-        inner_instructions = meta.get("innerInstructions", [])
+        meta.get("innerInstructions", [])
         
         # Check for token transfers in pre/post token balances
         pre_balances = meta.get("preTokenBalances", [])

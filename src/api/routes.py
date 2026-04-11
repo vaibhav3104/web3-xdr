@@ -6,7 +6,7 @@ Connected to real-time monitor data.
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import structlog
 
 logger = structlog.get_logger()
@@ -280,7 +280,7 @@ async def list_incidents(
     all_incidents.sort(key=lambda i: i.created_at.timestamp() if i.created_at else 0, reverse=True)
     
     # Apply pagination
-    total_count = len(all_incidents)
+    len(all_incidents)
     paginated = all_incidents[offset:offset + limit]
     
     return paginated
@@ -383,7 +383,7 @@ async def get_incident_events(incident_id: str, limit: int = 50):
     """
     from ..database.service import DatabaseService
     from ..shared_state import monitor_state
-    from datetime import datetime, timedelta
+    from datetime import datetime
     
     logger.info("get_incident_events_request", incident_id=incident_id)
     
@@ -787,8 +787,6 @@ async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
         FeedbackResponse with confirmation
     """
     from ..database.service import DatabaseService
-    from datetime import datetime, timezone
-    import json
     
     logger.info("feedback_submitted", 
                 incident_id=incident_id, 
@@ -1204,7 +1202,6 @@ async def list_events(
     - (chain:ethereum OR chain:polygon) AND NOT severity:info
     """
     from ..database.service import DatabaseService
-    from ..database.connection import DatabaseManager
     from ..query.lucene_parser import execute_lucene_query
     
     # ========== DEBUG: Log all incoming parameters ==========
@@ -2162,59 +2159,6 @@ async def test_rpc_connections():
     return results
 
 
-@router.get("/chains/status")
-async def get_chains_status():
-    """
-    Get connection status of all blockchain listeners.
-    Shows EVM and non-EVM chain connection health.
-    """
-    from ..shared_state import monitor_state
-    
-    chain_status = monitor_state.get_chain_status()
-    events_by_chain = monitor_state.stats.get("events_by_chain", {})
-    
-    # Categorize chains
-    evm_chains = []
-    non_evm_chains = []
-    
-    evm_types = ["ethereum", "polygon", "arbitrum", "optimism", "base", "avalanche", "bsc"]
-    non_evm_types = ["cosmos", "osmosis", "injective", "aptos", "sui", "near", "solana"]
-    
-    for chain_id, status in chain_status.items():
-        status["events_count"] = events_by_chain.get(chain_id, 0)
-        
-        if status.get("chain_type") == "evm" or chain_id.lower() in evm_types:
-            evm_chains.append(status)
-        else:
-            non_evm_chains.append(status)
-    
-    # Add any chains with events but not in status tracking
-    for chain_id, count in events_by_chain.items():
-        if chain_id not in chain_status:
-            entry = {
-                "chain_id": chain_id,
-                "chain_type": "evm" if chain_id.lower() in evm_types else "non-evm",
-                "status": "connected",
-                "events_count": count,
-                "last_update": None
-            }
-            if chain_id.lower() in evm_types:
-                evm_chains.append(entry)
-            else:
-                non_evm_chains.append(entry)
-    
-    return {
-        "summary": {
-            "total_chains": len(evm_chains) + len(non_evm_chains),
-            "evm_chains": len(evm_chains),
-            "non_evm_chains": len(non_evm_chains),
-            "chains_with_events": len([c for c in evm_chains + non_evm_chains if c.get("events_count", 0) > 0])
-        },
-        "evm_chains": sorted(evm_chains, key=lambda x: x.get("events_count", 0), reverse=True),
-        "non_evm_chains": sorted(non_evm_chains, key=lambda x: x.get("events_count", 0), reverse=True)
-    }
-
-
 @router.get("/chains/status", response_model=ChainsStatusResponse)
 async def get_chains_status():
     """
@@ -2339,7 +2283,7 @@ async def verify_schema(user_info: dict = Depends(lambda: __import__("src.api.ma
     Verify database schema - check if status column exists.
     Requires maintenance access (admin role or MAINTENANCE_TOKEN).
     """
-    from ..api.maintenance_auth import log_maintenance_action, require_maintenance_access
+    from ..api.maintenance_auth import log_maintenance_action
     try:
         from sqlalchemy import text
         from ..database.connection import DatabaseManager
@@ -2488,7 +2432,7 @@ async def migrate_events_table(user_info: dict = Depends(lambda: __import__("src
                     except Exception as idx_error:
                         # Index might fail if column doesn't exist or constraint conflict
                         # Log but don't fail the migration
-                        logger.warning(f"index_creation_failed", index=index_name, error=str(idx_error))
+                        logger.warning("index_creation_failed", index=index_name, error=str(idx_error))
             
             await session.commit()
             
@@ -2500,7 +2444,6 @@ async def migrate_events_table(user_info: dict = Depends(lambda: __import__("src
                 "summary": f"Added {len(columns_added)} columns and {len(indexes_created)} indexes"
             }
     except Exception as e:
-        import traceback
         error_details = {
             "error": str(e),
             "type": type(e).__name__,

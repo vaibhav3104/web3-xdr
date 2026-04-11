@@ -2,7 +2,7 @@
 Contract Threat Alerts - Storage and management of contract deployment alerts
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional, Dict
 from enum import Enum

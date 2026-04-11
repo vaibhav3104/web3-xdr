@@ -15,7 +15,7 @@ from typing import Optional
 import hashlib
 import structlog
 
-from ...models.events import SecurityEvent, EventType
+from ...models.events import SecurityEvent
 from .base import (
     BridgeAdapter,
     BridgeProtocol,

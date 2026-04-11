@@ -273,12 +273,12 @@ class Explanation:
         lines.append("")
         
         if self.what_happened:
-            lines.append(f"<b>What Happened</b>")
+            lines.append("<b>What Happened</b>")
             lines.append(self.what_happened[:500])
             lines.append("")
         
         if self.blast_radius:
-            lines.append(f"<b>Blast Radius</b>")
+            lines.append("<b>Blast Radius</b>")
             lines.append(self.blast_radius[:300])
             lines.append("")
         

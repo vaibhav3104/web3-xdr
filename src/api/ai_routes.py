@@ -3,7 +3,7 @@ AI/ML API Routes
 Endpoints for contract analysis, auto-collection, and deep learning models
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -237,7 +237,7 @@ async def analyze_incident(incident_id: str) -> Dict:
 def _analyze_root_cause(incident: Dict) -> Dict:
     """Analyze the root cause of an incident"""
     attack_type = incident.get('attack_type', 'unknown')
-    severity = incident.get('severity', 'medium')
+    incident.get('severity', 'medium')
     
     root_causes = {
         "rug_pull": {

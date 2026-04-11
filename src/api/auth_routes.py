@@ -28,7 +28,7 @@ async def login(request: LoginRequest, http_request: Request):
     - operator/operator123 (limited admin)
     - viewer/viewer123 (read-only)
     """
-    from ..database.audit import AuditLogger, ActionType
+    from ..database.audit import AuditLogger
     
     user = jwt_handler.authenticate_user(request.username, request.password)
     

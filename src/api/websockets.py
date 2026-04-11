@@ -13,7 +13,7 @@ from typing import Dict, Set
 import structlog
 import redis.asyncio as aioredis
 
-from fastapi import WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from ..config.settings import settings

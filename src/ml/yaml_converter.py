@@ -11,7 +11,7 @@ This is the bridge between rule-based detection and ML-based detection.
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Set, Tuple
+from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
 from collections import defaultdict
 import structlog
@@ -330,8 +330,8 @@ class YAMLToMLConverter:
         # Aggregate feature importance across all rules
         aggregated_importance = defaultdict(float)
         for rule in self.knowledge.rules:
-            for field, importance in rule.feature_importance.items():
-                aggregated_importance[field] += importance
+            for feat_field, importance in rule.feature_importance.items():
+                aggregated_importance[feat_field] += importance
         
         # Sort by importance
         sorted_features = sorted(

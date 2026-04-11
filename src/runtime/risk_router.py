@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Set, Tuple
 import structlog
 import os
 
-from ..models.predicted_incidents import SimulationMode
 from ..runtime.intent_sources.base import PendingTx
 
 logger = structlog.get_logger(__name__)

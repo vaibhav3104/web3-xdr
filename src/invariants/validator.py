@@ -13,7 +13,6 @@ import structlog
 from pydantic import BaseModel, ValidationError, Field
 
 from ..database.models import EventModel
-from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os

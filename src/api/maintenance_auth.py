@@ -11,8 +11,6 @@ import structlog
 from ..auth.jwt_handler import JWTHandler
 from ..database.models import AuditLogModel
 from ..database.connection import DatabaseManager
-from sqlalchemy import select
-from datetime import datetime, timezone
 
 logger = structlog.get_logger(__name__)
 
@@ -120,7 +118,6 @@ async def log_maintenance_action(
     """
     try:
         async with DatabaseManager.get_session() as session:
-            import json
             details = payload.copy()
             if error_message:
                 details["error"] = error_message

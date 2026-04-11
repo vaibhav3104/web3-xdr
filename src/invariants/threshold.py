@@ -3,7 +3,6 @@ Threshold Invariants - Signature, access control, and governance thresholds.
 """
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from typing import Dict, List, Optional, Set
 import structlog
 

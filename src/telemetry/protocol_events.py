@@ -10,11 +10,9 @@ This module defines:
 3. Protocol-specific event classification
 """
 
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
-from decimal import Decimal
-import hashlib
 
 
 class ProtocolType(Enum):

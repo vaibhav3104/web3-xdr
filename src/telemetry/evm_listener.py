@@ -10,24 +10,21 @@ Features:
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import AsyncIterator, Dict, List, Optional, Tuple, Union
+from typing import AsyncIterator, Dict, List, Optional
 import asyncio
-import json
 import hashlib
 import structlog
 
-from web3 import AsyncWeb3, AsyncHTTPProvider
+from web3 import AsyncWeb3
 from web3.exceptions import BlockNotFound
 from web3.middleware import ExtraDataToPOAMiddleware
-from eth_abi import decode
 
 from .base import ChainListener, ListenerConfig, BlockMetadata
-from .robust_provider import RobustAsyncHTTPProvider, create_robust_provider
+from .robust_provider import RobustAsyncHTTPProvider
 from .contract_alerts import (
-    ContractThreatAlert, ContractAlertStore, 
-    ThreatLevel, AlertStatus, contract_alert_store
+    ContractThreatAlert, ThreatLevel, AlertStatus, contract_alert_store
 )
-from .event_signatures import get_event_info, identify_event_type, get_protocol_name, get_event_severity
+from .event_signatures import get_event_info
 from .price_feed import get_price_feed, PriceFeed
 from ..models.events import SecurityEvent, EventType, Severity
 
@@ -245,7 +242,7 @@ class EVMListener(ChainListener):
         from .event_signatures import ALL_SIGNATURES
         
         # Get important event topics (all our monitored event signatures)
-        important_topics = list(ALL_SIGNATURES.keys())
+        list(ALL_SIGNATURES.keys())
         
         # Limit to most critical events to avoid rate limits
         # Priority: Liquidations, Flash Loans, Large Swaps, Admin Changes, Bridge Events
@@ -981,7 +978,7 @@ class EVMListener(ChainListener):
         while self.is_running:
             latest = await self.get_latest_block()
             if latest > self.last_processed_block:
-                metadata = await self.process_block(latest)
+                await self.process_block(latest)
                 self.last_processed_block = latest
             await asyncio.sleep(1)
             yield  # Required for async generator

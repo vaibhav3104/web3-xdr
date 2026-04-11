@@ -13,9 +13,7 @@ import structlog
 from ...models.predicted_incidents import (
     SimulationRun,
     SimulationMode,
-    SimulationStatus,
     StateDiffFingerprint,
-    ConfidenceReasons,
 )
 from ...runtime.intent_sources.base import PendingTx
 

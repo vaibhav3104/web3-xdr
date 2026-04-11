@@ -227,7 +227,7 @@ class BalancerMonitor(ProtocolMonitor):
                 chain_id=chain_id,
                 alert_type=AlertType.LARGE_TRANSACTION,
                 severity="low",
-                title=f"Large Balancer Pool Change",
+                title="Large Balancer Pool Change",
                 description=f"Large pool join/exit: ${estimated_value_usd:,.0f} by {sender[:10]}...",
                 tx_hash=tx_hash,
                 block_number=block_number,

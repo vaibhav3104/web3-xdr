@@ -1,0 +1,24 @@
+[lint]
+# Focus on correctness rules, not style
+select = ["E", "F", "W"]
+
+ignore = [
+    "E402",  # module-level imports not at top (sys.path manipulation)
+    "E501",  # line too long (not enforced yet)
+    "E741",  # ambiguous variable name
+    "W291",  # trailing whitespace
+    "W292",  # no newline at end of file
+    "W293",  # blank line contains whitespace
+    "E722",  # bare except (used intentionally for resilience in worker loops)
+]
+
+[lint.per-file-ignores]
+# Worker has many try-guarded imports for optional dependencies
+"src/worker/main.py" = ["F401"]
+# ML modules guard optional torch/sklearn imports
+"src/ai/models/deep_classifier.py" = ["F401"]
+"src/ai/training/pipeline.py" = ["F401"]
+"src/ml/*.py" = ["F401"]
+"src/api/alert_routes.py" = ["F401"]
+"src/api/contract_routes.py" = ["F401"]
+"src/api/ml_routes.py" = ["F401"]

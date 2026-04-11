@@ -7,7 +7,6 @@ Uses Redis (primary) for fast access, Postgres (persistence) for durability.
 """
 
 from typing import Optional, Dict
-from datetime import datetime, timezone
 import structlog
 
 try:
@@ -16,7 +15,6 @@ try:
 except ImportError:
     REDIS_AVAILABLE = False
 
-from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import os

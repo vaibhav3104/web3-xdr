@@ -8,7 +8,6 @@ Abstract base class for protocol-specific monitoring.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional, Callable, Awaitable
 import structlog

@@ -5,7 +5,7 @@ Endpoints for managing contract threat alerts and notifications
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import List, Optional
 from datetime import datetime, timezone
 import os
 

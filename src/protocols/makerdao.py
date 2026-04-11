@@ -168,7 +168,7 @@ class MakerDAOMonitor(ProtocolMonitor):
             chain_id=chain_id,
             alert_type=AlertType.LIQUIDATION,
             severity=severity,
-            title=f"MakerDAO Vault Liquidation",
+            title="MakerDAO Vault Liquidation",
             description=f"Vault liquidated for {vault_owner[:10]}... "
                        f"Estimated value: ${estimated_value_usd:,.0f}",
             tx_hash=tx_hash,

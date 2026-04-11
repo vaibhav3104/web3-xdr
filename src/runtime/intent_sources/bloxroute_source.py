@@ -8,9 +8,8 @@ Provides "0-block" detection by monitoring transactions before they're mined.
 
 import asyncio
 import json
-import os
 from datetime import datetime, timezone
-from typing import List, Optional, Set
+from typing import List, Optional
 import structlog
 import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException

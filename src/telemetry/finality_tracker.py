@@ -15,10 +15,9 @@ Chain-specific finality:
 """
 
 import asyncio
-from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Any
+from typing import Callable, Coroutine, Dict, List, Optional, Any
 from enum import Enum
 
 import structlog

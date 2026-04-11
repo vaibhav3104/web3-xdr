@@ -10,7 +10,6 @@ Deep integration with Aave V2/V3 lending protocol:
 - TVL tracking
 """
 
-import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 import structlog
@@ -151,7 +150,7 @@ class AaveMonitor(ProtocolMonitor):
         self._stats["liquidations_detected"] += 1
         
         topics = event_data.get("topics", [])
-        data = event_data.get("data", "0x")
+        event_data.get("data", "0x")
         
         # Parse liquidation data (simplified)
         # In production, would decode full event data

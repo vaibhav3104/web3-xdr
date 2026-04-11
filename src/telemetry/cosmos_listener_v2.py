@@ -6,11 +6,10 @@ Refactored to be passive - no loops, no threading.
 Worker calls poll_logs(block_number) to get events.
 """
 
-import json
 import base64
 import hashlib
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 
 import structlog

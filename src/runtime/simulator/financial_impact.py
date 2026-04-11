@@ -7,11 +7,10 @@ Uses state diffs to determine token balance changes and converts to USD.
 """
 
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import structlog
 import aiohttp
 
-from web3 import Web3
 from ...models.predicted_incidents import StateDiffFingerprint
 
 logger = structlog.get_logger(__name__)

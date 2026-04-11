@@ -9,7 +9,7 @@ import hashlib
 import uuid
 from typing import Dict, Optional, Callable
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import asyncio
 import structlog
 
@@ -17,7 +17,6 @@ from fastapi import Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader, HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-import structlog
 
 logger = structlog.get_logger(__name__)
 

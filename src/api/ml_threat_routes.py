@@ -6,17 +6,16 @@ REST API endpoints for ML-based threat detection.
 Replaces YAML rule evaluation with intelligent ML classification.
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
-import asyncio
 import structlog
 
 # Import ML components
 from src.ml.yaml_converter import YAMLToMLConverter
 from src.ml.feature_extractor import FeatureExtractor
-from src.ml.threat_detector import ThreatDetector, ThreatPrediction, ThreatTypes
+from src.ml.threat_detector import ThreatDetector, ThreatTypes
 from src.ml.training_pipeline import TrainingPipeline
 
 logger = structlog.get_logger(__name__)

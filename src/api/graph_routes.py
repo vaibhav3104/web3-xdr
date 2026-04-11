@@ -17,8 +17,8 @@ import structlog
 # Import graph components
 from src.graph.connection import get_neo4j_connection, Neo4jConnection
 from src.graph.builder import GraphBuilder
-from src.graph.analyzer import AttackPathAnalyzer, AttackPath
-from src.graph.risk import GraphRiskScorer, RiskScore
+from src.graph.analyzer import AttackPathAnalyzer
+from src.graph.risk import GraphRiskScorer
 
 logger = structlog.get_logger(__name__)
 

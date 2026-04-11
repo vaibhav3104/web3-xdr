@@ -20,26 +20,21 @@ Usage:
 """
 
 import argparse
-import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
     roc_auc_score,
-    roc_curve,
-    precision_recall_curve,
     average_precision_score
 )
 from imblearn.over_sampling import SMOTE
@@ -48,8 +43,7 @@ import joblib
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from src.ai.data.enhanced_extractor import EnhancedBytecodeExtractor, EnhancedBytecodeFeatures
-from src.ai.data.exploit_database import EXPLOIT_DATABASE, ExploitContract
+from src.ai.data.enhanced_extractor import EnhancedBytecodeExtractor
 import structlog
 
 structlog.configure(
@@ -221,7 +215,6 @@ class ContractDataLoader:
             return MockExploitGenerator.generate_all_mock_exploits(50)
         
         # Try to load real exploit contracts
-        exploits = []
         
         # For now, use mock exploits as real bytecode fetching requires RPC calls
         # In production, you would fetch bytecode from blockchain using addresses

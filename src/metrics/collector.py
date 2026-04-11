@@ -14,7 +14,7 @@ from typing import Optional, Callable
 from functools import wraps
 
 from prometheus_client import (
-    Counter, Gauge, Histogram, Summary, Info,
+    Counter, Gauge, Histogram, Info,
     REGISTRY, generate_latest, CONTENT_TYPE_LATEST
 )
 import structlog

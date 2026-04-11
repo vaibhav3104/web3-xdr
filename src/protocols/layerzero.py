@@ -141,9 +141,9 @@ class LayerZeroMonitor(ProtocolMonitor):
         block_timestamp: datetime
     ) -> Optional[ProtocolAlert]:
         """Handle cross-chain packet sent."""
-        topics = event_data.get("topics", [])
+        event_data.get("topics", [])
         
-        sender = event_data.get("address", "unknown")
+        event_data.get("address", "unknown")
         estimated_value_usd = 50000
         
         if estimated_value_usd >= self.config.large_tx_threshold_usd:

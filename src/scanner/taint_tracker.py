@@ -18,7 +18,7 @@ Taint Sinks (dangerous operations with tainted data):
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set, Tuple, Any
+from typing import List, Dict, Optional
 from enum import Enum
 import structlog
 

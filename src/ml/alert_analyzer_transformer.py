@@ -11,10 +11,8 @@ The ensemble provides more accurate TP/FP classification than simple MLP.
 """
 
 import json
-import hashlib
-import pickle
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple, Any
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -56,8 +54,6 @@ except ImportError:
     gcs_storage = None
 
 import os
-import tempfile
-import io
 
 
 class AlertVerdict(Enum):

@@ -6,7 +6,7 @@ Phase 5: Evaluates whether an incident warrants automated pause action.
 Implements "Defense in Depth" to prevent accidental or malicious pauses.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass, field
@@ -15,7 +15,7 @@ import structlog
 
 from ..correlation.incident_builder import Incident, IncidentStatus
 from ..models.invariants import InvariantResult
-from ..models.predicted_incidents import PredictedIncident, PredictedIncidentStatus
+from ..models.predicted_incidents import PredictedIncident
 import os
 
 logger = structlog.get_logger(__name__)

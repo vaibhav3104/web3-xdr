@@ -9,12 +9,11 @@ with protocol-aware invariants.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, List, Optional
 
-from ...models.events import SecurityEvent, EventType
+from ...models.events import SecurityEvent
 
 
 class BridgeProtocol(Enum):

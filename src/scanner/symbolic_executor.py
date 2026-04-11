@@ -11,7 +11,7 @@ Uses constraint solving to determine if vulnerabilities are exploitable.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set, Tuple, Any
+from typing import List, Dict, Optional, Any
 from enum import Enum
 import structlog
 
@@ -437,7 +437,7 @@ class SymbolicExecutor:
         elif opcode == 0x57:  # JUMPI
             if len(state.stack) >= 2:
                 dest = state.stack.pop()
-                cond = state.stack.pop()
+                state.stack.pop()
                 # This is where we would fork execution
                 # For now, continue with condition being true
                 state.pc += 1
@@ -450,13 +450,13 @@ class SymbolicExecutor:
         # External calls
         elif opcode == 0xF1:  # CALL
             if len(state.stack) >= 7:
-                gas = state.stack.pop()
+                state.stack.pop()
                 to = state.stack.pop()
                 value = state.stack.pop()
-                in_offset = state.stack.pop()
-                in_size = state.stack.pop()
-                out_offset = state.stack.pop()
-                out_size = state.stack.pop()
+                state.stack.pop()
+                state.stack.pop()
+                state.stack.pop()
+                state.stack.pop()
                 
                 path.external_calls.append({
                     "type": "CALL",

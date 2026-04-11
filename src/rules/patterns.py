@@ -13,7 +13,7 @@ Detects complex attack patterns across multiple events:
 - Honeypot tokens
 """
 
-from typing import Dict, Any, Optional, List, Set
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -317,7 +317,7 @@ class PatternMatcher:
     def _detect_flash_loan_attack(self, event: Dict[str, Any]) -> List[PatternMatch]:
         """Detect flash loan attack pattern."""
         matches = []
-        config = self.PATTERN_CONFIGS[PatternType.FLASH_LOAN_ATTACK]
+        self.PATTERN_CONFIGS[PatternType.FLASH_LOAN_ATTACK]
         
         # Look for flash loan events
         if event.get("event_type") != "FlashLoan":
@@ -357,7 +357,7 @@ class PatternMatcher:
     def _detect_rug_pull(self, event: Dict[str, Any]) -> List[PatternMatch]:
         """Detect rug pull pattern."""
         matches = []
-        config = self.PATTERN_CONFIGS[PatternType.RUG_PULL]
+        self.PATTERN_CONFIGS[PatternType.RUG_PULL]
         
         # Look for large liquidity removal
         if event.get("event_type") not in ("LiquidityRemove", "liquidity_remove", "Burn"):

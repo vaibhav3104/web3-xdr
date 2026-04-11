@@ -9,7 +9,6 @@ from typing import List, Optional
 import uuid
 
 from sqlalchemy import (
-    Column,
     String,
     Integer,
     BigInteger,
@@ -20,12 +19,9 @@ from sqlalchemy import (
     Numeric,
     ForeignKey,
     Index,
-    JSON,
-    Enum as SQLEnum,
-    DECIMAL,
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
-from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 

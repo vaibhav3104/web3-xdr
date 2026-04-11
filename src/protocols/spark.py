@@ -146,7 +146,7 @@ class SparkMonitor(ProtocolMonitor):
             chain_id=chain_id,
             alert_type=AlertType.LIQUIDATION,
             severity=severity,
-            title=f"Spark Protocol Liquidation",
+            title="Spark Protocol Liquidation",
             description=f"Position liquidated for {liquidated_user[:10]}... Value: ${estimated_value_usd:,.0f}",
             tx_hash=tx_hash,
             block_number=block_number,

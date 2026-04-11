@@ -5,7 +5,7 @@ Base Chain Listener - Abstract base for all blockchain listeners.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Set, Any
+from typing import AsyncIterator, Awaitable, Callable, List, Optional, Set, Any
 import asyncio
 import structlog
 

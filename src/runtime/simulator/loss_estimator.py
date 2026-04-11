@@ -7,10 +7,10 @@ token balances before and after simulation.
 """
 
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import structlog
 
-from web3 import Web3, AsyncWeb3
+from web3 import AsyncWeb3
 from web3.types import TxParams
 
 from .financial_impact import FinancialImpactCalculator, PriceOracle
@@ -62,7 +62,7 @@ class LossEstimator:
                 return {"loss_usd": Decimal("0.0"), "loss_by_token": {}, "primary_token": None, "primary_token_symbol": None}
             
             # Step 2: Get balances before
-            balances_before = await self._get_balances(web3, protected_addresses, watched_tokens)
+            await self._get_balances(web3, protected_addresses, watched_tokens)
             
             # Step 3: Execute transaction (simulate)
             try:
@@ -74,7 +74,6 @@ class LossEstimator:
                 # Step 4: Get balances after (would need actual execution or trace)
                 # For now, we'll use the state diff fingerprint approach
                 # This is a placeholder - real implementation would compare actual balances
-                balances_after = balances_before  # Placeholder
                 
             except Exception as e:
                 logger.warning("simulation_execution_failed", error=str(e))

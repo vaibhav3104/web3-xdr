@@ -22,10 +22,8 @@ Bridge Protocols Monitored:
 - Multichain (compromised - forensic)
 """
 
-import asyncio
-import json
 from datetime import datetime, timezone
-from typing import AsyncGenerator, Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
 import structlog

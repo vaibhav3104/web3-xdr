@@ -6,43 +6,29 @@ Phase 3: Invariants that are protocol-aware and use bridge adapters.
 """
 
 from decimal import Decimal
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Set
+from typing import Dict
 import structlog
 
 from .base import Invariant, InvariantContext, InvariantType
 from ..models.events import SecurityEvent, EventStatus
 from ..models.invariants import InvariantResult, ViolationSeverity
 from ..bridges.registry import BridgeAdapterRegistry
-from ..bridges.adapters.base import BridgeEventSemantic, ExpectedAmounts
-from typing import List
+from ..bridges.adapters.base import BridgeEventSemantic
 
 logger = structlog.get_logger(__name__)
 
 
 class MintBurnInvariant(Invariant):
-    """Mint/Burn Parity Invariant - for Wormhole-style bridges."""
-    
-    def __init__(
-        self,
-        protocol_id: str,
-        tolerance_bps: int = 50,
-        max_latency_seconds: int = 900
-    ):
-        super().__init__()
-        self.name = f"MINT_BURN_PARITY_{protocol_id}"
-        self.description = f"Mint/burn parity for {protocol_id}"
-        self.invariant_type = InvariantType.ECONOMIC
     """
     Mint/Burn Parity Invariant (for Wormhole-style bridges).
-    
+
     Applies ONLY to protocols that use canonical mint/burn:
     - Lock on source → Mint on dest
     - Burn on dest → Unlock on source
-    
+
     Checks: Mint Amount <= Lock Amount (with tolerance)
     """
-    
+
     def __init__(
         self,
         protocol_id: str,
@@ -172,28 +158,16 @@ class MintBurnInvariant(Invariant):
 
 
 class LiquidityInvariant(Invariant):
-    """Liquidity Bridge Parity - for Stargate/Across/Hop."""
-    
-    def __init__(
-        self,
-        protocol_id: str,
-        tolerance_bps: int = 50,
-        max_latency_seconds: int = 300
-    ):
-        super().__init__()
-        self.name = f"LIQUIDITY_PARITY_{protocol_id}"
-        self.description = f"Liquidity parity for {protocol_id}"
-        self.invariant_type = InvariantType.ECONOMIC
     """
     Liquidity Bridge Parity (for Stargate/Across/Hop).
-    
+
     Applies ONLY to liquidity bridges:
     - Deposit → Fill (with fees)
     - NOT mint/burn - uses existing pool liquidity
-    
+
     Checks: Fill Amount <= Deposit Amount * (1 - MaxFee) + tolerance
     """
-    
+
     def __init__(
         self,
         protocol_id: str,
@@ -307,19 +281,12 @@ class LiquidityInvariant(Invariant):
 
 
 class SequenceInvariant(Invariant):
-    """Sequence Continuity - for messaging protocols."""
-    
-    def __init__(self, protocol_id: str):
-        super().__init__()
-        self.name = f"SEQUENCE_CONTINUITY_{protocol_id}"
-        self.description = f"Sequence continuity for {protocol_id}"
-        self.invariant_type = InvariantType.TEMPORAL
     """
     Sequence Continuity Invariant (for messaging protocols).
-    
+
     Checks for skipped nonces/sequences in messaging protocols.
     """
-    
+
     def __init__(self, protocol_id: str):
         super().__init__(
             name=f"SEQUENCE_CONTINUITY_{protocol_id}",
