@@ -82,6 +82,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - DATABASE_URL=postgresql://xdr:xdr_password@postgres:5432/web3_xdr
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-sentinel3-dev-admin-key}
     depends_on:
       postgres:
         condition: service_healthy
