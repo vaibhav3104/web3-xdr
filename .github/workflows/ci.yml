@@ -141,6 +141,16 @@ jobs:
             -e REDIS_URL="" \
             -p 8080:8080 \
             sentinel3:${{ github.sha }}
-          sleep 5
-          curl -sf http://localhost:8080/health | grep -q healthy
+          echo "Waiting for API to start..."
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8080/health | grep -q healthy; then
+              echo "Health check passed on attempt $i"
+              docker stop smoke-api
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed after 30s"
+          docker logs smoke-api
           docker stop smoke-api
+          exit 1
