@@ -40,21 +40,26 @@ class SolanaListener(ChainListener):
         # Program ID to bridge mapping
         self._program_bridges: Dict[str, str] = {}
     
-    async def connect(self):
-        """Connect to Solana RPC."""
+    async def connect(self) -> bool:
+        """Connect to Solana RPC. Returns True on success."""
         import httpx
         self._http_client = httpx.AsyncClient(timeout=30.0)
-        
+
         # Test connection
-        response = await self._rpc_call("getHealth")
-        if response.get("result") != "ok":
-            logger.warning("solana_node_not_healthy", response=response)
-        
+        try:
+            response = await self._rpc_call("getHealth")
+            if response.get("result") != "ok":
+                logger.warning("solana_node_not_healthy", response=response)
+        except Exception as e:
+            logger.warning("solana_connect_failed", chain_id=self.chain_id, error=str(e))
+            return False
+
         logger.info(
             "solana_connected",
             chain_id=self.chain_id,
             rpc_url=self.config.rpc_url[:50] + "..."
         )
+        return True
     
     async def disconnect(self):
         """Disconnect from Solana RPC."""
@@ -340,29 +345,55 @@ class SolanaListener(ChainListener):
             return Severity.LOW
         return Severity.INFO
     
-    async def subscribe_to_events(self) -> AsyncIterator[SecurityEvent]:
+    async def listen_events(self) -> AsyncIterator[SecurityEvent]:
         """
-        Subscribe to real-time events.
-        
-        Uses polling since WebSocket subscription requires different client.
+        Poll for new blocks and yield security events.
+        Compatible with the non-EVM listener runner interface.
         """
+        self.is_running = True
+        if self.last_processed_block == 0:
+            self.last_processed_block = await self.get_latest_block()
+            logger.info("solana_listener_starting_at_slot", slot=self.last_processed_block)
+
         while self.is_running:
             try:
                 latest = await self.get_latest_block()
                 if latest > self.last_processed_block:
-                    # Process in batches
                     start = self.last_processed_block + 1
                     end = min(latest, start + self.config.max_blocks_per_batch)
-                    
+
                     for slot in range(start, end + 1):
-                        await self.process_block(slot)
+                        try:
+                            response = await self._rpc_call(
+                                "getBlock",
+                                [slot, {
+                                    "encoding": "jsonParsed",
+                                    "transactionDetails": "full",
+                                    "rewards": False,
+                                    "maxSupportedTransactionVersion": 0
+                                }]
+                            )
+                            if "error" in response or not response.get("result"):
+                                continue
+
+                            block = response["result"]
+                            block_timestamp = datetime.utcfromtimestamp(block.get("blockTime", 0))
+
+                            for tx in block.get("transactions", []):
+                                events = await self._parse_transaction(tx, slot, block_timestamp)
+                                for event in events:
+                                    yield event
+                        except Exception as e:
+                            logger.warning("solana_slot_error", slot=slot, error=str(e))
+
                         self.last_processed_block = slot
-                
+
                 await asyncio.sleep(self.config.poll_interval_seconds)
-                yield  # Required for async generator
-                
+
+            except asyncio.CancelledError:
+                logger.info("solana_listener_cancelled", chain_id=self.chain_id)
+                break
             except Exception as e:
-                logger.error("solana_subscription_error", error=str(e))
+                logger.error("solana_listen_error", error=str(e))
                 await asyncio.sleep(5)
-                yield
 

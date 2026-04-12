@@ -610,20 +610,49 @@ class Sentinel3Worker:
             if not rpc_url:
                 continue
 
+            # Build base config fields from YAML dict
+            base_kwargs = dict(
+                chain_id=chain_id,
+                chain_name=chain_config.get("chain_name", chain_id),
+                rpc_url=rpc_url,
+                ws_url=chain_config.get("ws_url"),
+                bridge_contracts=chain_config.get("bridge_contracts", []),
+                token_contracts=chain_config.get("token_contracts", []),
+                poll_interval_seconds=chain_config.get("poll_interval_seconds", 1.0),
+                confirmations_required=chain_config.get("confirmations_required", 1),
+            )
+
             try:
                 listener = None
                 if chain_type == "solana":
                     from src.telemetry.solana_listener import SolanaListener
-                    listener = SolanaListener(chain_config)
+                    from src.telemetry.base import ListenerConfig
+                    cfg = ListenerConfig(**base_kwargs)
+                    listener = SolanaListener(cfg)
                 elif chain_type in ("cosmos", "ibc"):
-                    from src.telemetry.cosmos_listener import CosmosListener
-                    listener = CosmosListener(chain_config)
+                    from src.telemetry.cosmos_listener import CosmosListener, CosmosConfig
+                    cfg = CosmosConfig(
+                        **base_kwargs,
+                        tendermint_rpc=rpc_url,
+                        ibc_channels=chain_config.get("ibc_channels", []),
+                    )
+                    listener = CosmosListener(cfg)
                 elif chain_type in ("aptos", "sui", "move"):
-                    from src.telemetry.aptos_listener import AptosListener
-                    listener = AptosListener(chain_config)
+                    from src.telemetry.aptos_listener import AptosListener, AptosConfig
+                    cfg = AptosConfig(
+                        **base_kwargs,
+                        rest_api=rpc_url,
+                        chain_type=chain_type,
+                        bridge_modules=chain_config.get("bridge_modules", []),
+                    )
+                    listener = AptosListener(cfg)
                 elif chain_type == "near":
-                    from src.telemetry.near_listener import NearListener
-                    listener = NearListener(chain_config)
+                    from src.telemetry.near_listener import NearListener, NearConfig
+                    cfg = NearConfig(
+                        **base_kwargs,
+                        bridge_accounts=chain_config.get("bridge_contracts", []),
+                    )
+                    listener = NearListener(cfg)
 
                 if listener:
                     connected = await listener.connect()
