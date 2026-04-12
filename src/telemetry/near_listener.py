@@ -128,15 +128,15 @@ class NearListener(RobustNonEVMListener):
                         method=method,
                         error=data["error"]
                     )
-                    return None
+                    raise Exception(f"Near RPC error: {data['error']}")
                 return data.get("result")
-            elif resp.status >= 500:
+            else:
                 raise aiohttp.ClientResponseError(
                     resp.request_info,
                     resp.history,
-                    status=resp.status
+                    status=resp.status,
+                    message=f"HTTP {resp.status}"
                 )
-            return None
     
     async def _get_latest_block_height(self) -> int:
         """Get the latest block height from Near."""

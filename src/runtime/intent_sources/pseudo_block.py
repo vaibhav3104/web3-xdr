@@ -74,11 +74,13 @@ class PseudoIntentBlockSource(PendingTxSource):
                 if isinstance(val, int):
                     return val
                 if isinstance(val, str):
+                    val = val.strip()
                     return int(val, 16) if val.startswith("0x") else int(val)
                 return int(val)
 
             latest_block = _to_int(latest_block)
             self.last_processed_block = _to_int(self.last_processed_block)
+
             
             if latest_block <= self.last_processed_block:
                 return []  # No new blocks
@@ -98,7 +100,8 @@ class PseudoIntentBlockSource(PendingTxSource):
                     continue
                 
                 block_hash = block.get("hash", "")
-                block_timestamp = datetime.fromtimestamp(block.get("timestamp", 0), tz=timezone.utc)
+                raw_ts = block.get("timestamp", 0)
+                block_timestamp = datetime.fromtimestamp(_to_int(raw_ts) if raw_ts else 0, tz=timezone.utc)
                 
                 # Get transactions
                 tx_hashes = block.get("transactions", [])
@@ -167,11 +170,11 @@ class PseudoIntentBlockSource(PendingTxSource):
             if not data.startswith("0x"):
                 data = "0x" + data
             
-            # Extract value
+            # Extract value (may be hex string from RPC)
             value = tx_data.get("value", 0)
-            if isinstance(value, (int, str)):
-                value = int(value) if isinstance(value, str) else value
-            else:
+            if isinstance(value, str):
+                value = int(value, 16) if value.startswith("0x") else int(value)
+            elif not isinstance(value, int):
                 value = 0
             
             # Extract addresses
@@ -183,10 +186,19 @@ class PseudoIntentBlockSource(PendingTxSource):
             if to_addr and isinstance(to_addr, bytes):
                 to_addr = to_addr.hex()
             
-            # Extract gas info
-            gas_limit = tx_data.get("gas")
-            gas_price = tx_data.get("gasPrice")
-            max_fee_per_gas = tx_data.get("maxFeePerGas")
+            # Extract gas info (may be hex strings from RPC)
+            def _safe_int(v):
+                if v is None:
+                    return None
+                if isinstance(v, int):
+                    return v
+                if isinstance(v, str):
+                    return int(v, 16) if v.startswith("0x") else int(v)
+                return int(v)
+
+            gas_limit = _safe_int(tx_data.get("gas"))
+            gas_price = _safe_int(tx_data.get("gasPrice"))
+            max_fee_per_gas = _safe_int(tx_data.get("maxFeePerGas"))
             
             return PendingTx(
                 tx_hash=tx_hash,
