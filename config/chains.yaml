@@ -329,6 +329,10 @@ chains:
     chain_name: "Injective"
     chain_type: "cosmos"
     rpc_url: "https://sentry.tm.injective.network"
+    fallback_rpcs:
+      - "https://injective-rpc.publicnode.com:443"
+      - "https://rpc-injective.goldenratiostaking.net"
+      - "https://injective-rpc.polkachu.com"
     ws_url: "wss://sentry.tm.injective.network/websocket"
     bridge_contracts:
       - "inj1"
