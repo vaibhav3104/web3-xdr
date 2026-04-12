@@ -548,14 +548,37 @@ class RealBytecodeFeatureExtractor:
                 elif name in ["implementation", "admin", "upgradeTo"]:
                     features["has_proxy_pattern"] = True
         
-        # Detect reentrancy pattern: CALL followed by SSTORE
+        # Detect reentrancy pattern: CALL opcode (0xf1) followed by SSTORE (0x55)
+        # Parse opcodes properly instead of naive hex string search to avoid
+        # matching data bytes embedded in PUSH instructions
         if features["call_count"] > 0 and features["sstore_count"] > 0:
-            # Simple heuristic - proper detection needs control flow analysis
-            call_pos = bytecode.lower().find("f1")
-            if call_pos > 0:
-                remaining = bytecode[call_pos:call_pos + 200]  # Next 100 bytes
-                if "55" in remaining:  # SSTORE after CALL
-                    features["has_reentrancy_pattern"] = True
+            try:
+                bc_bytes = bytes.fromhex(bytecode.lower().replace("0x", ""))
+                opcodes_parsed = []
+                idx = 0
+                while idx < len(bc_bytes):
+                    op = bc_bytes[idx]
+                    opcodes_parsed.append(op)
+                    # Skip PUSH data bytes (0x60-0x7f push 1-32 bytes)
+                    if 0x60 <= op <= 0x7F:
+                        idx += op - 0x5F
+                    idx += 1
+                # Check for CALL (0xf1) followed by SSTORE (0x55) within 30 opcodes
+                call_indices = [i for i, op in enumerate(opcodes_parsed) if op == 0xF1]
+                sstore_indices = [i for i, op in enumerate(opcodes_parsed) if op == 0x55]
+                for ci in call_indices:
+                    for si in sstore_indices:
+                        if ci < si < ci + 30:
+                            # Check for reentrancy guard (SLOAD+EQ/ISZERO+JUMPI before CALL)
+                            pre = opcodes_parsed[max(0, ci - 30):ci]
+                            has_guard = 0x54 in pre and (0x14 in pre or 0x15 in pre) and 0x57 in pre
+                            if not has_guard:
+                                features["has_reentrancy_pattern"] = True
+                            break
+                    if features.get("has_reentrancy_pattern"):
+                        break
+            except (ValueError, IndexError):
+                pass
         
         # Normalize counts
         features["call_count_normalized"] = min(features["call_count"] / 50, 1.0)

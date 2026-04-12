@@ -197,8 +197,8 @@ class AutoContractCollector:
                             requested_model=model_type,
                             fallback="random_forest"
                         )
-                from ..models.contract_classifier import ContractThreatClassifier
-                self._classifier = ContractThreatClassifier()
+                        from ..models.contract_classifier import ContractThreatClassifier
+                        self._classifier = ContractThreatClassifier()
                         
             except Exception as e:
                 logger.warning("deep_classifier_load_failed", error=str(e), model_type=model_type)
@@ -563,7 +563,8 @@ class AutoContractCollector:
                     cat = "unknown_threat"
                 
                 threat_category = cat.value if hasattr(cat, 'value') else str(cat)
-                ml_risk_score = result.risk_score
+                # Normalize to 0-1 scale (classifier returns 0-100)
+                ml_risk_score = result.risk_score / 100.0 if result.risk_score > 1.0 else result.risk_score
                 ml_confidence = result.confidence
             else:
                 # Fallback to rule-based analysis
