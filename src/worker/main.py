@@ -598,6 +598,47 @@ class Sentinel3Worker:
         self.finality_manager.register_reorg_handler(invalidate_reorged_events)
         logger.info("reorg_handler_registered", trackers=len(self.finality_manager.trackers))
 
+        # Initialize non-EVM chain listeners (Solana, Cosmos, Aptos, Sui, Near)
+        self.non_evm_listeners = {}
+        for chain_config in self.config.get("chains", []):
+            chain_id = chain_config.get("chain_id", "")
+            chain_type = chain_config.get("chain_type", "evm").lower()
+            if chain_type == "evm":
+                continue
+
+            rpc_url = chain_config.get("rpc_url", "")
+            if not rpc_url:
+                continue
+
+            try:
+                listener = None
+                if chain_type == "solana":
+                    from src.telemetry.solana_listener import SolanaListener
+                    listener = SolanaListener(chain_config)
+                elif chain_type in ("cosmos", "ibc"):
+                    from src.telemetry.cosmos_listener import CosmosListener
+                    listener = CosmosListener(chain_config)
+                elif chain_type in ("aptos", "sui", "move"):
+                    from src.telemetry.aptos_listener import AptosListener
+                    listener = AptosListener(chain_config)
+                elif chain_type == "near":
+                    from src.telemetry.near_listener import NearListener
+                    listener = NearListener(chain_config)
+
+                if listener:
+                    connected = await listener.connect()
+                    if connected:
+                        self.non_evm_listeners[chain_id] = listener
+                        logger.info("non_evm_listener_connected", chain_id=chain_id, chain_type=chain_type)
+                    else:
+                        logger.warning("non_evm_listener_connect_failed", chain_id=chain_id)
+            except Exception as e:
+                logger.warning("non_evm_listener_init_failed", chain_id=chain_id, error=str(e))
+
+        if self.non_evm_listeners:
+            logger.info("non_evm_listeners_initialized", count=len(self.non_evm_listeners),
+                        chains=list(self.non_evm_listeners.keys()))
+
         # Initialize Economic Invariant Engine for bridge exploit detection
         try:
             from src.invariants.engine import InvariantEngine
@@ -669,10 +710,22 @@ class Sentinel3Worker:
             except Exception as e:
                 logger.warning("scanner_auto_start_failed", error=str(e), exc_info=True)
     
+    async def _run_non_evm_listener(self, chain_id: str, listener):
+        """Run a non-EVM chain listener, saving events to the database."""
+        logger.info("non_evm_listener_started", chain_id=chain_id)
+        try:
+            async for event in listener.listen_events():
+                try:
+                    await self._save_event_to_db(event)
+                except Exception as e:
+                    logger.warning("non_evm_event_save_failed", chain_id=chain_id, error=str(e))
+        except Exception as e:
+            logger.error("non_evm_listener_crashed", chain_id=chain_id, error=str(e))
+
     async def ingestion_loop(self):
         """Loop A: Ingest events from chains."""
         logger.info("ingestion_loop_started")
-        
+
         # Track chains that successfully process
         successful_chains = set()
         iteration_count = 0
@@ -2469,6 +2522,14 @@ class Sentinel3Worker:
         ingestion_task = asyncio.create_task(self.ingestion_loop())
         detection_task = asyncio.create_task(self.detection_loop())
 
+        # Start non-EVM listener tasks
+        non_evm_tasks = []
+        for chain_id, listener in getattr(self, 'non_evm_listeners', {}).items():
+            task = asyncio.create_task(self._run_non_evm_listener(chain_id, listener))
+            non_evm_tasks.append(task)
+        if non_evm_tasks:
+            logger.info("non_evm_ingestion_started", count=len(non_evm_tasks))
+
         # Start runtime loop if enabled
         runtime_task = None
         if self.runtime_enabled and RUNTIME_AVAILABLE:
@@ -2720,7 +2781,7 @@ class Sentinel3Worker:
         logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled, continuous_learning=continuous_learning_enabled)
 
         # Wait for tasks
-        tasks = [ingestion_task, detection_task, uptime_task, feedback_task]
+        tasks = [ingestion_task, detection_task, uptime_task, feedback_task] + non_evm_tasks
         if runtime_task:
             tasks.append(runtime_task)
         if continuous_learning_task:
