@@ -345,6 +345,11 @@ class SolanaListener(ChainListener):
             return Severity.LOW
         return Severity.INFO
     
+    async def subscribe_to_events(self) -> AsyncIterator[SecurityEvent]:
+        """Alias for listen_events (satisfies abstract base class)."""
+        async for event in self.listen_events():
+            yield event
+
     async def listen_events(self) -> AsyncIterator[SecurityEvent]:
         """
         Poll for new blocks and yield security events.
