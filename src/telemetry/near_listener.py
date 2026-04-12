@@ -350,11 +350,50 @@ class NearListener(RobustNonEVMListener):
         
         # Deploy contract action
         elif "DeployContract" in action:
+            # Extract WASM bytecode from the deploy action
+            deploy_data = action.get("DeployContract", {})
+            wasm_code_b64 = deploy_data.get("code", "")
+            wasm_size = 0
+            wasm_analysis = {}
+
+            if wasm_code_b64:
+                try:
+                    wasm_bytes = base64.b64decode(wasm_code_b64)
+                    wasm_size = len(wasm_bytes)
+                    # Run WASM feature extraction
+                    from src.ai.data.wasm_extractor import WasmFeatureExtractor
+                    extractor = WasmFeatureExtractor()
+                    features = extractor.extract_features(wasm_bytes)
+                    wasm_analysis = {
+                        "is_valid_wasm": features.is_valid_wasm,
+                        "function_count": features.function_count,
+                        "import_count": features.import_count,
+                        "export_count": features.export_count,
+                        "dangerous_import_count": features.dangerous_import_count,
+                        "has_external_call_imports": features.has_external_call_imports,
+                        "has_admin_exports": features.has_admin_exports,
+                        "has_proxy_pattern": features.has_proxy_pattern,
+                        "suspicious_export_count": features.suspicious_export_count,
+                        "risk_score": features.risk_score,
+                        "risk_factors": features.risk_factors,
+                        "likely_contract_type": features.likely_contract_type,
+                        "export_names": features.export_names[:20],
+                    }
+                except Exception as e:
+                    logger.warning("near_wasm_analysis_failed", error=str(e))
+
+            # Determine severity based on WASM analysis
+            severity = Severity.MEDIUM
+            if wasm_analysis.get("risk_score", 0) >= 0.3:
+                severity = Severity.HIGH
+            if wasm_analysis.get("risk_score", 0) >= 0.5:
+                severity = Severity.CRITICAL
+
             events.append(SecurityEvent(
                 event_id=f"near_{tx_hash}_deploy",
                 chain_id=self.config.chain_id,
                 event_type=EventType.CONTRACT_DEPLOYED,
-                severity=Severity.MEDIUM,
+                severity=severity,
                 block_timestamp=datetime.now(timezone.utc),
                 tx_hash=tx_hash,
                 block_number=height,
@@ -365,7 +404,9 @@ class NearListener(RobustNonEVMListener):
                     "action": "DeployContract",
                     "method_name": "deploy_contract",
                     "chain_type": "near",
-                    "deployed_to": receiver
+                    "deployed_to": receiver,
+                    "wasm_size": wasm_size,
+                    "wasm_analysis": wasm_analysis,
                 }
             ))
         

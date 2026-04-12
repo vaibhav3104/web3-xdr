@@ -740,16 +740,65 @@ class Sentinel3Worker:
                 logger.warning("scanner_auto_start_failed", error=str(e), exc_info=True)
     
     async def _run_non_evm_listener(self, chain_id: str, listener):
-        """Run a non-EVM chain listener, saving events to the database."""
+        """Run a non-EVM chain listener, saving events and analyzing contracts."""
         logger.info("non_evm_listener_started", chain_id=chain_id)
         try:
             async for event in listener.listen_events():
                 try:
                     await self._save_event_to_db(event)
+
+                    # Analyze WASM contracts from non-EVM deployments
+                    if event.event_type == EventType.CONTRACT_DEPLOYED:
+                        await self._analyze_non_evm_contract(chain_id, event)
                 except Exception as e:
                     logger.warning("non_evm_event_save_failed", chain_id=chain_id, error=str(e))
         except Exception as e:
             logger.error("non_evm_listener_crashed", chain_id=chain_id, error=str(e))
+
+    async def _analyze_non_evm_contract(self, chain_id: str, event: SecurityEvent):
+        """Analyze a non-EVM contract deployment using WASM feature extraction."""
+        try:
+            raw = event.raw_event or {}
+            chain_type = raw.get("chain_type", "unknown")
+            wasm_analysis = raw.get("wasm_analysis", {})
+
+            # Near contracts include inline WASM analysis from the listener
+            if chain_type == "near" and wasm_analysis:
+                risk_score = wasm_analysis.get("risk_score", 0)
+                risk_factors = wasm_analysis.get("risk_factors", [])
+                contract_type = wasm_analysis.get("likely_contract_type", "unknown")
+
+                if risk_score >= 0.25:
+                    logger.warning(
+                        "non_evm_contract_threat",
+                        chain=chain_id,
+                        chain_type=chain_type,
+                        contract=event.contract_address,
+                        risk_score=f"{risk_score:.2f}",
+                        contract_type=contract_type,
+                        risk_factors=risk_factors,
+                    )
+                else:
+                    logger.info(
+                        "non_evm_contract_safe",
+                        chain=chain_id,
+                        contract=event.contract_address,
+                        risk_score=f"{risk_score:.2f}",
+                        contract_type=contract_type,
+                    )
+
+            # Cosmos/Injective contracts - log the deployment for tracking
+            elif chain_type == "cosmos":
+                logger.info(
+                    "cosmos_contract_deployed",
+                    chain=chain_id,
+                    contract=event.contract_address,
+                    code_id=raw.get("code_id", ""),
+                    action=raw.get("action", ""),
+                )
+
+        except Exception as e:
+            logger.warning("non_evm_contract_analysis_failed", chain_id=chain_id, error=str(e))
 
     async def ingestion_loop(self):
         """Loop A: Ingest events from chains."""

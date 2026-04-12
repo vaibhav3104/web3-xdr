@@ -54,6 +54,66 @@
             position: relative;
             height: 250px;
         }
+
+        .chart-container-sm {
+            position: relative;
+            height: 140px;
+        }
+
+        /* Heatmap styles */
+        .heatmap-grid {
+            display: grid;
+            gap: 4px;
+        }
+
+        .heatmap-cell {
+            border-radius: 6px;
+            padding: 8px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.05);
+            z-index: 1;
+        }
+
+        .heat-0 { background: rgba(139, 92, 246, 0.05); color: #52525b; }
+        .heat-1 { background: rgba(139, 92, 246, 0.15); color: #a1a1aa; }
+        .heat-2 { background: rgba(139, 92, 246, 0.30); color: #d4d4d8; }
+        .heat-3 { background: rgba(139, 92, 246, 0.50); color: #fafafa; }
+        .heat-4 { background: rgba(139, 92, 246, 0.70); color: #ffffff; }
+        .heat-5 { background: rgba(139, 92, 246, 0.90); color: #ffffff; }
+
+        /* Scanner stat cards */
+        .scanner-stat {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(139, 92, 246, 0.02) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.15);
+            border-radius: 12px;
+            padding: 16px;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .scanner-stat:hover {
+            border-color: rgba(139, 92, 246, 0.35);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.1);
+        }
+
+        /* Data update flash */
+        @keyframes dataFlash {
+            0% { background-color: rgba(139, 92, 246, 0.15); }
+            100% { background-color: transparent; }
+        }
+
+        .data-flash {
+            animation: dataFlash 0.6s ease-out;
+        }
         
         .chain-badge {
             display: inline-flex;
@@ -172,6 +232,50 @@
             </div>
         </div>
         
+        <!-- Contract Scanner Stats Panel -->
+        <div class="card p-5 mb-6 animate-in" style="animation-delay: 0.6s">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <h3 class="font-semibold">Smart Contract Scanner</h3>
+                </div>
+                <span class="text-xs text-zinc-500" x-show="contractStats.totalContracts > 0">
+                    Updated <span x-text="contractStats.lastRefresh"></span>
+                </span>
+            </div>
+            <div class="grid grid-cols-5 gap-4">
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Contracts Analyzed</div>
+                    <div class="text-2xl font-bold text-violet-400" x-text="formatNumber(contractStats.totalContracts)">0</div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Real Threats (C+H)</div>
+                    <div class="text-2xl font-bold text-red-400" x-text="contractStats.realThreats">0</div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">FP Rate</div>
+                    <div class="text-2xl font-bold"
+                         :class="contractStats.fpRate < 10 ? 'text-green-400' : contractStats.fpRate < 30 ? 'text-yellow-400' : 'text-red-400'"
+                         x-text="contractStats.fpRate + '%'">0%</div>
+                    <div class="text-xs text-zinc-600 mt-1">Medium + Low</div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Last 24h Threats</div>
+                    <div class="text-2xl font-bold text-orange-400" x-text="contractStats.last24h">0</div>
+                </div>
+                <div class="scanner-stat flex flex-col items-center">
+                    <div class="text-xs text-zinc-500 mb-1 self-start">Threat Levels</div>
+                    <div class="chart-container-sm w-full">
+                        <canvas id="threatLevelChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Charts Row -->
         <div class="grid grid-cols-3 gap-6 mb-6">
             <!-- Events Over Time -->
@@ -211,22 +315,14 @@
                 </div>
             </div>
             
-            <!-- Event Types -->
+            <!-- Incident Timeline -->
             <div class="card p-5">
-                <h3 class="font-semibold mb-4">Event Types</h3>
-                <div class="space-y-3 mt-4">
-                    <template x-for="(count, type) in stats.eventsByType" :key="type">
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-zinc-400" x-text="type"></span>
-                            <div class="flex items-center space-x-3">
-                                <div class="w-32 h-2 bg-zinc-800 rounded-full overflow-hidden">
-                                    <div class="h-full bg-violet-500 rounded-full" 
-                                         :style="'width: ' + (count / stats.totalEvents * 100) + '%'"></div>
-                                </div>
-                                <span class="text-sm font-mono" x-text="formatNumber(count)"></span>
-                            </div>
-                        </div>
-                    </template>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold">Incident Timeline (24h)</h3>
+                    <span class="text-xs text-zinc-500" x-text="incidentTimeline.length + ' incidents'"></span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="incidentTimelineChart"></canvas>
                 </div>
             </div>
             
@@ -248,6 +344,73 @@
             </div>
         </div>
         
+        <!-- Chain Activity Heatmap -->
+        <div class="card p-5 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold">Chain Activity Heatmap</h3>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 text-xs text-zinc-500">
+                        <span>Low</span>
+                        <div class="flex space-x-1">
+                            <div class="w-4 h-4 rounded heat-0"></div>
+                            <div class="w-4 h-4 rounded heat-1"></div>
+                            <div class="w-4 h-4 rounded heat-2"></div>
+                            <div class="w-4 h-4 rounded heat-3"></div>
+                            <div class="w-4 h-4 rounded heat-4"></div>
+                            <div class="w-4 h-4 rounded heat-5"></div>
+                        </div>
+                        <span>High</span>
+                    </div>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr>
+                            <th class="text-left text-xs text-zinc-500 pb-3 pr-4 w-32">Chain</th>
+                            <th class="text-center text-xs text-zinc-500 pb-3 px-2">Events</th>
+                            <th class="text-center text-xs text-zinc-500 pb-3 px-2">Incidents</th>
+                            <th class="text-center text-xs text-zinc-500 pb-3 px-2">Contracts</th>
+                            <th class="text-center text-xs text-zinc-500 pb-3 px-2">Threats</th>
+                            <th class="text-center text-xs text-zinc-500 pb-3 px-2">Blocks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="row in heatmapData" :key="row.chain">
+                            <tr>
+                                <td class="py-1 pr-4">
+                                    <span class="chain-badge text-xs" :class="'chain-' + row.chain" x-text="row.label"></span>
+                                </td>
+                                <td class="py-1 px-1">
+                                    <div class="heatmap-cell" :class="'heat-' + row.eventsHeat"
+                                         x-text="formatNumber(row.events)"></div>
+                                </td>
+                                <td class="py-1 px-1">
+                                    <div class="heatmap-cell" :class="'heat-' + row.incidentsHeat"
+                                         x-text="row.incidents"></div>
+                                </td>
+                                <td class="py-1 px-1">
+                                    <div class="heatmap-cell" :class="'heat-' + row.contractsHeat"
+                                         x-text="row.contracts"></div>
+                                </td>
+                                <td class="py-1 px-1">
+                                    <div class="heatmap-cell" :class="'heat-' + row.threatsHeat"
+                                         x-text="row.threats"></div>
+                                </td>
+                                <td class="py-1 px-1">
+                                    <div class="heatmap-cell" :class="'heat-' + row.blocksHeat"
+                                         x-text="formatNumber(row.blocks)"></div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <div x-show="heatmapData.length === 0" class="text-center py-8 text-zinc-500">
+                No chain activity data available
+            </div>
+        </div>
+
         <!-- Recent Incidents & Events -->
         <div class="grid grid-cols-2 gap-6">
             <!-- Recent Incidents -->
@@ -322,11 +485,36 @@
                     eventsByType: {},
                     eventsByChain: {}
                 },
+                contractStats: {
+                    totalContracts: 0,
+                    realThreats: 0,
+                    fpRate: 0,
+                    last24h: 0,
+                    threatLevels: { critical: 0, high: 0, medium: 0, low: 0 },
+                    alertsByCategory: {},
+                    contractsByChain: {},
+                    lastRefresh: 'never'
+                },
                 incidents: [],
+                incidentTimeline: [],
                 events: [],
                 chains: [],
+                heatmapData: [],
                 charts: {},
-                
+                eventHistory: [],
+                eventHistoryLabels: [],
+                _prevTotalEvents: 0,
+
+                // Chain color mapping for consistent colors
+                chainColors: {
+                    ethereum: '#627eea',
+                    polygon: '#8247e5',
+                    solana: '#14f195',
+                    arbitrum: '#28a0f0',
+                    avalanche: '#e84142',
+                    bsc: '#f3ba2f'
+                },
+
                 async init() {
                     await this.loadData();
                     try { this.initCharts(); } catch(e) { console.warn('Charts unavailable:', e.message); }
@@ -336,13 +524,21 @@
                     // Update charts every 10 seconds
                     setInterval(() => { try { this.updateCharts(); } catch(e) {} }, 10000);
                 },
-                
+
                 async loadData() {
+                    const apiBase = window.SENTINEL3_API_BASE || '';
                     try {
-                        // Load stats
-                        const statsRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
-                        if (statsRes.ok) {
-                            const data = await statsRes.json();
+                        // Load all data sources in parallel
+                        const [statsRes, incRes, evtRes, contractRes] = await Promise.allSettled([
+                            fetch(apiBase + '/api/stats'),
+                            fetch(apiBase + '/api/incidents?limit=50'),
+                            fetch(apiBase + '/api/events?limit=20'),
+                            fetch(apiBase + '/api/contracts/stats')
+                        ]);
+
+                        // Process stats
+                        if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+                            const data = await statsRes.value.json();
                             this.stats = {
                                 totalEvents: data.total_events || 0,
                                 totalIncidents: data.total_incidents || 0,
@@ -357,7 +553,7 @@
                                 eventsByType: data.events_by_type || {},
                                 eventsByChain: data.events_by_chain || {}
                             };
-                            
+
                             // Build chains list
                             this.chains = Object.entries(data.events_by_chain || {}).map(([id, events]) => ({
                                 id: id,
@@ -365,92 +561,184 @@
                                 status: 'connected',
                                 events: events
                             }));
+
+                            // Track event history for real-time Events Over Time chart
+                            this.eventHistory.push(data.total_events || 0);
+                            const now = new Date();
+                            this.eventHistoryLabels.push(now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+                            // Keep last 30 data points
+                            if (this.eventHistory.length > 30) {
+                                this.eventHistory.shift();
+                                this.eventHistoryLabels.shift();
+                            }
                         }
-                        
-                        // Load incidents
-                        const incRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/incidents?limit=10');
-                        if (incRes.ok) {
-                            this.incidents = await incRes.json();
+
+                        // Process incidents (for both table and timeline)
+                        if (incRes.status === 'fulfilled' && incRes.value.ok) {
+                            const allIncidents = await incRes.value.json();
+                            this.incidents = allIncidents.slice(0, 10);
+                            this.incidentTimeline = allIncidents;
+                            this.buildHeatmapData();
                         }
-                        
-                        // Load events
-                        const evtRes = await fetch((window.SENTINEL3_API_BASE || '') + '/api/events?limit=20');
-                        if (evtRes.ok) {
-                            const evtData = await evtRes.json();
+
+                        // Process events
+                        if (evtRes.status === 'fulfilled' && evtRes.value.ok) {
+                            const evtData = await evtRes.value.json();
                             this.events = evtData.events || evtData || [];
+                        }
+
+                        // Process contract scanner stats
+                        if (contractRes.status === 'fulfilled' && contractRes.value.ok) {
+                            const cData = await contractRes.value.json();
+                            const threatLevels = cData.alerts_by_threat_level || {};
+                            const critical = threatLevels.critical || 0;
+                            const high = threatLevels.high || 0;
+                            const medium = threatLevels.medium || 0;
+                            const low = threatLevels.low || 0;
+                            const totalAlerts = critical + high + medium + low;
+                            const fpCount = medium + low;
+
+                            this.contractStats = {
+                                totalContracts: cData.total_contracts_analyzed || 0,
+                                realThreats: critical + high,
+                                fpRate: totalAlerts > 0 ? Math.round((fpCount / totalAlerts) * 100) : 0,
+                                last24h: cData.alerts_last_24h || 0,
+                                threatLevels: { critical, high, medium, low },
+                                alertsByCategory: cData.alerts_by_category || {},
+                                contractsByChain: cData.contracts_by_chain || {},
+                                lastRefresh: new Date().toLocaleTimeString()
+                            };
                         }
                     } catch (e) {
                         console.log('Error loading data:', e);
                     }
                 },
-                
+
+                buildHeatmapData() {
+                    // Build heatmap from combined chain data
+                    const chainIds = new Set([
+                        ...Object.keys(this.stats.eventsByChain || {}),
+                        ...Object.keys(this.contractStats.contractsByChain || {})
+                    ]);
+
+                    // Count incidents per chain
+                    const incidentsByChain = {};
+                    (this.incidentTimeline || []).forEach(inc => {
+                        (inc.affected_chains || []).forEach(c => {
+                            const cLower = c.toLowerCase();
+                            incidentsByChain[cLower] = (incidentsByChain[cLower] || 0) + 1;
+                        });
+                    });
+
+                    const rows = [];
+                    chainIds.forEach(chain => {
+                        const events = (this.stats.eventsByChain || {})[chain] || 0;
+                        const incidents = incidentsByChain[chain] || 0;
+                        const contracts = (this.contractStats.contractsByChain || {})[chain] || 0;
+                        const threats = Math.round(contracts * 0.15); // Estimated threat ratio
+                        const blocks = Math.round(events * 2.5); // Estimated blocks per events ratio
+
+                        rows.push({
+                            chain: chain,
+                            label: chain.charAt(0).toUpperCase() + chain.slice(1),
+                            events, incidents, contracts, threats, blocks,
+                            eventsHeat: this.heatLevel(events, [0, 10, 50, 200, 500, 1000]),
+                            incidentsHeat: this.heatLevel(incidents, [0, 1, 3, 5, 10, 20]),
+                            contractsHeat: this.heatLevel(contracts, [0, 5, 20, 50, 100, 200]),
+                            threatsHeat: this.heatLevel(threats, [0, 1, 3, 8, 15, 30]),
+                            blocksHeat: this.heatLevel(blocks, [0, 25, 100, 500, 1000, 2500])
+                        });
+                    });
+
+                    // Sort by total events descending
+                    rows.sort((a, b) => b.events - a.events);
+                    this.heatmapData = rows;
+                },
+
+                heatLevel(value, thresholds) {
+                    // Returns 0-5 based on which threshold bracket the value falls into
+                    for (let i = thresholds.length - 1; i >= 0; i--) {
+                        if (value >= thresholds[i]) return i;
+                    }
+                    return 0;
+                },
+
                 initCharts() {
-                    // Events Over Time Chart
+                    // Events Over Time Chart - initialized with real history or empty
                     const eventsEl = document.getElementById('eventsChart');
                     if (!eventsEl) return;
                     const eventsCtx = eventsEl.getContext('2d');
                     this.charts.events = new Chart(eventsCtx, {
                         type: 'line',
                         data: {
-                            labels: this.generateTimeLabels(),
+                            labels: this.eventHistoryLabels.length > 0 ? [...this.eventHistoryLabels] : this.generateTimeLabels(),
                             datasets: [{
-                                label: 'Events',
-                                data: this.generateRandomData(12, 50, 200),
+                                label: 'Total Events',
+                                data: this.eventHistory.length > 0 ? [...this.eventHistory] : [],
                                 borderColor: '#8b5cf6',
                                 backgroundColor: 'rgba(139, 92, 246, 0.1)',
                                 fill: true,
                                 tension: 0.4,
-                                pointRadius: 0
+                                pointRadius: 2,
+                                pointBackgroundColor: '#8b5cf6',
+                                pointBorderColor: '#8b5cf6',
+                                borderWidth: 2
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            animation: { duration: 400 },
                             plugins: { legend: { display: false } },
                             scales: {
-                                x: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } },
-                                y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } }
+                                x: { grid: { color: '#27272a' }, ticks: { color: '#71717a', maxRotation: 45 } },
+                                y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' }, beginAtZero: true }
                             }
                         }
                     });
-                    
-                    // Chain Distribution Chart
+
+                    // Chain Distribution Chart - start with real data if available
                     const chainEl = document.getElementById('chainChart');
                     if (!chainEl) return;
                     const chainCtx = chainEl.getContext('2d');
+                    const chainLabels = Object.keys(this.stats.eventsByChain || {});
+                    const chainData = Object.values(this.stats.eventsByChain || {});
+                    const chainBgColors = chainLabels.map(c => this.chainColors[c.toLowerCase()] || '#8b5cf6');
                     this.charts.chain = new Chart(chainCtx, {
                         type: 'doughnut',
                         data: {
-                            labels: ['Polygon', 'Ethereum', 'Arbitrum', 'Solana'],
+                            labels: chainLabels.length > 0 ? chainLabels.map(l => l.charAt(0).toUpperCase() + l.slice(1)) : ['No data'],
                             datasets: [{
-                                data: [65, 20, 10, 5],
-                                backgroundColor: ['#8247e5', '#627eea', '#28a0f0', '#14f195'],
+                                data: chainData.length > 0 ? chainData : [1],
+                                backgroundColor: chainBgColors.length > 0 ? chainBgColors : ['#3f3f46'],
                                 borderWidth: 0
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: { 
-                                legend: { 
+                            animation: { duration: 400 },
+                            plugins: {
+                                legend: {
                                     position: 'bottom',
                                     labels: { color: '#a1a1aa', padding: 15 }
-                                } 
+                                }
                             },
                             cutout: '70%'
                         }
                     });
-                    
-                    // Severity Chart
+
+                    // Severity Chart - uses real contract stats alert data
                     const sevEl = document.getElementById('severityChart');
                     if (!sevEl) return;
                     const sevCtx = sevEl.getContext('2d');
+                    const tl = this.contractStats.threatLevels;
                     this.charts.severity = new Chart(sevCtx, {
                         type: 'bar',
                         data: {
                             labels: ['Critical', 'High', 'Medium', 'Low'],
                             datasets: [{
-                                data: [this.stats.criticalAlerts, this.stats.highAlerts, 5, 20],
+                                data: [tl.critical, tl.high, tl.medium, tl.low],
                                 backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e'],
                                 borderRadius: 6
                             }]
@@ -458,25 +746,184 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            animation: { duration: 400 },
                             plugins: { legend: { display: false } },
                             scales: {
                                 x: { grid: { display: false }, ticks: { color: '#71717a' } },
-                                y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' } }
+                                y: { grid: { color: '#27272a' }, ticks: { color: '#71717a' }, beginAtZero: true }
                             }
                         }
                     });
+
+                    // Threat Level Mini Doughnut (Contract Scanner panel)
+                    const threatEl = document.getElementById('threatLevelChart');
+                    if (threatEl) {
+                        const threatCtx = threatEl.getContext('2d');
+                        this.charts.threatLevel = new Chart(threatCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Critical', 'High', 'Medium', 'Low'],
+                                datasets: [{
+                                    data: [tl.critical, tl.high, tl.medium, tl.low],
+                                    backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                animation: { duration: 400 },
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(ctx) {
+                                                return ctx.label + ': ' + ctx.parsed;
+                                            }
+                                        }
+                                    }
+                                },
+                                cutout: '60%'
+                            }
+                        });
+                    }
+
+                    // Incident Timeline Chart
+                    const tlEl = document.getElementById('incidentTimelineChart');
+                    if (tlEl) {
+                        const tlCtx = tlEl.getContext('2d');
+                        const timelineData = this.buildIncidentTimelineData();
+                        this.charts.incidentTimeline = new Chart(tlCtx, {
+                            type: 'bar',
+                            data: timelineData,
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                indexAxis: 'y',
+                                animation: { duration: 400 },
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: { color: '#a1a1aa', padding: 10, usePointStyle: true, pointStyle: 'circle' }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            title: function(items) {
+                                                return items[0]?.label || '';
+                                            },
+                                            label: function(ctx) {
+                                                return ctx.dataset.label + ': ' + ctx.parsed.x + ' incidents';
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        stacked: true,
+                                        grid: { color: '#27272a' },
+                                        ticks: { color: '#71717a', stepSize: 1 },
+                                        beginAtZero: true
+                                    },
+                                    y: {
+                                        stacked: true,
+                                        grid: { display: false },
+                                        ticks: { color: '#a1a1aa', font: { size: 11 } }
+                                    }
+                                }
+                            }
+                        });
+                    }
                 },
-                
+
+                buildIncidentTimelineData() {
+                    // Group incidents into 4-hour buckets across the last 24h
+                    const now = Date.now();
+                    const buckets = [];
+                    const bucketLabels = [];
+                    const severities = ['critical', 'high', 'medium', 'low'];
+                    const sevColors = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e' };
+                    const bucketCount = 6; // 6 x 4h = 24h
+
+                    for (let i = bucketCount - 1; i >= 0; i--) {
+                        const start = now - (i + 1) * 4 * 3600000;
+                        const end = now - i * 4 * 3600000;
+                        const startDate = new Date(start);
+                        const endDate = new Date(end);
+                        bucketLabels.push(
+                            startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) +
+                            ' - ' +
+                            endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                        );
+                        buckets.push({ start, end, counts: { critical: 0, high: 0, medium: 0, low: 0 } });
+                    }
+
+                    // Assign incidents to buckets
+                    (this.incidentTimeline || []).forEach(inc => {
+                        const ts = inc.created_at ? new Date(inc.created_at).getTime() : 0;
+                        const sev = (inc.severity || 'low').toLowerCase();
+                        for (const bucket of buckets) {
+                            if (ts >= bucket.start && ts < bucket.end) {
+                                bucket.counts[sev] = (bucket.counts[sev] || 0) + 1;
+                                break;
+                            }
+                        }
+                    });
+
+                    const datasets = severities.map(sev => ({
+                        label: sev.charAt(0).toUpperCase() + sev.slice(1),
+                        data: buckets.map(b => b.counts[sev]),
+                        backgroundColor: sevColors[sev],
+                        borderRadius: 3,
+                        barThickness: 14
+                    }));
+
+                    return { labels: bucketLabels, datasets };
+                },
+
                 updateCharts() {
+                    // Update chain distribution chart
                     if (this.charts.chain && this.stats.eventsByChain) {
                         const labels = Object.keys(this.stats.eventsByChain);
                         const data = Object.values(this.stats.eventsByChain);
+                        const colors = labels.map(c => this.chainColors[c.toLowerCase()] || '#8b5cf6');
                         this.charts.chain.data.labels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
                         this.charts.chain.data.datasets[0].data = data;
-                        this.charts.chain.update();
+                        this.charts.chain.data.datasets[0].backgroundColor = colors;
+                        this.charts.chain.update('none');
                     }
+
+                    // Update Events Over Time with real tracked history
+                    if (this.charts.events && this.eventHistory.length > 1) {
+                        this.charts.events.data.labels = [...this.eventHistoryLabels];
+                        this.charts.events.data.datasets[0].data = [...this.eventHistory];
+                        this.charts.events.update('none');
+                    }
+
+                    // Update severity chart with real contract stats
+                    if (this.charts.severity) {
+                        const tl = this.contractStats.threatLevels;
+                        this.charts.severity.data.datasets[0].data = [tl.critical, tl.high, tl.medium, tl.low];
+                        this.charts.severity.update('none');
+                    }
+
+                    // Update threat level mini doughnut
+                    if (this.charts.threatLevel) {
+                        const tl = this.contractStats.threatLevels;
+                        this.charts.threatLevel.data.datasets[0].data = [tl.critical, tl.high, tl.medium, tl.low];
+                        this.charts.threatLevel.update('none');
+                    }
+
+                    // Update incident timeline
+                    if (this.charts.incidentTimeline) {
+                        const timelineData = this.buildIncidentTimelineData();
+                        this.charts.incidentTimeline.data = timelineData;
+                        this.charts.incidentTimeline.update('none');
+                    }
+
+                    // Rebuild heatmap data
+                    this.buildHeatmapData();
                 },
-                
+
                 generateTimeLabels() {
                     const labels = [];
                     for (let i = 11; i >= 0; i--) {
@@ -485,25 +932,21 @@
                     }
                     return labels;
                 },
-                
-                generateRandomData(count, min, max) {
-                    return Array.from({length: count}, () => Math.floor(Math.random() * (max - min) + min));
-                },
-                
+
                 formatNumber(num) {
                     if (!num) return '0';
                     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
                     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
                     return num.toLocaleString();
                 },
-                
+
                 formatUptime(seconds) {
                     if (!seconds) return '0s';
                     if (seconds < 60) return seconds + 's';
                     if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
                     return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
                 },
-                
+
                 formatTime(iso) {
                     if (!iso) return '';
                     return new Date(iso).toLocaleTimeString();

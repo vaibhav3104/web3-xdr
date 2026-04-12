@@ -49,19 +49,40 @@ class ContractThreatClassifier:
     new weights without restarting the process.
     """
 
+    # Default model search paths (checked in order)
+    DEFAULT_MODEL_PATHS = [
+        Path(__file__).parent / "contract_classifier.pkl",
+        Path(__file__).parent / "classifier.pkl",
+        Path("./data/models/contract_classifier.pkl"),
+    ]
+
     def __init__(self, model_path: Optional[str] = None):
         self.extractor = BytecodeExtractor()
+        self._enhanced_extractor = None  # Lazy-loaded for 43-feature models
         self.model = None
+        self._model_feature_count = 20  # Default to basic extractor
         self.known_exploits: Dict[str, Dict] = {}
         self._model_path = model_path
         self._model_loaded_at: Optional[float] = None
 
-        # Load model if provided
+        # Try to load model: explicit path, or auto-discover
         if model_path and Path(model_path).exists():
             self.load_model(model_path)
+        else:
+            self._auto_discover_model()
 
         # Initialize with rule-based classifier
         self._init_rule_weights()
+
+    def _auto_discover_model(self):
+        """Try to find and load a trained model from default paths."""
+        for path in self.DEFAULT_MODEL_PATHS:
+            if path.exists():
+                try:
+                    self.load_model(str(path))
+                    return
+                except Exception:
+                    continue
     
     def _init_rule_weights(self):
         """Initialize weights for rule-based classification"""
@@ -131,10 +152,22 @@ class ContractThreatClassifier:
         
         # ML-based classification (if model loaded)
         if self.model:
-            ml_scores = self._ml_classify(features)
-            # Combine scores
-            for cat, score in ml_scores.items():
-                category_scores[cat] = category_scores.get(cat, 0) * 0.4 + score * 0.6
+            ml_scores = self._ml_classify(features, bytecode=bytecode)
+            ml_weight = 0.7 if self._model_feature_count == 43 else 0.6
+            rule_weight = 1.0 - ml_weight
+
+            if ml_scores:
+                # For binary classifiers: scale ALL category scores by ML confidence
+                ml_safe_prob = ml_scores.get(ThreatCategory.SAFE, 0.0)
+                ml_threat_prob = 1.0 - ml_safe_prob
+
+                for cat in category_scores:
+                    if cat == ThreatCategory.SAFE:
+                        category_scores[cat] = category_scores[cat] * rule_weight + ml_safe_prob * ml_weight
+                    else:
+                        # Scale threat categories by ML threat probability
+                        category_scores[cat] = category_scores[cat] * rule_weight * ml_threat_prob + \
+                            ml_scores.get(cat, 0.0) * ml_weight
         
         # Find similar known exploits
         similar = self._find_similar_exploits(bytecode)
@@ -198,21 +231,39 @@ class ContractThreatClassifier:
         return scores
     
     def _ml_classify(
-        self, 
-        features: BytecodeFeatures
+        self,
+        features: BytecodeFeatures,
+        bytecode: str = None,
     ) -> Dict[ThreatCategory, float]:
-        """Apply ML model classification"""
+        """Apply ML model classification. Handles both 20 and 43 feature models."""
         if not self.model:
             return {}
-        
-        # Convert features to vector
-        vector = np.array(features_to_vector(features)).reshape(1, -1)
-        
-        # Get predictions
+
         try:
+            if self._model_feature_count == 43 and bytecode:
+                # Use enhanced extractor for 43-feature model
+                if self._enhanced_extractor is None:
+                    from ..data.enhanced_extractor import EnhancedBytecodeExtractor
+                    self._enhanced_extractor = EnhancedBytecodeExtractor()
+                enhanced_features = self._enhanced_extractor.extract_features(bytecode)
+                vector = np.array(enhanced_features.to_vector()).reshape(1, -1)
+            else:
+                vector = np.array(features_to_vector(features)).reshape(1, -1)
+
+            # Binary classifier returns [safe_prob, exploit_prob]
             probabilities = self.model.predict_proba(vector)[0]
-            categories = self.model.classes_
-            return {ThreatCategory(cat): prob for cat, prob in zip(categories, probabilities)}
+            classes = self.model.classes_
+
+            if len(classes) == 2:
+                # Binary: map exploit probability to threat categories
+                exploit_prob = float(probabilities[list(classes).index(1)] if 1 in classes else probabilities[1])
+                safe_prob = 1.0 - exploit_prob
+                return {
+                    ThreatCategory.SAFE: safe_prob,
+                    ThreatCategory.UNKNOWN_THREAT: exploit_prob,
+                }
+            else:
+                return {ThreatCategory(cat): prob for cat, prob in zip(classes, probabilities)}
         except Exception as e:
             print(f"ML prediction error: {e}")
             return {}
@@ -303,13 +354,33 @@ class ContractThreatClassifier:
             }, f)
     
     def load_model(self, path: str):
-        """Load the model from disk. Only loads trusted local model files."""
+        """Load the model from disk. Supports both pickle dict and joblib formats."""
         import os
-        with open(path, 'rb') as f:
-            data = pickle.load(f)  # nosec B301 — trusted local model files only
-            self.model = data.get('model')
-            self.known_exploits = data.get('known_exploits', {})
-            self.rule_weights = data.get('rule_weights', self.rule_weights)
+        import joblib
+
+        try:
+            # Try pickle dict format first (ContractThreatClassifier.save_model format)
+            with open(path, 'rb') as f:
+                data = pickle.load(f)  # nosec B301 — trusted local model files only
+
+            if isinstance(data, dict):
+                self.model = data.get('model')
+                self.known_exploits = data.get('known_exploits', {})
+                if data.get('rule_weights') is not None:
+                    self.rule_weights = data['rule_weights']
+                self._model_feature_count = data.get('feature_count', 20)
+            else:
+                # Raw sklearn model saved by joblib
+                self.model = data
+                # Detect feature count from model
+                if hasattr(self.model, 'n_features_in_'):
+                    self._model_feature_count = self.model.n_features_in_
+        except Exception:
+            # Try joblib format
+            self.model = joblib.load(path)
+            if hasattr(self.model, 'n_features_in_'):
+                self._model_feature_count = self.model.n_features_in_
+
         self._model_path = path
         self._model_loaded_at = os.path.getmtime(path)
 

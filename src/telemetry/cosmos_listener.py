@@ -249,6 +249,14 @@ class CosmosListener(RobustNonEVMListener):
                 )
                 if security_event:
                     events.append(security_event)
+
+            # Detect CosmWasm contract instantiation
+            elif event_type in ("instantiate", "store_code"):
+                deploy_event = self._check_contract_deploy(
+                    event_type, attributes, tx_hash, height
+                )
+                if deploy_event:
+                    events.append(deploy_event)
         
         return events
     
@@ -398,6 +406,62 @@ class CosmosListener(RobustNonEVMListener):
             }
         )
     
+    def _check_contract_deploy(
+        self,
+        event_type: str,
+        attributes: Dict,
+        tx_hash: str,
+        height: int
+    ) -> Optional[SecurityEvent]:
+        """Detect CosmWasm contract instantiation or code store events."""
+        contract_address = attributes.get("_contract_address", "")
+        code_id = attributes.get("code_id", "")
+        creator = attributes.get("sender", "") or attributes.get("creator", "")
+
+        if event_type == "store_code":
+            # New WASM code stored on-chain
+            return SecurityEvent(
+                event_id=f"cosmos_{tx_hash}_store_code",
+                chain_id=self.config.chain_id,
+                event_type=EventType.CONTRACT_DEPLOYED,
+                severity=Severity.MEDIUM,
+                block_timestamp=datetime.now(timezone.utc),
+                tx_hash=tx_hash,
+                block_number=height,
+                source_address=creator,
+                contract_address=f"code:{code_id}",
+                raw_event={
+                    **attributes,
+                    "action": "store_code",
+                    "chain_type": "cosmos",
+                    "code_id": code_id,
+                    "protocol": "CosmWasm",
+                }
+            )
+
+        if event_type == "instantiate" and contract_address:
+            return SecurityEvent(
+                event_id=f"cosmos_{tx_hash}_instantiate",
+                chain_id=self.config.chain_id,
+                event_type=EventType.CONTRACT_DEPLOYED,
+                severity=Severity.MEDIUM,
+                block_timestamp=datetime.now(timezone.utc),
+                tx_hash=tx_hash,
+                block_number=height,
+                source_address=creator,
+                dest_address=contract_address,
+                contract_address=contract_address,
+                raw_event={
+                    **attributes,
+                    "action": "instantiate",
+                    "chain_type": "cosmos",
+                    "code_id": code_id,
+                    "protocol": "CosmWasm",
+                }
+            )
+
+        return None
+
     async def listen_events_ws(self) -> AsyncGenerator[SecurityEvent, None]:
         """
         Alternative: Subscribe to Tendermint WebSocket events.

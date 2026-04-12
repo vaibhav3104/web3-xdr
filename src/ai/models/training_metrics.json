@@ -7,12 +7,12 @@
   "average_precision": 1.0,
   "confusion_matrix": [
     [
-      9,
+      6,
       0
     ],
     [
       0,
-      15
+      10
     ]
   ],
   "classification_report": {
@@ -20,29 +20,34 @@
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 9.0
+      "support": 6.0
     },
     "1": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 15.0
+      "support": 10.0
     },
     "accuracy": 1.0,
     "macro avg": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 24.0
+      "support": 16.0
     },
     "weighted avg": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 24.0
+      "support": 16.0
     }
   },
-  "training_date": "2026-01-08T21:24:07.157086",
+  "cv_f1_mean": 0.9904761904761905,
+  "cv_f1_std": 0.01904761904761907,
+  "training_date": "2026-04-12T20:11:43.829190",
   "model_type": "random_forest",
-  "feature_count": 43
+  "feature_count": 43,
+  "total_samples": 79,
+  "safe_samples": 29,
+  "exploit_samples": 50
 }

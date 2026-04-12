@@ -21,6 +21,8 @@ Usage:
 
 import argparse
 import json
+import pickle
+import random
 import sys
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
@@ -30,7 +32,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -94,83 +96,219 @@ FEATURE_NAMES = [
 
 class MockExploitGenerator:
     """
-    Generates synthetic exploit bytecode for testing when real exploit
-    bytecode is not available.
-    
-    Creates bytecode patterns that mimic common exploit characteristics:
-    - Flash loan callbacks
-    - Reentrancy patterns
-    - Unchecked external calls
-    - High CFG complexity
+    Generates diverse synthetic exploit bytecodes with realistic variation.
+
+    Each template is randomized with:
+    - Random padding/filler opcodes
+    - Variable-length PUSH data
+    - Shuffled non-critical sections
+    - Random contract sizes
     """
-    
+
+    @staticmethod
+    def _random_hex(n: int) -> str:
+        """Generate n random hex bytes."""
+        return ''.join(random.choice('0123456789abcdef') for _ in range(n * 2))
+
+    @staticmethod
+    def _random_filler(min_ops: int = 5, max_ops: int = 30) -> str:
+        """Generate random filler opcodes (arithmetic, stack, memory)."""
+        safe_ops = [
+            "01", "02", "03", "04", "05", "06",  # arithmetic
+            "10", "11", "14", "15", "16", "17",  # comparison/bitwise
+            "50", "51", "52", "53",  # stack/memory
+            "80", "81", "82", "83",  # DUP1-4
+            "90", "91", "92",  # SWAP1-3
+        ]
+        count = random.randint(min_ops, max_ops)
+        ops = []
+        for _ in range(count):
+            op = random.choice(safe_ops)
+            ops.append(op)
+            # Occasionally add PUSH with random data
+            if random.random() < 0.3:
+                push_size = random.randint(1, 4)
+                push_op = hex(0x5f + push_size)[2:]
+                ops.append(push_op + MockExploitGenerator._random_hex(push_size))
+        return ''.join(ops)
+
+    @staticmethod
+    def _solidity_preamble() -> str:
+        """Standard Solidity contract preamble with variation."""
+        # PUSH1 0x80 PUSH1 0x40 MSTORE [CALLVALUE DUP1 ISZERO ... REVERT]
+        base = "6080604052"
+        if random.random() < 0.7:
+            base += "34801561001057600080fd5b50"
+        base += MockExploitGenerator._random_filler(2, 8)
+        return base
+
     @staticmethod
     def generate_flash_loan_exploit() -> str:
-        """Generate bytecode with flash loan callback pattern."""
-        # Pattern: PUSH4 flash loan sig + CALL + SSTORE (reentrancy)
-        return (
-            "608060405234801561001057600080fd5b50600436106100415760003560e01c8063"
-            "23e30c8b14610046578063c3924ed614610062575b600080fd5b6100606004803603"
-            "810190610057919061024d565b61007e565b005b61007c6004803603810190610077"
-            "91906102d0565b610101565b005b60008054905090565b600080543373ffffffff"
-            "ffffffffffffffffffffffffffff1614156100ef573373ffffffffffffffffffff"
-            "ffffffffffffffff166108fc600080549081150290604051600060405180830381"
-            "858888f19350505050158015610030573d6000803e3d6000fd5b505b565b34600080"
-            "82825401925050819055503373ffffffffffffffffffffffffffffffffffffffff"
-            "166108fc600080549081150290604051600060405180830381858888f193505050"
-            "50158015610030573d6000803e3d6000fd5b505b565b"
+        """Flash loan exploit: callback sig + CALL + SSTORE pattern."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        # Flash loan callback signatures
+        sigs = ["23e30c8b", "c3924ed6", "ab803a65", "ee872558"]
+        sig = random.choice(sigs)
+        filler1 = MockExploitGenerator._random_filler(5, 15)
+        # Function dispatcher with flash loan sig
+        dispatcher = f"600035{'60' + sig[:2]}{'63' + sig}{filler1}"
+        # SLOAD + CALL (external call) + SSTORE (state change after call = reentrancy risk)
+        attack = (
+            f"54{MockExploitGenerator._random_filler(2, 6)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}73{MockExploitGenerator._random_hex(20)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}f1"  # CALL
+            f"{MockExploitGenerator._random_filler(1, 4)}55"  # SSTORE after CALL
         )
-    
+        # Extra CALL chains for depth
+        extra_calls = ""
+        for _ in range(random.randint(1, 3)):
+            extra_calls += (
+                f"{'60' + MockExploitGenerator._random_hex(1)}f1"
+                f"{MockExploitGenerator._random_filler(1, 3)}"
+            )
+        suffix = MockExploitGenerator._random_filler(10, 40)
+        return preamble + dispatcher + attack + extra_calls + suffix + "00"
+
     @staticmethod
     def generate_reentrancy_exploit() -> str:
-        """Generate bytecode with reentrancy pattern."""
-        # Pattern: CALL before SSTORE (classic reentrancy)
-        return (
-            "608060405234801561001057600080fd5b50600436106100415760003560e01c8063"
-            "3ccfd60b14610046578063d0e30db01461006e575b600080fd5b61004e610078565b"
-            "60405161005b9190610256565b60405180910390f35b61007761008c565b005b6100"
-            "816100f1565b005b60008054905090565b600080543373ffffffffffffffffffff"
-            "ffffffffffffffff1614156100ef573373ffffffffffffffffffffffffffffffff"
-            "ffffffff166108fc600080549081150290604051600060405180830381858888f1"
-            "9350505050158015610030573d6000803e3d6000fd5b505b565b3460008082825401"
-            "925050819055503373ffffffffffffffffffffffffffffffffffffffff166108fc"
-            "600080549081150290604051600060405180830381858888f19350505050158015"
-            "610030573d6000803e3d6000fd5b505b565b"
+        """Reentrancy: CALL before SSTORE, no guard check."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        filler = MockExploitGenerator._random_filler(5, 15)
+        # SLOAD balance, then CALL to send ETH, then SSTORE (update state AFTER call)
+        attack = (
+            f"54"  # SLOAD
+            f"{MockExploitGenerator._random_filler(2, 5)}"
+            f"73{MockExploitGenerator._random_hex(20)}"  # address
+            f"{'6108fc' if random.random() < 0.5 else '60' + MockExploitGenerator._random_hex(1) + 'f1'}"
+            f"{MockExploitGenerator._random_filler(1, 4)}"
+            f"55"  # SSTORE after external call
         )
-    
+        # Withdraw function sig
+        withdraw_sigs = ["3ccfd60b", "2e1a7d4d", "f3fef3a3"]
+        sig = random.choice(withdraw_sigs)
+        dispatcher = f"600435{'63' + sig}{MockExploitGenerator._random_filler(3, 8)}"
+        suffix = MockExploitGenerator._random_filler(10, 30)
+        return preamble + dispatcher + filler + attack + suffix + "00"
+
     @staticmethod
     def generate_unchecked_call_exploit() -> str:
-        """Generate bytecode with unchecked external call."""
-        # Pattern: CALL without ISZERO check
-        return (
-            "608060405234801561001057600080fd5b50600436106100415760003560e01c8063"
-            "f1f1f1f1146100465780633ccfd60b14610064578063d0e30db01461006e575b6000"
-            "80fd5b61004e610078565b60405161005b9190610256565b60405180910390f35b"
-            "61007761008c565b005b6100816100f1565b005b60008054905090565b60008054"
-            "3373ffffffffffffffffffffffffffffffffffffffff1614156100ef573373ffff"
-            "ffffffffffffffffffffffffffffffffffff166108fc6000805490811502906040"
-            "51600060405180830381858888f19350505050158015610030573d6000803e3d60"
-            "00fd5b505b565b3460008082825401925050819055503373ffffffffffffffffff"
-            "ffffffffffffffffffffffffffff166108fc600080549081150290604051600060"
-            "405180830381858888f19350505050158015610030573d6000803e3d6000fd5b505b"
-            "565b"
-        )
-    
+        """Unchecked external call: CALL without return value check."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        filler = MockExploitGenerator._random_filler(5, 20)
+        # Multiple unchecked CALLs (no ISZERO after)
+        calls = ""
+        for _ in range(random.randint(2, 5)):
+            calls += (
+                f"73{MockExploitGenerator._random_hex(20)}"
+                f"{'60' + MockExploitGenerator._random_hex(1)}f1"  # CALL
+                f"50"  # POP return value (unchecked!)
+                f"{MockExploitGenerator._random_filler(1, 4)}"
+            )
+        suffix = MockExploitGenerator._random_filler(5, 20)
+        return preamble + filler + calls + suffix + "00"
+
     @staticmethod
-    def generate_all_mock_exploits(count: int = 50) -> List[Tuple[str, str]]:
-        """Generate multiple mock exploit bytecodes."""
+    def generate_selfdestruct_exploit() -> str:
+        """Selfdestruct: admin-gated self-destruct with ownership transfer."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        # Admin sigs: renounceOwnership, transferOwnership
+        admin_sigs = ["715018a6", "f2fde38b"]
+        sig = random.choice(admin_sigs)
+        dispatcher = f"600435{'63' + sig}{MockExploitGenerator._random_filler(3, 6)}"
+        filler = MockExploitGenerator._random_filler(10, 25)
+        # CALLER check + SELFDESTRUCT
+        attack = (
+            f"33"  # CALLER
+            f"54"  # SLOAD (owner)
+            f"14"  # EQ
+            f"{MockExploitGenerator._random_filler(1, 3)}"
+            f"73{MockExploitGenerator._random_hex(20)}"
+            f"ff"  # SELFDESTRUCT
+        )
+        return preamble + dispatcher + filler + attack + "00"
+
+    @staticmethod
+    def generate_delegatecall_exploit() -> str:
+        """Delegatecall: proxy-like contract with dangerous delegatecall."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        # Proxy pattern sigs
+        proxy_sigs = ["5c60da1b", "3659cfe6", "f851a440"]
+        sig = random.choice(proxy_sigs)
+        dispatcher = f"600435{'63' + sig}{MockExploitGenerator._random_filler(2, 6)}"
+        filler = MockExploitGenerator._random_filler(5, 15)
+        # Multiple DELEGATECALLs
+        delegatecalls = ""
+        for _ in range(random.randint(2, 4)):
+            delegatecalls += (
+                f"73{MockExploitGenerator._random_hex(20)}"
+                f"{'60' + MockExploitGenerator._random_hex(1)}f4"  # DELEGATECALL
+                f"55"  # SSTORE
+                f"{MockExploitGenerator._random_filler(1, 3)}"
+            )
+        suffix = MockExploitGenerator._random_filler(5, 15)
+        return preamble + dispatcher + filler + delegatecalls + suffix + "00"
+
+    @staticmethod
+    def generate_oracle_manipulation() -> str:
+        """Oracle manipulation: price read + large swap + price read pattern."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        filler = MockExploitGenerator._random_filler(10, 20)
+        # Pattern: STATICCALL (read price) + CALL (swap) + STATICCALL (read again) + CALL (profit)
+        attack = (
+            f"73{MockExploitGenerator._random_hex(20)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}fa"  # STATICCALL (price oracle)
+            f"{MockExploitGenerator._random_filler(2, 5)}"
+            f"73{MockExploitGenerator._random_hex(20)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}f1"  # CALL (swap)
+            f"{MockExploitGenerator._random_filler(2, 5)}"
+            f"73{MockExploitGenerator._random_hex(20)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}fa"  # STATICCALL (read again)
+            f"{MockExploitGenerator._random_filler(2, 5)}"
+            f"73{MockExploitGenerator._random_hex(20)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}f1"  # CALL (profit)
+        )
+        suffix = MockExploitGenerator._random_filler(5, 15)
+        return preamble + filler + attack + suffix + "00"
+
+    @staticmethod
+    def generate_timestamp_exploit() -> str:
+        """Timestamp dependence: uses TIMESTAMP for pseudo-randomness."""
+        preamble = MockExploitGenerator._solidity_preamble()
+        filler = MockExploitGenerator._random_filler(5, 15)
+        # TIMESTAMP used in conditional logic
+        attack = (
+            f"42"  # TIMESTAMP
+            f"{MockExploitGenerator._random_filler(1, 3)}"
+            f"06"  # MOD
+            f"15"  # ISZERO
+            f"57"  # JUMPI (conditional based on timestamp)
+            f"5b"  # JUMPDEST
+            f"73{MockExploitGenerator._random_hex(20)}"
+            f"{'60' + MockExploitGenerator._random_hex(1)}f1"  # CALL
+            f"55"  # SSTORE
+        )
+        suffix = MockExploitGenerator._random_filler(5, 20)
+        return preamble + filler + attack + suffix + "00"
+
+    @staticmethod
+    def generate_all_mock_exploits(count: int = 80) -> List[Tuple[str, str]]:
+        """Generate diverse mock exploit bytecodes with randomized variation."""
         exploits = []
         generators = [
-            MockExploitGenerator.generate_flash_loan_exploit,
-            MockExploitGenerator.generate_reentrancy_exploit,
-            MockExploitGenerator.generate_unchecked_call_exploit,
+            ("flash_loan", MockExploitGenerator.generate_flash_loan_exploit),
+            ("reentrancy", MockExploitGenerator.generate_reentrancy_exploit),
+            ("unchecked_call", MockExploitGenerator.generate_unchecked_call_exploit),
+            ("selfdestruct", MockExploitGenerator.generate_selfdestruct_exploit),
+            ("delegatecall", MockExploitGenerator.generate_delegatecall_exploit),
+            ("oracle_manipulation", MockExploitGenerator.generate_oracle_manipulation),
+            ("timestamp", MockExploitGenerator.generate_timestamp_exploit),
         ]
-        
+
         for i in range(count):
-            generator = generators[i % len(generators)]
+            name, generator = generators[i % len(generators)]
             bytecode = generator()
-            exploits.append((bytecode, f"mock_exploit_{i}"))
-        
+            exploits.append((bytecode, f"mock_{name}_{i}"))
+
         return exploits
 
 
@@ -458,10 +596,26 @@ class ModelTrainer:
         logger.info("confusion_matrix_plot_saved", path=str(save_path))
     
     def save_model(self, path: Path):
-        """Save trained model."""
+        """Save trained model in format compatible with ContractThreatClassifier."""
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Save as joblib for the training pipeline
         joblib.dump(self.model, path)
-        logger.info("model_saved", path=str(path))
+        logger.info("joblib_model_saved", path=str(path))
+
+        # Also save in pickle dict format for ContractThreatClassifier.load_model()
+        compat_path = path.parent / "contract_classifier.pkl"
+        with open(compat_path, "wb") as f:
+            pickle.dump({
+                "model": self.model,
+                "known_exploits": {},
+                "rule_weights": None,
+                "feature_count": len(self.feature_names),
+                "feature_names": self.feature_names,
+                "model_type": self.model_type,
+                "training_date": datetime.now().isoformat(),
+            }, f)
+        logger.info("compat_model_saved", path=str(compat_path))
 
 
 def main():
@@ -532,20 +686,29 @@ def main():
     trainer.create_model()
     trainer.train(X_train, y_train, use_smote=not args.no_smote)
     
-    # Evaluate
+    # Evaluate on held-out test set
     metrics = trainer.evaluate(X_test, y_test)
-    
+
+    # Cross-validation on full dataset to check for overfitting
+    cv_scores = cross_val_score(trainer.model, X, y, cv=min(5, len(X) // 4), scoring="f1")
+    metrics["cv_f1_mean"] = float(np.mean(cv_scores))
+    metrics["cv_f1_std"] = float(np.std(cv_scores))
+    logger.info("cross_validation", cv_f1_mean=f"{np.mean(cv_scores):.3f}", cv_f1_std=f"{np.std(cv_scores):.3f}")
+
     # Generate plots
     trainer.plot_feature_importance(FEATURE_IMPORTANCE_PLOT)
     trainer.plot_confusion_matrix(y_test, trainer.model.predict(X_test), CONFUSION_MATRIX_PLOT)
-    
+
     # Save model
     trainer.save_model(MODEL_PATH)
-    
+
     # Save metrics
     metrics["training_date"] = datetime.now().isoformat()
     metrics["model_type"] = args.model
     metrics["feature_count"] = len(FEATURE_NAMES)
+    metrics["total_samples"] = len(X)
+    metrics["safe_samples"] = int(np.sum(y == 0))
+    metrics["exploit_samples"] = int(np.sum(y == 1))
     
     with open(METRICS_FILE, "w") as f:
         json.dump(metrics, f, indent=2)
@@ -561,6 +724,8 @@ def main():
     print(f"   F1 Score:        {metrics['f1_score']:.3f}")
     print(f"   ROC AUC:         {metrics['roc_auc']:.3f}")
     print(f"   Avg Precision:   {metrics['average_precision']:.3f}")
+    print(f"   CV F1 (5-fold):  {metrics['cv_f1_mean']:.3f} +/- {metrics['cv_f1_std']:.3f}")
+    print(f"   Total Samples:   {len(X)} (safe={np.sum(y==0)}, exploit={np.sum(y==1)})")
     print()
     print(f"   Model saved:     {MODEL_PATH}")
     print(f"   Plots saved:     {FEATURE_IMPORTANCE_PLOT}")
