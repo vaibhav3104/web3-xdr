@@ -660,8 +660,8 @@ class Sentinel3Worker:
         if os.getenv("AUTO_START_SCANNER", "false").lower() == "true":
             try:
                 from src.ai.collectors import start_auto_collection
-                scanner_chains = os.getenv("SCANNER_CHAINS", "ethereum,polygon,arbitrum").split(",")
-                scanner_chains = [c.strip() for c in scanner_chains if c.strip()]
+                raw = os.getenv("SCANNER_CHAINS", "ethereum,polygon,arbitrum")
+                scanner_chains = [c.strip() for c in raw.replace(":", ",").split(",") if c.strip()]
                 await start_auto_collection(chains=scanner_chains)
                 logger.info("contract_scanner_auto_started", chains=scanner_chains)
             except ImportError as e:
@@ -2459,11 +2459,16 @@ class Sentinel3Worker:
         logger.info("worker_start_time_set")
         
         await self.initialize()
-        
+
+        # Signal readiness as soon as core init completes — before optional subsystems
+        global is_ready
+        is_ready = True
+        logger.info("worker_ready", ready=True)
+
         # Start ingestion and detection loops
         ingestion_task = asyncio.create_task(self.ingestion_loop())
         detection_task = asyncio.create_task(self.detection_loop())
-        
+
         # Start runtime loop if enabled
         runtime_task = None
         if self.runtime_enabled and RUNTIME_AVAILABLE:
@@ -2713,11 +2718,6 @@ class Sentinel3Worker:
         feedback_task = asyncio.create_task(feedback_loop_evaluation())
 
         logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled, continuous_learning=continuous_learning_enabled)
-
-        # Signal readiness to health endpoint before blocking on gather
-        global is_ready
-        is_ready = True
-        logger.info("worker_ready", ready=True)
 
         # Wait for tasks
         tasks = [ingestion_task, detection_task, uptime_task, feedback_task]
