@@ -372,6 +372,10 @@ chains:
     chain_name: "Near Protocol"
     chain_type: "near"
     rpc_url: "https://rpc.mainnet.near.org"
+    fallback_rpcs:
+      - "https://near.lava.build"
+      - "https://rpc.fastnear.com"
+      - "https://near.drpc.org"
     bridge_contracts:
       - "factory.bridge.near"
       - "client.bridge.near"

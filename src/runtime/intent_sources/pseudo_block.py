@@ -103,27 +103,31 @@ class PseudoIntentBlockSource(PendingTxSource):
                 raw_ts = block.get("timestamp", 0)
                 block_timestamp = datetime.fromtimestamp(_to_int(raw_ts) if raw_ts else 0, tz=timezone.utc)
                 
-                # Get transactions
-                tx_hashes = block.get("transactions", [])
-                if not tx_hashes:
+                # Get transactions (already full objects since get_block passes True)
+                raw_txs = block.get("transactions", [])
+                if not raw_txs:
                     continue
-                
-                # Fetch transaction details (batch)
-                for tx_hash in tx_hashes[:limit - len(pending_txs)]:
+
+                # Ensure it's a plain list (AttributeDict wraps may break slicing)
+                txs = list(raw_txs)
+
+                # Process transaction objects directly (no re-fetch needed)
+                for tx_data in txs[:limit - len(pending_txs)]:
                     try:
-                        tx_data = await self.rpc_provider.get_transaction(tx_hash)
-                        if not tx_data:
+                        # If tx is a string hash (shouldn't happen but be safe), skip
+                        if isinstance(tx_data, str):
                             continue
-                        
+
                         # Convert to PendingTx
                         pending_tx = self._tx_to_pending_tx(tx_data, block_num, block_hash, block_timestamp)
                         if pending_tx:
                             pending_txs.append(pending_tx)
                     except Exception as e:
+                        tx_id = tx_data.get("hash", "")[:16] if isinstance(tx_data, dict) else str(tx_data)[:16]
                         logger.warning(
-                            "failed_to_fetch_tx",
+                            "failed_to_convert_block_tx",
                             chain_id=self.chain_id,
-                            tx_hash=tx_hash[:16],
+                            tx_hash=tx_id,
                             error=str(e)
                         )
                         continue

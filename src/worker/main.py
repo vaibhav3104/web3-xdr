@@ -620,6 +620,7 @@ class Sentinel3Worker:
                 token_contracts=chain_config.get("token_contracts", []),
                 poll_interval_seconds=chain_config.get("poll_interval_seconds", 1.0),
                 confirmations_required=chain_config.get("confirmations_required", 1),
+                fallback_rpcs=chain_config.get("fallback_rpcs", []),
             )
 
             try:
