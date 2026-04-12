@@ -386,7 +386,7 @@ class SourceFetcher:
         """Fetch bytecode via RPC"""
         rpc_urls = {
             "ethereum": "https://eth.llamarpc.com",
-            "polygon": "https://polygon.llamarpc.com",
+            "polygon": "https://polygon-bor-rpc.publicnode.com",
             "arbitrum": "https://arbitrum.llamarpc.com",
             "optimism": "https://optimism.llamarpc.com",
             "base": "https://base.llamarpc.com",

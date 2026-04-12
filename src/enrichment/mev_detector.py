@@ -152,7 +152,7 @@ class MEVDetector:
             return None
         
         # Look for swap sequences
-        swaps = [t for t in block_txs if t.event_type.lower() in ("swap", "transfer")]
+        swaps = [t for t in block_txs if t.event_type and t.event_type.lower() in ("swap", "transfer")]
         
         if len(swaps) < 3:
             return None
@@ -271,7 +271,7 @@ class MEVDetector:
         
         All in same block.
         """
-        if tx.event_type.lower() not in ("liquidityremove", "liquidity_remove", "burn"):
+        if not tx.event_type or tx.event_type.lower() not in ("liquidityremove", "liquidity_remove", "burn"):
             return None
         
         block_txs = self._transactions.get(tx.block_number, [])
@@ -281,7 +281,7 @@ class MEVDetector:
             t for t in block_txs
             if t.from_address == tx.from_address
             and t.tx_index < tx.tx_index
-            and t.event_type.lower() in ("liquidityadd", "liquidity_add", "mint")
+            and t.event_type and t.event_type.lower() in ("liquidityadd", "liquidity_add", "mint")
             and t.contract_address == tx.contract_address
         ]
         
@@ -295,7 +295,7 @@ class MEVDetector:
             t for t in block_txs
             if t.tx_index > add_tx.tx_index
             and t.tx_index < tx.tx_index
-            and t.event_type.lower() in ("swap", "swapv3")
+            and t.event_type and t.event_type.lower() in ("swap", "swapv3")
             and t.contract_address == tx.contract_address
         ]
         

@@ -975,8 +975,8 @@ class Sentinel3Worker:
                                                 amount_usd = float(amount_usd) if hasattr(amount_usd, '__float__') else amount_usd
                                             
                                             # Get event type string
-                                            event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
-                                            
+                                            event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type) if event.event_type else 'unknown'
+
                                             # ========================================
                                             # FILTER: Skip unknown events to reduce noise
                                             # Only store events we can classify
