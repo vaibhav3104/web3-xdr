@@ -2877,6 +2877,7 @@ async def main():
         app = web.Application()
         
         # API routes
+        app.router.add_get("/", root_handler)
         app.router.add_get("/health", health_handler)
         app.router.add_get("/metrics", metrics_handler)
         
