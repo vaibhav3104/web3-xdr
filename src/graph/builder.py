@@ -158,9 +158,9 @@ class GraphBuilder:
     
     async def _process_transfer(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process a Transfer event."""
-        from_addr = event.get("source_address", "").lower()
-        to_addr = event.get("dest_address", "").lower()
-        token_addr = event.get("asset_address", event.get("contract_address", "")).lower()
+        from_addr = (event.get("source_address") or "").lower()
+        to_addr = (event.get("dest_address") or "").lower()
+        token_addr = (event.get("asset_address") or event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         amount_usd = float(event.get("amount_usd", 0))
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
@@ -189,8 +189,8 @@ class GraphBuilder:
     
     async def _process_contract_deployment(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process a contract deployment event."""
-        deployer = event.get("source_address", "").lower()
-        contract_addr = event.get("contract_address", "").lower()
+        deployer = (event.get("source_address") or "").lower()
+        contract_addr = (event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
         
@@ -225,8 +225,8 @@ class GraphBuilder:
     
     async def _process_swap(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process a swap event."""
-        sender = event.get("source_address", "").lower()
-        pool_addr = event.get("contract_address", "").lower()
+        sender = (event.get("source_address") or "").lower()
+        pool_addr = (event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
         amount_usd = float(event.get("amount_usd", 0))
@@ -252,8 +252,8 @@ class GraphBuilder:
     
     async def _process_flash_loan(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process a flash loan event."""
-        borrower = event.get("source_address", "").lower()
-        protocol_addr = event.get("contract_address", "").lower()
+        borrower = (event.get("source_address") or "").lower()
+        protocol_addr = (event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
         amount_usd = float(event.get("amount_usd", 0))
@@ -279,8 +279,8 @@ class GraphBuilder:
     
     async def _process_liquidation(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process a liquidation event."""
-        liquidator = event.get("source_address", "").lower()
-        protocol_addr = event.get("contract_address", "").lower()
+        liquidator = (event.get("source_address") or "").lower()
+        protocol_addr = (event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
         float(event.get("amount_usd", 0))
@@ -293,8 +293,8 @@ class GraphBuilder:
     
     async def _process_admin_action(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process an admin action event."""
-        admin = event.get("source_address", "").lower()
-        contract_addr = event.get("contract_address", "").lower()
+        admin = (event.get("source_address") or "").lower()
+        contract_addr = (event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
         
@@ -318,8 +318,8 @@ class GraphBuilder:
     
     async def _process_generic_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Process a generic event."""
-        source = event.get("source_address", "").lower()
-        contract = event.get("contract_address", "").lower()
+        source = (event.get("source_address") or "").lower()
+        contract = (event.get("contract_address") or "").lower()
         chain_id = event.get("chain_id", "ethereum")
         timestamp = event.get("block_timestamp", datetime.now(timezone.utc))
         
