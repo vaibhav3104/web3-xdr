@@ -93,7 +93,7 @@ class DatabaseService:
                     raw_insert_sql = text("""
                     INSERT INTO events (
                         id, event_id, chain_id, event_type, tx_hash, block_number,
-                        block_timestamp, contract_address, severity, status, amount, amount_usd,
+                        block_timestamp, contract_address, severity, amount, amount_usd,
                         from_address, to_address, raw_data, log_index, created_at
                     ) VALUES (
                         gen_random_uuid(),
@@ -105,7 +105,6 @@ class DatabaseService:
                         CAST(:block_timestamp AS TIMESTAMP WITH TIME ZONE),
                         :contract_address,
                         COALESCE(:severity, 'LOW'),
-                        'PENDING',
                         CAST(:amount AS NUMERIC(38, 18)),
                         CAST(:amount_usd AS NUMERIC(20, 2)),
                         :from_address,
@@ -434,7 +433,6 @@ class DatabaseService:
                     'to_address': row[12],
                     'raw_data': row[13] if isinstance(row[13], dict) else (json.loads(row[13]) if row[13] else {}),
                     'created_at': row[14],
-                    'status': 'PENDING',  # Default status - column doesn't exist in DB
                 })
             
             # Generate next cursor if there are more results

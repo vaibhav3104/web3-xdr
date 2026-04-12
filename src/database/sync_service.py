@@ -298,7 +298,7 @@ def save_events_batch_sync(events: List[Dict[str, Any]]) -> int:
         insert_sql = """
             INSERT INTO events (
                 id, event_id, chain_id, event_type, tx_hash, block_number,
-                block_timestamp, contract_address, severity, status, amount, amount_usd,
+                block_timestamp, contract_address, severity, amount, amount_usd,
                 from_address, to_address, raw_data, log_index
             ) VALUES %s
             ON CONFLICT (chain_id, tx_hash, log_index) DO NOTHING
@@ -321,7 +321,6 @@ def save_events_batch_sync(events: List[Dict[str, Any]]) -> int:
                 e.get("block_timestamp"),
                 e.get("contract_address"),
                 e.get("severity", "LOW"),
-                "PENDING",
                 e.get("amount"),
                 e.get("amount_usd"),
                 e.get("from_address"),
