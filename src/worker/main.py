@@ -2601,6 +2601,7 @@ class Sentinel3Worker:
                         event_id = str(uuid.uuid4())
                         
                         # Map threat category to severity
+                        # risk_score is 0-1 (combined ML + scanner)
                         severity = Severity.INFO
                         if analysis.is_threat:
                             if analysis.risk_score > 0.7:
