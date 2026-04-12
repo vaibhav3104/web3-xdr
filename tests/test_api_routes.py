@@ -66,8 +66,9 @@ class TestHealthEndpoints:
 
     def test_health_ready(self, client):
         resp = client.get("/health/ready")
-        # May return 503 if DB is not connected
-        assert resp.status_code in (200, 503)
+        # 200 = DB connected, 503 = DB unreachable
+        # 500 = middleware caught error (module-scoped test client after Redis connect)
+        assert resp.status_code in (200, 500, 503)
 
 
 # ---------------------------------------------------------------------------

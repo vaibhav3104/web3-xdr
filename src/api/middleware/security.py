@@ -18,6 +18,12 @@ from fastapi.security import APIKeyHeader, HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
+try:
+    import redis as _redis_pkg
+    _RedisError = _redis_pkg.RedisError
+except ImportError:
+    _RedisError = type(None)  # Never matches if redis not installed
+
 logger = structlog.get_logger(__name__)
 
 # ============================================================================
@@ -62,7 +68,7 @@ class RateLimiter:
             await self._redis.ping()
             logger.info("rate_limiter_redis_connected")
             return self._redis
-        except (ConnectionError, OSError, ImportError) as e:
+        except (ConnectionError, OSError, ImportError, _RedisError) as e:
             logger.warning("rate_limiter_redis_fallback", error=str(e))
             self._redis_failed = True
             return None
@@ -104,7 +110,7 @@ class RateLimiter:
                 "remaining_minute": self.rpm - minute_count - 1,
                 "remaining_hour": self.rph - hour_count - 1
             }
-        except (ConnectionError, OSError):
+        except (ConnectionError, OSError, _RedisError):
             # Redis error — fall back to memory
             return await self._check_memory(client_ip, now)
 
