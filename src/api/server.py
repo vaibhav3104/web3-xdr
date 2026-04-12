@@ -247,14 +247,16 @@ def create_app(
     @app.get("/health/ready")
     async def readiness_check():
         """K8s readiness probe — returns 503 if DB is unreachable."""
+        from starlette.responses import JSONResponse
         try:
             from ..database.connection import DatabaseManager
+            if DatabaseManager._session_factory is None:
+                return JSONResponse({"ready": False}, status_code=503)
             async with DatabaseManager.get_session() as session:
                 from sqlalchemy import text
                 await session.execute(text("SELECT 1"))
             return {"ready": True}
         except Exception:
-            from starlette.responses import JSONResponse
             return JSONResponse({"ready": False}, status_code=503)
 
     @app.get("/docs", include_in_schema=False)

@@ -401,7 +401,8 @@ async def mark_false_positive(alert_id: str):
             # Persist false-positive label for retraining pipeline
             try:
                 import redis.asyncio as aioredis
-                import os, json as _json
+                import os
+                import json as _json
                 redis_url = os.getenv("REDIS_URL")
                 if redis_url:
                     r = aioredis.from_url(redis_url, decode_responses=True)
