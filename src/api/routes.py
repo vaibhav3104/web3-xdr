@@ -259,7 +259,7 @@ async def list_incidents(
                         created = datetime.fromisoformat(created)
                     else:
                         created = datetime.fromisoformat(created).replace(tzinfo=timezone.utc)
-                except:
+                except (ValueError, TypeError):
                     return False
             # Ensure timezone-aware comparison
             if created.tzinfo is None:
@@ -433,7 +433,7 @@ async def get_incident_events(incident_id: str, limit: int = 50):
         if isinstance(created_at, str):
             try:
                 created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-            except:
+            except (ValueError, TypeError):
                 created_at = datetime.now(timezone.utc)
         
         # Check if this is an ML-detected incident (no event_ids, has ml_contract_scanner in rule_ids)
@@ -458,7 +458,7 @@ async def get_incident_events(incident_id: str, limit: int = 50):
                 try:
                     risk_part = summary.lower().split('risk score of')[1]
                     risk_score = int(risk_part.split('/')[0].strip())
-                except:
+                except (ValueError, IndexError):
                     pass
             
             # Create contract deployment info entries
@@ -822,7 +822,7 @@ async def submit_incident_feedback(incident_id: str, body: FeedbackRequest):
             fl = get_feedback_loop()
             for rule_id in (getattr(incident, "rule_ids", None) or []):
                 fl.record_feedback(rule_id, is_tp=body.is_true_positive)
-        except Exception:
+        except (ImportError, AttributeError):
             pass  # Feedback loop is best-effort
 
         # Check if we should trigger retraining
@@ -869,7 +869,7 @@ async def _store_ml_training_feedback(incident, is_tp: bool, notes: Optional[str
         if isinstance(explanation, str):
             try:
                 explanation = json.loads(explanation)
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 explanation = {}
         if "ml_prediction" in explanation:
             training_sample["ml_prediction"] = explanation["ml_prediction"]
@@ -952,7 +952,7 @@ async def get_feedback_stats():
             for line in f:
                 try:
                     feedback_entries.append(json.loads(line.strip()))
-                except:
+                except (json.JSONDecodeError, ValueError):
                     continue
         
         # Calculate stats
@@ -1064,7 +1064,7 @@ async def trigger_ml_retrain(background_tasks: BackgroundTasks):
         if feedback_file.exists():
             with open(feedback_file, "r") as f:
                 feedback_count = sum(1 for line in f if line.strip())
-    except Exception:
+    except (FileNotFoundError, IOError):
         pass
 
     # Add retraining to background tasks
@@ -1666,7 +1666,7 @@ async def debug_incident_details(incident_id: str):
                         if isinstance(raw_data, str):
                             try:
                                 raw_data = json.loads(raw_data)
-                            except:
+                            except (json.JSONDecodeError, TypeError):
                                 pass
                         
                         event_data = {
@@ -2187,7 +2187,7 @@ async def get_chains_status():
             response = await client.get(worker_url)
             if response.status_code == 200:
                 metrics_text = response.text
-    except Exception:
+    except (httpx.ConnectError, httpx.TimeoutException, OSError):
         pass  # Worker may not be running
     
     # Parse metrics

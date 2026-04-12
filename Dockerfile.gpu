@@ -1,7 +1,7 @@
-# Dockerfile for Google Cloud with NVIDIA GPU support
+# Dockerfile for GPU-accelerated Sentinel3 (NVIDIA CUDA)
 # Use NVIDIA CUDA base image for GPU acceleration
 
-FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -42,8 +42,8 @@ COPY . .
 # Create directories for models and data
 RUN mkdir -p /app/data/models /app/data/collected_contracts /app/logs
 
-# Copy pre-trained model if exists
-COPY data/models/deep_transformer.pt /app/data/models/ 2>/dev/null || true
+# Model directory ready — will download/train on first run if no pre-trained model is present
+RUN echo "Model directory ready - will download/train on first run if needed"
 
 # Set environment for GPU
 ENV ML_MODEL_TYPE=transformer \

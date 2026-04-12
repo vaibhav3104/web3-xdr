@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, Set
 import structlog
+import redis
 import redis.asyncio as aioredis
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -65,7 +66,7 @@ class ConnectionManager:
             self._running = True
             self._redis_task = asyncio.create_task(self._redis_listener())
         
-        except Exception as e:
+        except (ConnectionError, OSError, redis.ConnectionError, redis.TimeoutError) as e:
             logger.error("redis_subscription_failed", error=str(e))
             self._running = False
     
@@ -100,12 +101,12 @@ class ConnectionManager:
                         await self.broadcast(data)
                     except json.JSONDecodeError as e:
                         logger.warning("invalid_json_from_redis", error=str(e))
-                    except Exception as e:
+                    except (RuntimeError, ConnectionError) as e:
                         logger.error("broadcast_error", error=str(e))
             
             except asyncio.TimeoutError:
                 continue
-            except Exception as e:
+            except (ConnectionError, OSError, redis.ConnectionError) as e:
                 logger.error("redis_listener_error", error=str(e))
                 await asyncio.sleep(1.0)
     
@@ -126,7 +127,7 @@ class ConnectionManager:
                     await connection.send_text(message_json)
                 else:
                     disconnected.add(connection)
-            except Exception as e:
+            except (RuntimeError, ConnectionError) as e:
                 logger.warning("websocket_send_failed", error=str(e))
                 disconnected.add(connection)
         
@@ -248,7 +249,7 @@ async def websocket_feed(websocket: WebSocket):
     
     except WebSocketDisconnect:
         logger.info("websocket_client_disconnected_normally")
-    except Exception as e:
+    except (RuntimeError, ConnectionError) as e:
         logger.error("websocket_error", error=str(e))
     finally:
         await manager.disconnect(websocket)

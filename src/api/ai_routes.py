@@ -92,7 +92,18 @@ async def start_collector(
                 category=analysis.threat_category,
                 risk_score=analysis.risk_score
             )
-            # TODO: Send notifications (Telegram, Slack, etc.)
+            try:
+                from ..notifications.alert_notifier import AlertNotifier
+                notifier = AlertNotifier()
+                await notifier.send_contract_threat_alert({
+                    "alert_id": f"auto-{analysis.contract.address[:16]}",
+                    "contract_address": analysis.contract.address,
+                    "threat_category": analysis.threat_category,
+                    "risk_score": analysis.risk_score,
+                    "chain": getattr(analysis.contract, "chain", "unknown"),
+                })
+            except (ImportError, ConnectionError, OSError) as e:
+                logger.warning("threat_notification_failed", error=str(e))
         
         # Start collector
         collector = await start_auto_collection(

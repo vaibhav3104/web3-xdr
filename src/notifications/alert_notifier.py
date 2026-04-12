@@ -175,7 +175,7 @@ class AlertNotifier:
                         logger.error("telegram_send_failed", status=resp.status, error=error)
                         self.stats["failed"] += 1
                         
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("telegram_error", error=str(e))
             self.stats["failed"] += 1
     
@@ -243,7 +243,7 @@ class AlertNotifier:
                         logger.error("slack_send_failed", status=resp.status, error=error)
                         self.stats["failed"] += 1
                         
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("slack_error", error=str(e))
             self.stats["failed"] += 1
     
@@ -273,7 +273,7 @@ class AlertNotifier:
 
             self.stats["email_sent"] += 1
             logger.info("email_alert_sent", alert_id=alert.get("alert_id"))
-        except Exception as e:
+        except (smtplib.SMTPException, ConnectionError, OSError) as e:
             logger.error("email_send_failed", error=str(e))
             self.stats["failed"] += 1
 
@@ -328,7 +328,7 @@ class AlertNotifier:
                         error = await resp.text()
                         logger.error("pagerduty_send_failed", status=resp.status, error=error)
                         self.stats["failed"] += 1
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("pagerduty_error", error=str(e))
             self.stats["failed"] += 1
 

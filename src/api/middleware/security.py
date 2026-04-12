@@ -62,7 +62,7 @@ class RateLimiter:
             await self._redis.ping()
             logger.info("rate_limiter_redis_connected")
             return self._redis
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError) as e:
             logger.warning("rate_limiter_redis_fallback", error=str(e))
             self._redis_failed = True
             return None
@@ -104,7 +104,7 @@ class RateLimiter:
                 "remaining_minute": self.rpm - minute_count - 1,
                 "remaining_hour": self.rph - hour_count - 1
             }
-        except Exception:
+        except (ConnectionError, OSError):
             # Redis error — fall back to memory
             return await self._check_memory(client_ip, now)
 
@@ -190,7 +190,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 remaining = max(0, api_key_obj.rate_limit_requests - api_key_obj.requests_this_window)
                 response.headers["X-RateLimit-Remaining"] = str(remaining)
                 return response
-            except Exception:
+            except (ValueError, KeyError, AttributeError, ImportError):
                 pass  # Fall through to IP-based limiting
 
         # --- IP-based rate limiting (no API key) ---

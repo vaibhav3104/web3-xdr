@@ -53,7 +53,7 @@ class TokenBlacklist:
             self._redis = aioredis.from_url(url, decode_responses=True)
             await self._redis.ping()
             return self._redis
-        except Exception:
+        except (ConnectionError, OSError, ImportError):
             self._redis = None
             return None
 
@@ -65,7 +65,7 @@ class TokenBlacklist:
             try:
                 await r.setex(f"blacklist:{jti}", ttl, "1")
                 return
-            except Exception:
+            except (ConnectionError, OSError):
                 pass
         # Fallback: in-memory
         self._memory[jti] = exp_timestamp
@@ -78,7 +78,7 @@ class TokenBlacklist:
         if r:
             try:
                 return await r.exists(f"blacklist:{jti}") > 0
-            except Exception:
+            except (ConnectionError, OSError):
                 pass
         return self._memory.get(jti, 0) > datetime.now(timezone.utc).timestamp()
 

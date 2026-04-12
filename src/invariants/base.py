@@ -224,13 +224,27 @@ class InvariantContext:
         """
         Get TVL for a bridge, optionally at a past time.
         """
-        # In a real implementation, this would query actual TVL
-        # For now, calculate from lock/unlock events
+        # Calculate TVL from lock/unlock events
         state = self.get_bridge_state(bridge_id)
         current_tvl = state["locked"] - state["unlocked"]
-        
-        # TODO: Handle historical TVL
-        
+
+        if offset is not None:
+            # Approximate historical TVL by replaying events up to the cutoff
+            cutoff = datetime.now(timezone.utc) - offset
+            historical_locked = Decimal("0")
+            historical_unlocked = Decimal("0")
+            for event in self._events:
+                if event.block_timestamp > cutoff:
+                    break
+                meta = event.metadata or {}
+                if meta.get("bridge_id") != bridge_id:
+                    continue
+                if event.event_type == "bridge_lock":
+                    historical_locked += Decimal(str(meta.get("amount", 0)))
+                elif event.event_type == "bridge_unlock":
+                    historical_unlocked += Decimal(str(meta.get("amount", 0)))
+            return max(Decimal("0"), historical_locked - historical_unlocked)
+
         return max(Decimal("0"), current_tvl)
     
     async def get_timelock_delay(self, contract_address: str) -> timedelta:

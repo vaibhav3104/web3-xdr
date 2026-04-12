@@ -398,7 +398,21 @@ async def mark_false_positive(alert_id: str):
     for alert in simulated_monitor.alerts:
         if alert.id == alert_id:
             alert.status = "false_positive"
-            # TODO: Store for retraining
+            # Persist false-positive label for retraining pipeline
+            try:
+                import redis.asyncio as aioredis
+                import os, json as _json
+                redis_url = os.getenv("REDIS_URL")
+                if redis_url:
+                    r = aioredis.from_url(redis_url, decode_responses=True)
+                    await r.rpush("ml:retraining_queue", _json.dumps({
+                        "alert_id": alert_id,
+                        "label": "false_positive",
+                        "features": getattr(alert, "features", {}),
+                    }))
+                    await r.close()
+            except (ConnectionError, OSError, ImportError) as e:
+                logger.warning("retraining_store_failed", error=str(e))
             return {"success": True, "alert_id": alert_id, "new_status": "false_positive"}
     
     raise HTTPException(status_code=404, detail="Alert not found")

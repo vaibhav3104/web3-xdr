@@ -191,7 +191,7 @@ async def simulate_transaction(
                     "requested_by": current_user.username,
                 }))
                 await r.close()
-        except Exception as pub_err:
+        except (ConnectionError, OSError, ImportError) as pub_err:
             logger.warning("simulation_publish_failed", error=str(pub_err))
 
         # Also check DB for an existing simulation result

@@ -636,7 +636,7 @@ class APIKeyManager:
 
             logger.info("api_keys_loaded_from_db", customers=len(self.customers), keys=loaded)
             return loaded
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError) as e:
             logger.warning("api_keys_db_load_failed", error=str(e))
             return 0
 
@@ -674,7 +674,7 @@ class APIKeyManager:
                         rate_limit_multiplier=customer.rate_limit_multiplier,
                         contracts=customer.contracts,
                     ))
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError) as e:
             logger.error("customer_db_save_failed", error=str(e), customer_id=customer.id)
 
     async def save_key_to_db(self, api_key: APIKey):
@@ -711,7 +711,7 @@ class APIKeyManager:
                         expires_at=api_key.expires_at,
                         created_by=api_key.created_by,
                     ))
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError) as e:
             logger.error("api_key_db_save_failed", error=str(e), key_id=api_key.id)
 
 

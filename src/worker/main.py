@@ -1341,10 +1341,57 @@ class Sentinel3Worker:
                 await asyncio.sleep(5.0)
     
     async def _store_simulation_run(self, runtime_engine: "RuntimeEngine", simulation_run_id: str):
-        """Store simulation run to database (stub - would need to get from runtime engine)."""
-        # TODO: Store simulation run details
-        # For now, this is a placeholder
-        pass
+        """Store simulation run to database if not already persisted."""
+        if not RUNTIME_AVAILABLE:
+            return
+        try:
+            from src.database.models import SimulationRunModel
+            from src.database.connection import DatabaseManager
+            from sqlalchemy import select
+            async with DatabaseManager.get_session() as session:
+                existing = await session.execute(
+                    select(SimulationRunModel).where(
+                        SimulationRunModel.id == uuid.UUID(simulation_run_id)
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    return  # Already stored
+
+                # Retrieve from engine's predicted incidents cache
+                sim_data = None
+                for inc in runtime_engine._predicted_incidents.values():
+                    if inc.linked_simulation_run_id == simulation_run_id:
+                        sim_data = inc.evidence_json.get("simulation", {})
+                        break
+
+                if not sim_data:
+                    logger.debug("simulation_run_data_not_found", simulation_run_id=simulation_run_id[:16])
+                    return
+
+                db_sim = SimulationRunModel(
+                    id=uuid.UUID(simulation_run_id),
+                    chain_id=sim_data.get("chain_id", "unknown"),
+                    block_number=sim_data.get("block", {}).get("number", 0),
+                    block_hash=sim_data.get("block", {}).get("hash", ""),
+                    tx_hash=sim_data.get("tx_hash", ""),
+                    tx_from=sim_data.get("tx_from"),
+                    tx_to=sim_data.get("tx_to"),
+                    tx_selector=sim_data.get("tx_selector"),
+                    mode=sim_data.get("mode", "FAST"),
+                    status=sim_data.get("status", "SUCCESS"),
+                    duration_ms=sim_data.get("duration_ms", 0),
+                    rpc_calls=sim_data.get("rpc_calls", 0),
+                    state_diff_fingerprint=sim_data.get("state_diff_fingerprint"),
+                    invariant_results=sim_data.get("invariant_results", []),
+                    confidence=sim_data.get("confidence", 0.0),
+                    confidence_reasons=sim_data.get("confidence_reasons"),
+                    assumptions=sim_data.get("assumptions"),
+                )
+                session.add(db_sim)
+                await session.commit()
+                logger.info("simulation_run_stored", simulation_run_id=simulation_run_id[:16])
+        except (ConnectionError, OSError, ImportError, RuntimeError, ValueError) as e:
+            logger.warning("simulation_run_store_failed", error=str(e))
     
     async def _store_predicted_incident(self, incident: "PredictedIncident"):
         """Store predicted incident to database."""

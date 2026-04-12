@@ -100,13 +100,13 @@ def create_app(
             await DatabaseManager.initialize()
             await DatabaseManager.ensure_indexes()
             logger.info("database_initialized")
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError) as e:
             logger.error("database_init_failed", error=str(e))
 
         try:
             from ..shared_state import monitor_state
             monitor_state.set_start_time()
-        except Exception:
+        except (ImportError, AttributeError):
             pass
 
         # Load API keys from database
@@ -114,7 +114,7 @@ def create_app(
             from .api_keys import api_key_manager
             loaded = await api_key_manager.load_from_db()
             logger.info("api_keys_loaded", count=loaded)
-        except Exception as e:
+        except (ImportError, ConnectionError, OSError) as e:
             logger.warning("api_keys_load_failed", error=str(e))
 
         # Bootstrap TP/FP feedback loop from historical incident data
@@ -135,7 +135,7 @@ def create_app(
             loaded = fl.load_from_db(pg_conn.cursor())
             pg_conn.close()
             logger.info("feedback_loop_bootstrapped", feedbacks_loaded=loaded)
-        except Exception as e:
+        except (ImportError, ConnectionError, OSError, ValueError) as e:
             logger.warning("feedback_loop_bootstrap_failed", error=str(e))
 
     # ── CORS ────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ def create_app(
     try:
         from ..telemetry.tracing import init_tracing
         init_tracing(app)
-    except Exception as e:
+    except ImportError as e:
         logger.debug("otel_init_skipped", error=str(e))
 
     # ── Static routes ───────────────────────────────────────────────
@@ -222,7 +222,7 @@ def create_app(
                 from sqlalchemy import text
                 await session.execute(text("SELECT 1"))
             checks["postgres"] = "connected"
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError, RuntimeError) as e:
             checks["postgres"] = f"error: {str(e)[:80]}"
 
         # Check Redis
@@ -233,7 +233,7 @@ def create_app(
             await r.ping()
             await r.aclose()
             checks["redis"] = "connected"
-        except Exception as e:
+        except (ConnectionError, OSError, ImportError, RuntimeError) as e:
             checks["redis"] = f"error: {str(e)[:80]}"
 
         all_ok = all(v == "connected" for v in checks.values())
