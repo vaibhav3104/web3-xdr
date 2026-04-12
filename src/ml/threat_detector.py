@@ -450,7 +450,7 @@ class ThreatDetector:
     def _get_top_factors(
         self,
         features: Dict[str, float],
-        probs: torch.Tensor
+        probs: "torch.Tensor"
     ) -> List[Dict[str, Any]]:
         """Get top contributing features using simple importance estimation."""
         factors = []

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query, Body, status
 import structlog
 import uuid
+import os
 
 from ..auth.jwt_handler import require_auth, require_role
 from ..auth.models import User

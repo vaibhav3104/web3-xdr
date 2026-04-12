@@ -9,7 +9,7 @@ WASM binary format: https://webassembly.github.io/spec/core/binary/
 """
 
 import struct
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 from dataclasses import dataclass, field
 
 import structlog

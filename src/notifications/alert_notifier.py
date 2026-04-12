@@ -5,6 +5,7 @@ Sends alerts to Telegram, Slack, Email, and Dashboard
 
 import os
 import asyncio
+import smtplib
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from dataclasses import dataclass
@@ -249,7 +250,6 @@ class AlertNotifier:
     async def _send_email(self, message: str, alert: dict):
         """Send alert via SMTP email."""
         try:
-            import smtplib
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
 

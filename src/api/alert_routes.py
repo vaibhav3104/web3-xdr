@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone
 import os
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/alerts", tags=["Contract Alerts"])
 
