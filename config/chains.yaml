@@ -314,8 +314,8 @@ chains:
   - chain_id: "osmosis"
     chain_name: "Osmosis"
     chain_type: "cosmos"
-    rpc_url: "https://osmosis-rpc.polkachu.com"
-    ws_url: "wss://osmosis-rpc.polkachu.com/websocket"
+    rpc_url: "https://rpc.osmosis.zone"
+    ws_url: "wss://rpc.osmosis.zone/websocket"
     bridge_contracts:
       - "osmo1"
     tokens:
@@ -328,8 +328,8 @@ chains:
   - chain_id: "injective"
     chain_name: "Injective"
     chain_type: "cosmos"
-    rpc_url: "https://injective-rpc.polkachu.com"
-    ws_url: "wss://injective-rpc.polkachu.com/websocket"
+    rpc_url: "https://sentry.tm.injective.network"
+    ws_url: "wss://sentry.tm.injective.network/websocket"
     bridge_contracts:
       - "inj1"
     tokens:
