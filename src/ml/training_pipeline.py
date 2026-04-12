@@ -8,6 +8,7 @@ Supports:
 - Vertex AI training (cloud)
 - Continuous learning from new incidents
 """
+from __future__ import annotations
 
 import json
 from datetime import datetime, timezone

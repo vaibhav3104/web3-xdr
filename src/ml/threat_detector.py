@@ -10,6 +10,7 @@ Supports:
 - Vertex AI inference (cloud)
 - Ensemble of multiple models
 """
+from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
@@ -450,7 +451,7 @@ class ThreatDetector:
     def _get_top_factors(
         self,
         features: Dict[str, float],
-        probs: "torch.Tensor"
+        probs: torch.Tensor
     ) -> List[Dict[str, Any]]:
         """Get top contributing features using simple importance estimation."""
         factors = []
