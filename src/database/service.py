@@ -784,22 +784,26 @@ class DatabaseService:
                 by_chain = {row.chain_id: row.count for row in chain_result}
                 total = sum(by_chain.values())
                 
-                # Count threats (CRITICAL or HIGH severity)
+                # Count threats: MEDIUM+ severity with is_threat=true in raw_data
                 threat_sql = text("""
                     SELECT COUNT(*) as count
-                    FROM events 
+                    FROM events
                     WHERE event_type = 'contract_deploy'
-                    AND (severity = 'CRITICAL' OR severity = 'HIGH' OR severity = 'critical' OR severity = 'high')
+                    AND LOWER(severity) IN ('critical', 'high', 'medium')
+                    AND raw_data IS NOT NULL
+                    AND raw_data->>'is_threat' = 'true'
                 """)
                 threat_result = await session.execute(threat_sql)
                 total_threats = threat_result.scalar() or 0
-                
+
                 # Count threats in last 24 hours
                 threat_24h_sql = text("""
                     SELECT COUNT(*) as count
-                    FROM events 
+                    FROM events
                     WHERE event_type = 'contract_deploy'
-                    AND (severity = 'CRITICAL' OR severity = 'HIGH' OR severity = 'critical' OR severity = 'high')
+                    AND LOWER(severity) IN ('critical', 'high', 'medium')
+                    AND raw_data IS NOT NULL
+                    AND raw_data->>'is_threat' = 'true'
                     AND created_at >= NOW() - INTERVAL '24 hours'
                 """)
                 threat_24h_result = await session.execute(threat_24h_sql)
@@ -863,6 +867,50 @@ class DatabaseService:
                     "by_category": {}
                 }
     
+    @staticmethod
+    async def migrate_contract_severity() -> Dict[str, Any]:
+        """
+        One-time migration: recalculate severity for contract_deploy events using
+        the risk_score + confidence stored in raw_data. This aligns historical
+        events with the new stricter severity logic.
+        """
+        async with DatabaseManager.get_session() as session:
+            try:
+                # Recalculate severity based on raw_data risk_score + confidence
+                migrate_sql = text("""
+                    UPDATE events
+                    SET severity = CASE
+                        WHEN (raw_data->>'risk_score')::float >= 0.80
+                             AND (raw_data->>'confidence')::float >= 0.85
+                            THEN 'CRITICAL'
+                        WHEN (raw_data->>'risk_score')::float >= 0.65
+                             AND (raw_data->>'confidence')::float >= 0.70
+                            THEN 'HIGH'
+                        WHEN (raw_data->>'risk_score')::float >= 0.50
+                             AND (raw_data->>'confidence')::float >= 0.55
+                            THEN 'MEDIUM'
+                        ELSE 'LOW'
+                    END
+                    WHERE event_type = 'contract_deploy'
+                    AND raw_data IS NOT NULL
+                    AND raw_data->>'risk_score' IS NOT NULL
+                    AND raw_data->>'confidence' IS NOT NULL
+                    AND raw_data->>'is_threat' = 'true'
+                """)
+                result = await session.execute(migrate_sql)
+                await session.commit()
+                updated = result.rowcount
+
+                logger.info("contract_severity_migration_complete", updated_rows=updated)
+                return {
+                    "status": "completed",
+                    "updated_rows": updated,
+                    "message": f"Recalculated severity for {updated} contract events"
+                }
+            except Exception as e:
+                logger.error("contract_severity_migration_error", error=str(e))
+                raise
+
     @staticmethod
     async def get_contract_deploy_alerts(
         chain_id: Optional[str] = None,

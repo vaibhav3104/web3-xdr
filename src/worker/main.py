@@ -2600,15 +2600,18 @@ class Sentinel3Worker:
                         contract = analysis.contract
                         event_id = str(uuid.uuid4())
                         
-                        # Map threat category to severity
+                        # Map threat category to severity using BOTH risk_score AND confidence
                         # risk_score is 0-1 (combined ML + scanner)
+                        # Must match incident-creation thresholds to avoid inflated DB counts
                         severity = Severity.INFO
                         if analysis.is_threat:
-                            if analysis.risk_score > 0.7:
+                            rs = analysis.risk_score
+                            conf = analysis.confidence
+                            if rs >= 0.80 and conf >= 0.85:
                                 severity = Severity.CRITICAL
-                            elif analysis.risk_score > 0.5:
+                            elif rs >= 0.65 and conf >= 0.70:
                                 severity = Severity.HIGH
-                            elif analysis.risk_score > 0.3:
+                            elif rs >= 0.50 and conf >= 0.55:
                                 severity = Severity.MEDIUM
                             else:
                                 severity = Severity.LOW

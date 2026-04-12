@@ -378,7 +378,7 @@ async def contract_detection_health():
     Health check for contract detection system.
     """
     classifier = get_classifier()
-    
+
     return {
         "status": "healthy",
         "ml_available": ML_AVAILABLE,
@@ -386,4 +386,20 @@ async def contract_detection_health():
         "total_alerts": len(contract_alert_store._alerts),
         "total_analyzed": contract_alert_store.total_contracts_analyzed
     }
+
+
+@router.post("/migrate-severity")
+async def migrate_contract_severity():
+    """
+    One-time migration: recalculate severity for historical contract_deploy events
+    using the risk_score + confidence stored in raw_data.
+
+    This fixes inflated threat counts from the old scanner that used risk_score only.
+    """
+    try:
+        result = await DatabaseService.migrate_contract_severity()
+        return result
+    except Exception as e:
+        logger.error("severity_migration_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
 
