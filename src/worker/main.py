@@ -2729,7 +2729,7 @@ class Sentinel3Worker:
                                 "summary": f"ML Contract Scanner detected a potentially malicious contract deployment. "
                                            f"Contract {contract.address} deployed by {contract.deployer or 'unknown'} "
                                            f"has been classified as '{analysis.threat_category}' with {analysis.confidence:.1%} confidence "
-                                           f"and risk score of {analysis.risk_score:.0f}/100.",
+                                           f"and risk score of {analysis.risk_score * 100:.0f}/100.",
                                 "severity": severity.name,
                                 "status": "OPEN_PENDING",  # Matches database model expectation
                                 "attack_type": attack_type,
