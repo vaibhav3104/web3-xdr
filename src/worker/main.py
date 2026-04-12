@@ -626,7 +626,6 @@ class Sentinel3Worker:
                 listener = None
                 if chain_type == "solana":
                     from src.telemetry.solana_listener import SolanaListener
-                    from src.telemetry.base import ListenerConfig
                     cfg = ListenerConfig(**base_kwargs)
                     listener = SolanaListener(cfg)
                 elif chain_type in ("cosmos", "ibc"):
