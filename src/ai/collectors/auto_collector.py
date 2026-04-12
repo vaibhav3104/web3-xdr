@@ -688,30 +688,33 @@ class AutoContractCollector:
             # ================================================================
             # COMBINE RESULTS
             # ================================================================
-            
-            # Weighted risk score combination
-            # ML: 50%, Scanner: 40%, Source: 10% (if available)
+
+            # When no ML classifier is loaded, the "ML score" is just a
+            # rule-based feature check (has_reentrancy_pattern, etc.) with
+            # 0.6 confidence — not a trained model. Weight scanner lower
+            # in that case to avoid heuristic-on-heuristic inflation.
+            has_real_ml = self.classifier is not None
             if source_available:
-                combined_risk_score = (ml_risk_score * 0.45) + (scanner_risk_score * 0.45) + (0.1 if source_alerts else 0)
+                ml_w, sc_w = (0.45, 0.45) if has_real_ml else (0.50, 0.35)
+                combined_risk_score = (ml_risk_score * ml_w) + (scanner_risk_score * sc_w) + (0.1 if source_alerts else 0)
             else:
-                combined_risk_score = (ml_risk_score * 0.55) + (scanner_risk_score * 0.45)
-            
+                ml_w, sc_w = (0.55, 0.45) if has_real_ml else (0.60, 0.30)
+                combined_risk_score = (ml_risk_score * ml_w) + (scanner_risk_score * sc_w)
+
             # Ensure risk score is capped at 1.0
             combined_risk_score = min(1.0, combined_risk_score)
-            
+
             # Adjust confidence based on scanner agreement
             if scanner_risk_score > 0.5 and ml_risk_score > 0.5:
-                # Both agree it's risky - higher confidence
                 combined_confidence = min(0.95, ml_confidence + 0.1)
             elif scanner_risk_score > 0.5 or ml_risk_score > 0.5:
-                # One thinks it's risky - moderate confidence
                 combined_confidence = ml_confidence
             else:
-                # Both think it's safe - high confidence in safety
                 combined_confidence = min(0.9, ml_confidence + 0.05)
-            
-            # Determine if threat
-            is_threat = threat_category != "safe" and combined_risk_score > 0.4
+
+            # Determine if threat — require higher bar when running without ML model
+            threat_threshold = 0.45 if has_real_ml else 0.55
+            is_threat = threat_category != "safe" and combined_risk_score > threat_threshold
             
             # ================================================================
             # GENERATE ALERTS

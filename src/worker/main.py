@@ -2645,12 +2645,12 @@ class Sentinel3Worker:
                         # Apply ML-based TP filtering to reduce false positives
                         
                         # Confidence thresholds for incident creation
-                        MIN_CONFIDENCE_FOR_INCIDENT = 0.25  # 25% minimum
-                        
+                        MIN_CONFIDENCE_FOR_INCIDENT = 0.50  # 50% minimum (raised from 25%)
+
                         # Only process threats
                         if not analysis.is_threat:
                             return  # Not a threat, skip incident creation
-                        
+
                         # Filter out low-confidence detections
                         if analysis.confidence < MIN_CONFIDENCE_FOR_INCIDENT:
                             logger.info(
@@ -2662,9 +2662,9 @@ class Sentinel3Worker:
                                 reason="Below minimum confidence threshold"
                             )
                             return  # Skip incident creation
-                        
+
                         # Filter out 'unknown_threat' with low confidence (likely FP)
-                        if analysis.threat_category == "unknown_threat" and analysis.confidence < 0.40:
+                        if analysis.threat_category == "unknown_threat" and analysis.confidence < 0.70:
                             logger.info(
                                 "ml_threat_filtered_unknown",
                                 chain=contract.chain,
@@ -2673,21 +2673,22 @@ class Sentinel3Worker:
                                 reason="Unknown threat with low confidence"
                             )
                             return  # Skip incident creation
-                        
-                        # Adjust severity based on confidence AND risk score (0-100 scale)
-                        # Risk score is the PRIMARY factor for severity
-                        # Risk score 15 with confidence 50% should be LOW, not CRITICAL
-                        if analysis.risk_score >= 80 and analysis.confidence >= 0.85:
+
+                        # Adjust severity based on confidence AND risk score
+                        # risk_score is 0-1 (combined ML + scanner from auto_collector)
+                        rs = analysis.risk_score
+                        conf = analysis.confidence
+                        if rs >= 0.80 and conf >= 0.85:
                             severity = Severity.CRITICAL
-                        elif analysis.risk_score >= 60 and analysis.confidence >= 0.70:
+                        elif rs >= 0.65 and conf >= 0.70:
                             severity = Severity.HIGH
-                        elif analysis.risk_score >= 40 and analysis.confidence >= 0.50:
+                        elif rs >= 0.50 and conf >= 0.55:
                             severity = Severity.MEDIUM
                         else:
                             severity = Severity.LOW
                         
                         # Only create incidents for MEDIUM+ severity
-                        if severity.value < Severity.MEDIUM.value:
+                        if severity not in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM):
                             logger.info(
                                 "ml_threat_filtered_low_severity",
                                 chain=contract.chain,
