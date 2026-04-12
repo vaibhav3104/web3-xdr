@@ -23,6 +23,7 @@ Bridge Protocols Monitored:
 """
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
@@ -257,18 +258,17 @@ class AptosListener(RobustNonEVMListener):
                 chain_id=self.config.chain_id,
                 event_type=EventType.BRIDGE_CALL,
                 severity=severity,
-                timestamp=datetime.now(timezone.utc),
-                transaction_hash=tx_hash,
+                block_timestamp=datetime.now(timezone.utc),
+                tx_hash=tx_hash,
                 block_number=int(version),
-                from_address=sender,
+                source_address=sender,
                 contract_address=module_address,
-                method_name=function,
-                value=str(value),
-                raw_data=tx,
-                metadata={
+                amount=Decimal(str(value)),
+                raw_event={
+                    "tx": tx,
+                    "method_name": function,
                     "chain_type": "aptos",
                     "bridge_name": bridge_name,
-                    "function": function,
                     "value_usd": value
                 }
             ))
@@ -282,17 +282,16 @@ class AptosListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.SUSPICIOUS_CALL,
                     severity=Severity.HIGH,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=tx_hash,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=tx_hash,
                     block_number=int(version),
-                    from_address=sender,
+                    source_address=sender,
                     contract_address=module_address,
-                    method_name=function,
-                    raw_data=tx,
-                    metadata={
+                    raw_event={
+                        "tx": tx,
+                        "method_name": function,
                         "chain_type": "aptos",
-                        "suspicious_pattern": pattern,
-                        "function": function
+                        "suspicious_pattern": pattern
                     }
                 ))
                 break
@@ -309,12 +308,12 @@ class AptosListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.TOKEN_TRANSFER,
                     severity=Severity.LOW,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=tx_hash,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=tx_hash,
                     block_number=int(version),
-                    from_address=sender,
-                    raw_data=event,
-                    metadata={
+                    source_address=sender,
+                    raw_event={
+                        "event": event,
                         "chain_type": "aptos",
                         "event_type": event_type,
                         "event_data": event_data
@@ -379,13 +378,13 @@ class AptosListener(RobustNonEVMListener):
                             chain_id=self.config.chain_id,
                             event_type=EventType.BRIDGE_CALL,
                             severity=Severity.MEDIUM,
-                            timestamp=datetime.now(timezone.utc),
-                            transaction_hash=digest,
+                            block_timestamp=datetime.now(timezone.utc),
+                            tx_hash=digest,
                             block_number=int(checkpoint) if checkpoint else 0,
                             contract_address=package,
-                            method_name=f"{module}::{function}",
-                            raw_data=tx,
-                            metadata={
+                            raw_event={
+                                "tx": tx,
+                                "method_name": f"{module}::{function}",
                                 "chain_type": "sui",
                                 "bridge_name": bridge_name,
                                 "package": package,
@@ -404,11 +403,11 @@ class AptosListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.TOKEN_TRANSFER,
                     severity=Severity.LOW,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=digest,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=digest,
                     block_number=int(checkpoint) if checkpoint else 0,
-                    raw_data=event,
-                    metadata={
+                    raw_event={
+                        "event": event,
                         "chain_type": "sui",
                         "event_type": event_type
                     }

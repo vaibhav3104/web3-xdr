@@ -29,6 +29,7 @@ Bridge Protocols Monitored:
 import asyncio
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import AsyncGenerator, Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
@@ -293,24 +294,21 @@ class CosmosListener(RobustNonEVMListener):
             chain_id=self.config.chain_id,
             event_type=EventType.CROSS_CHAIN_TRANSFER,
             severity=severity,
-            timestamp=datetime.now(timezone.utc),
-            transaction_hash=tx_hash,
+            block_timestamp=datetime.now(timezone.utc),
+            tx_hash=tx_hash,
             block_number=height,
-            from_address=sender,
-            to_address=receiver,
-            value=str(amount),
+            source_address=sender,
+            dest_address=receiver,
+            amount=Decimal(str(amount)),
             contract_address="ibc",
-            method_name=event_type,
-            raw_data={
+            raw_event={
                 "event_type": event_type,
                 "packet": packet,
                 "attributes": attributes,
-                "denom": denom
-            },
-            metadata={
+                "denom": denom,
+                "method_name": event_type,
                 "chain_type": "cosmos",
                 "protocol": "IBC",
-                "denom": denom,
                 "amount_normalized": amount_float
             }
         )
@@ -343,14 +341,14 @@ class CosmosListener(RobustNonEVMListener):
             chain_id=self.config.chain_id,
             event_type=EventType.LARGE_TRANSFER,
             severity=Severity.MEDIUM,
-            timestamp=datetime.now(timezone.utc),
-            transaction_hash=tx_hash,
+            block_timestamp=datetime.now(timezone.utc),
+            tx_hash=tx_hash,
             block_number=height,
-            from_address=sender,
-            to_address=recipient,
-            value=amount,
-            raw_data=attributes,
-            metadata={
+            source_address=sender,
+            dest_address=recipient,
+            amount=Decimal(str(amount_float)),
+            raw_event={
+                **attributes,
                 "chain_type": "cosmos",
                 "amount_normalized": amount_float
             }
@@ -387,13 +385,13 @@ class CosmosListener(RobustNonEVMListener):
             chain_id=self.config.chain_id,
             event_type=EventType.BRIDGE_CALL,
             severity=Severity.MEDIUM,
-            timestamp=datetime.now(timezone.utc),
-            transaction_hash=tx_hash,
+            block_timestamp=datetime.now(timezone.utc),
+            tx_hash=tx_hash,
             block_number=height,
             contract_address=contract,
-            method_name=action,
-            raw_data=attributes,
-            metadata={
+            raw_event={
+                **attributes,
+                "method_name": action,
                 "chain_type": "cosmos",
                 "bridge_type": bridge_type or "unknown",
                 "protocol": "CosmWasm"

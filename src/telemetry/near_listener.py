@@ -27,6 +27,7 @@ Near-Specific Vulnerabilities:
 import json
 import base64
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
@@ -233,14 +234,15 @@ class NearListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.BRIDGE_DEPOSIT if is_bridge else EventType.LARGE_TRANSFER,
                     severity=severity,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=tx_hash,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=tx_hash,
                     block_number=height,
-                    from_address=signer,
-                    to_address=receiver,
-                    value=str(amount),
-                    raw_data={"action": action, "outcome": outcome},
-                    metadata={
+                    source_address=signer,
+                    dest_address=receiver,
+                    amount=Decimal(str(amount_near)),
+                    raw_event={
+                        "action": action,
+                        "outcome": outcome,
                         "chain_type": "near",
                         "amount_near": amount_near,
                         "bridge_name": bridge_name,
@@ -279,19 +281,19 @@ class NearListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.BRIDGE_CALL,
                     severity=Severity.MEDIUM,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=tx_hash,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=tx_hash,
                     block_number=height,
-                    from_address=signer,
-                    to_address=receiver,
+                    source_address=signer,
+                    dest_address=receiver,
                     contract_address=receiver,
-                    method_name=method_name,
-                    value=str(deposit),
-                    raw_data={"action": action, "args": args},
-                    metadata={
+                    amount=Decimal(str(deposit / 1e24)),
+                    raw_event={
+                        "action": action,
+                        "args": args,
+                        "method_name": method_name,
                         "chain_type": "near",
                         "bridge_name": bridge_name,
-                        "method": method_name,
                         "deposit_near": deposit / 1e24
                     }
                 ))
@@ -302,15 +304,16 @@ class NearListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.SUSPICIOUS_CALL,
                     severity=Severity.HIGH,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=tx_hash,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=tx_hash,
                     block_number=height,
-                    from_address=signer,
-                    to_address=receiver,
+                    source_address=signer,
+                    dest_address=receiver,
                     contract_address=receiver,
-                    method_name=method_name,
-                    raw_data={"action": action, "args": args},
-                    metadata={
+                    raw_event={
+                        "action": action,
+                        "args": args,
+                        "method_name": method_name,
                         "chain_type": "near",
                         "suspicious_method": method_name,
                         "reason": "Matches suspicious pattern"
@@ -329,15 +332,15 @@ class NearListener(RobustNonEVMListener):
                     chain_id=self.config.chain_id,
                     event_type=EventType.ACCESS_CONTROL_CHANGE,
                     severity=Severity.CRITICAL,
-                    timestamp=datetime.now(timezone.utc),
-                    transaction_hash=tx_hash,
+                    block_timestamp=datetime.now(timezone.utc),
+                    tx_hash=tx_hash,
                     block_number=height,
-                    from_address=signer,
-                    to_address=receiver,
+                    source_address=signer,
+                    dest_address=receiver,
                     contract_address=receiver,
-                    method_name=key_action,
-                    raw_data={"action": action},
-                    metadata={
+                    raw_event={
+                        "action": action,
+                        "method_name": key_action,
                         "chain_type": "near",
                         "key_action": key_action,
                         "bridge_name": NEAR_BRIDGES.get(receiver),
@@ -352,15 +355,15 @@ class NearListener(RobustNonEVMListener):
                 chain_id=self.config.chain_id,
                 event_type=EventType.CONTRACT_DEPLOYED,
                 severity=Severity.MEDIUM,
-                timestamp=datetime.now(timezone.utc),
-                transaction_hash=tx_hash,
+                block_timestamp=datetime.now(timezone.utc),
+                tx_hash=tx_hash,
                 block_number=height,
-                from_address=signer,
-                to_address=receiver,
+                source_address=signer,
+                dest_address=receiver,
                 contract_address=receiver,
-                method_name="deploy_contract",
-                raw_data={"action": "DeployContract"},
-                metadata={
+                raw_event={
+                    "action": "DeployContract",
+                    "method_name": "deploy_contract",
                     "chain_type": "near",
                     "deployed_to": receiver
                 }
@@ -392,15 +395,15 @@ class NearListener(RobustNonEVMListener):
                         chain_id=self.config.chain_id,
                         event_type=EventType.BRIDGE_EVENT,
                         severity=Severity.LOW,
-                        timestamp=datetime.now(timezone.utc),
-                        transaction_hash=tx_hash,
+                        block_timestamp=datetime.now(timezone.utc),
+                        tx_hash=tx_hash,
                         block_number=height,
                         contract_address=executor_id,
-                        raw_data={"receipt": receipt, "log": log},
-                        metadata={
+                        raw_event={
+                            "receipt": receipt,
+                            "log": log,
                             "chain_type": "near",
-                            "bridge_name": NEAR_BRIDGES.get(executor_id),
-                            "log": log
+                            "bridge_name": NEAR_BRIDGES.get(executor_id)
                         }
                     ))
         
