@@ -2714,6 +2714,11 @@ class Sentinel3Worker:
 
         logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled, continuous_learning=continuous_learning_enabled)
 
+        # Signal readiness to health endpoint before blocking on gather
+        global is_ready
+        is_ready = True
+        logger.info("worker_ready", ready=True)
+
         # Wait for tasks
         tasks = [ingestion_task, detection_task, uptime_task, feedback_task]
         if runtime_task:
