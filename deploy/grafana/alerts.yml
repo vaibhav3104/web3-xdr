@@ -40,4 +40,3 @@ groups:
         annotations:
           summary: "High error rate in Sentinel3"
           description: "Error rate is {{ $value }} errors/sec over the last 5 minutes."
-

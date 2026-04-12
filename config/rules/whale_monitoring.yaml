@@ -7,7 +7,7 @@ rules:
   # ==========================================================================
   # LARGE TRANSFER MONITORING
   # ==========================================================================
-  
+
   - id: whale-transfer-001
     name: Whale Transfer Detected
     description: |
@@ -16,7 +16,7 @@ rules:
     severity: medium
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -25,15 +25,20 @@ rules:
         - field: amount_usd
           operator: gt
           value: 5000000  # $5M+
-    
+
     thresholds:
       min_amount_usd: 5000000
 
     # Known high-volume addresses — suppress known institutional/protocol movements
     exclusions:
+      contracts:
+        - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"  # WETH — routine wraps/unwraps
+        - "0xbb2b8038a1640196fbe3e38816f3e67cba72d940"  # Uniswap V2 WBTC/WETH LP pair
+        - "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc"  # Uniswap V2 USDC/WETH LP pair
       addresses:
         - "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb"  # Morpho protocol
         - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet
+        - "0x00eb00c6f847740000884d00e03f00c761998feb"  # MEV bot/router — multi-incident FP source
 
     rate_limit:
       max_alerts: 10
@@ -57,7 +62,7 @@ rules:
     severity: medium
     confidence: 0.65
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: accumulation
@@ -71,9 +76,9 @@ rules:
         - field: sell_count_24h
           operator: lt
           value: 2
-    
+
     time_window: 24h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -87,7 +92,7 @@ rules:
     severity: high
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: distribution
@@ -101,9 +106,9 @@ rules:
         - field: buy_count_24h
           operator: lt
           value: 2
-    
+
     time_window: 24h
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -112,7 +117,7 @@ rules:
   # ==========================================================================
   # EXCHANGE FLOW MONITORING
   # ==========================================================================
-  
+
   - id: exchange-inflow-001
     name: Large Exchange Inflow
     description: |
@@ -121,7 +126,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -132,7 +137,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 10000000  # $10M+
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -150,7 +155,7 @@ rules:
     severity: medium
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -161,7 +166,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 10000000  # $10M+
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -175,7 +180,7 @@ rules:
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: metric
       metric: exchange_net_flow_usd
@@ -183,9 +188,9 @@ rules:
         - field: net_flow_abs
           operator: gt
           value: 50000000  # $50M net flow
-    
+
     time_window: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -194,7 +199,7 @@ rules:
   # ==========================================================================
   # KNOWN ENTITY MONITORING
   # ==========================================================================
-  
+
   - id: known-hacker-movement-001
     name: Known Hacker Wallet Movement
     description: |
@@ -203,7 +208,7 @@ rules:
     severity: critical
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -211,7 +216,7 @@ rules:
         - field: from_is_known_hacker
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -230,7 +235,7 @@ rules:
     severity: critical
     confidence: 0.99
     enabled: true
-    
+
     detection:
       type: event
       event_type: any
@@ -238,7 +243,7 @@ rules:
         - field: address_is_sanctioned
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -255,7 +260,7 @@ rules:
     severity: high
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -266,7 +271,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 10000
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -279,7 +284,7 @@ rules:
   # ==========================================================================
   # STABLECOIN MONITORING
   # ==========================================================================
-  
+
   - id: stablecoin-large-mint-001
     name: Large Stablecoin Mint
     description: |
@@ -288,7 +293,7 @@ rules:
     severity: medium
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       event_type: Mint
@@ -299,7 +304,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 100000000  # $100M+
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -313,7 +318,7 @@ rules:
     severity: medium
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       event_type: Burn
@@ -324,7 +329,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 100000000  # $100M+
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -333,7 +338,7 @@ rules:
   # ==========================================================================
   # TOKEN UNLOCK MONITORING
   # ==========================================================================
-  
+
   - id: vesting-unlock-001
     name: Large Vesting Unlock
     description: |
@@ -342,17 +347,17 @@ rules:
     severity: medium
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
-      event_type: 
+      event_type:
         - VestingReleased
         - TokensClaimed
       conditions:
         - field: amount_usd
           operator: gt
           value: 5000000  # $5M+
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -371,7 +376,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -382,7 +387,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 1000000  # $1M+
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -391,7 +396,7 @@ rules:
   # ==========================================================================
   # SMART MONEY TRACKING
   # ==========================================================================
-  
+
   - id: smart-money-buy-001
     name: Smart Money Accumulation
     description: |
@@ -400,7 +405,7 @@ rules:
     severity: low
     confidence: 0.60
     enabled: true
-    
+
     detection:
       type: event
       event_type: Swap
@@ -411,7 +416,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 100000
-    
+
     actions:
       - type: log
         level: info
@@ -427,7 +432,7 @@ rules:
     severity: medium
     confidence: 0.65
     enabled: true
-    
+
     detection:
       type: event
       event_type: Swap
@@ -438,9 +443,8 @@ rules:
         - field: amount_usd
           operator: gt
           value: 500000
-    
+
     actions:
       - type: alert
         channels: [slack]
         priority: P3
-

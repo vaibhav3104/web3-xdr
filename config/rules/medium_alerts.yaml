@@ -26,12 +26,12 @@ rules:
       threshold: 500
 
     time_window: 1m
-    
+
     # Suppress during known high-activity times
     suppress:
       - schedule: "0 0 * * 1"  # Mondays (often high activity)
       - during_events: [airdrop, token_launch]
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -45,11 +45,11 @@ rules:
     description: |
       Detects large transfers from addresses with no prior history.
       Could indicate fresh attack wallet or legitimate new user.
-    
+
     severity: medium
     confidence: 0.60
     enabled: true
-    
+
     detection:
       type: event
       event_type: Transfer
@@ -60,10 +60,10 @@ rules:
         - field: sender_tx_count
           operator: lt
           value: 5   # Fewer than 5 prior transactions
-    
+
     thresholds:
       min_amount_usd: 100000
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -81,11 +81,11 @@ rules:
     description: |
       Monitors privileged operations on bridge contracts.
       Normal during maintenance, suspicious if unexpected.
-    
+
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: event
       event_type:
@@ -95,13 +95,13 @@ rules:
         - PauseToggled
         - ParameterChanged
       chain: any
-    
+
     # Alert if >5 admin actions per hour
     rate_threshold:
       count: 5
       period: 1h
       escalate_to: high
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -117,11 +117,11 @@ rules:
     description: |
       Detects rapid back-and-forth bridging that may indicate
       arbitrage activity or potential attack preparation.
-    
+
     severity: medium
     confidence: 0.50
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: rapid_bridging
@@ -135,7 +135,7 @@ rules:
         - field: same_address
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -149,11 +149,11 @@ rules:
     description: |
       Detects interactions with bridge contracts from unusual sources
       (unverified contracts, known attack contracts, etc.)
-    
+
     severity: medium
     confidence: 0.65
     enabled: true
-    
+
     detection:
       type: event
       event_type: any
@@ -164,7 +164,7 @@ rules:
         - field: caller_verified
           operator: eq
           value: false
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -193,7 +193,7 @@ rules:
       metric: failed_transactions_per_minute
       chain: any
       threshold: 10
-    
+
     actions:
       - type: log
         level: warning
@@ -211,11 +211,11 @@ rules:
     description: |
       Monitors large or unlimited token approvals to bridge contracts.
       Normal for users, but tracking for forensics.
-    
+
     severity: low
     confidence: 0.30
     enabled: true
-    
+
     detection:
       type: event
       event_type: Approval
@@ -223,9 +223,8 @@ rules:
         - field: amount
           operator: eq
           value: unlimited  # Max uint256
-    
+
     actions:
       - type: log
         level: info
         # No alert, just log for forensics
-

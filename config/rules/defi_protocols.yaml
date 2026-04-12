@@ -7,16 +7,16 @@ rules:
   # ==========================================================================
   # AAVE PROTOCOL RULES
   # ==========================================================================
-  
+
   - id: aave-flash-loan-001
     name: Aave Flash Loan Large Amount
     description: |
-      Detects large flash loans from Aave protocol which could be used 
+      Detects large flash loans from Aave protocol which could be used
       in price manipulation or exploit attacks.
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
       event_type: FlashLoan
@@ -28,10 +28,10 @@ rules:
         - field: amount_usd
           operator: gt
           value: 10000000  # $10M+
-    
+
     thresholds:
       min_amount_usd: 10000000
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -45,23 +45,23 @@ rules:
   - id: aave-liquidation-002
     name: Aave Mass Liquidation Event
     description: |
-      Detects multiple liquidations in short time period, indicating 
+      Detects multiple liquidations in short time period, indicating
       potential market manipulation or oracle attack.
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
       event_type: LiquidationCall
       chain: any
-      
+
       aggregation:
         function: count
         group_by: [chain]
         time_window: 10m
         threshold: 10  # >10 liquidations in 10 minutes
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -70,7 +70,7 @@ rules:
   - id: aave-borrow-spike-003
     name: Aave Abnormal Borrow Rate
     description: |
-      Detects sudden spike in borrow activity which could indicate 
+      Detects sudden spike in borrow activity which could indicate
       protocol exploitation or market manipulation.
     severity: medium
     confidence: 0.65
@@ -83,7 +83,7 @@ rules:
       threshold: 50
 
     time_window: 5m
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -92,7 +92,7 @@ rules:
   # ==========================================================================
   # UNISWAP PROTOCOL RULES
   # ==========================================================================
-  
+
   - id: uniswap-large-swap-001
     name: Uniswap Large Swap Detected
     description: |
@@ -101,7 +101,7 @@ rules:
     severity: medium
     confidence: 0.60
     enabled: false  # DISABLED 2026-04-11: 100% FP — normal Uniswap volume, $1M swaps are routine
-    
+
     detection:
       type: event
       event_type: Swap
@@ -112,10 +112,10 @@ rules:
         - field: amount_usd
           operator: gt
           value: 1000000
-    
+
     thresholds:
       min_amount_usd: 1000000  # $1M+
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -124,12 +124,12 @@ rules:
   - id: uniswap-pool-drain-002
     name: Uniswap Liquidity Pool Drain
     description: |
-      Detects rapid removal of liquidity from Uniswap pools which 
+      Detects rapid removal of liquidity from Uniswap pools which
       could indicate rug pull or exit scam.
     severity: critical
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       event_type: Burn  # LP token burn = liquidity removal
@@ -137,7 +137,7 @@ rules:
         - field: liquidity_removed_percent
           operator: gt
           value: 50  # >50% of pool liquidity
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -151,12 +151,12 @@ rules:
   - id: uniswap-sandwich-003
     name: Uniswap Sandwich Attack Pattern
     description: |
-      Detects sandwich attack pattern where attacker front-runs and 
+      Detects sandwich attack pattern where attacker front-runs and
       back-runs a victim transaction.
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: sandwich_attack
@@ -170,7 +170,7 @@ rules:
         - field: profit_usd
           operator: gt
           value: 1000
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -179,16 +179,16 @@ rules:
   # ==========================================================================
   # COMPOUND PROTOCOL RULES
   # ==========================================================================
-  
+
   - id: compound-oracle-manipulation-001
     name: Compound Oracle Price Deviation
     description: |
-      Detects significant price deviation in Compound oracle which 
+      Detects significant price deviation in Compound oracle which
       could indicate oracle manipulation attack.
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       event_type: PriceUpdated
@@ -198,7 +198,7 @@ rules:
         - field: price_deviation_percent
           operator: gt
           value: 10  # >10% deviation
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -212,25 +212,25 @@ rules:
   - id: compound-governance-attack-002
     name: Compound Governance Proposal Anomaly
     description: |
-      Detects suspicious governance activity like rapid proposal 
+      Detects suspicious governance activity like rapid proposal
       creation or unusual voting patterns.
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
-      event_type: 
+      event_type:
         - ProposalCreated
         - VoteCast
       contracts:
         - "0xc0Da02939E1441F497fd74F78cE7Decb17B66529"  # Compound Governor
-      
+
       aggregation:
         function: count
         time_window: 1h
         threshold: 5
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -239,27 +239,27 @@ rules:
   # ==========================================================================
   # MAKERDAO PROTOCOL RULES
   # ==========================================================================
-  
+
   - id: maker-vault-liquidation-001
     name: MakerDAO Mass Vault Liquidation
     description: |
-      Detects mass liquidation of Maker vaults which could indicate 
+      Detects mass liquidation of Maker vaults which could indicate
       market crash or oracle manipulation.
     severity: high
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       event_type: Bite  # Vault liquidation event
       contracts:
         - "0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B"  # MakerDAO Dog
-      
+
       aggregation:
         function: count
         time_window: 10m
         threshold: 20
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -268,12 +268,12 @@ rules:
   - id: maker-dai-peg-002
     name: DAI Peg Deviation
     description: |
-      Detects significant deviation of DAI from $1 peg which could 
+      Detects significant deviation of DAI from $1 peg which could
       indicate market stress or attack.
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: STABLECOIN_PEG
@@ -281,10 +281,10 @@ rules:
         - field: price_deviation_percent
           operator: gt
           value: 2  # >2% deviation from $1
-    
+
     thresholds:
       min_deviation_percent: 2
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -293,26 +293,26 @@ rules:
   # ==========================================================================
   # CURVE FINANCE RULES
   # ==========================================================================
-  
+
   - id: curve-pool-imbalance-001
     name: Curve Pool Severe Imbalance
     description: |
-      Detects severe imbalance in Curve pools which could indicate 
+      Detects severe imbalance in Curve pools which could indicate
       depeg event or liquidity attack.
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
-      event_type: 
+      event_type:
         - TokenExchange
         - RemoveLiquidity
       conditions:
         - field: pool_imbalance_percent
           operator: gt
           value: 20  # >20% imbalance
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -325,7 +325,7 @@ rules:
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: STABLECOIN_PEG
@@ -336,7 +336,7 @@ rules:
         - field: token_price_deviation
           operator: gt
           value: 5  # >5% from expected price
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -345,7 +345,7 @@ rules:
   # ==========================================================================
   # LIDO PROTOCOL RULES
   # ==========================================================================
-  
+
   - id: lido-steth-depeg-001
     name: Lido stETH Depeg Alert
     description: |
@@ -353,7 +353,7 @@ rules:
     severity: high
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: STETH_PEG
@@ -361,7 +361,7 @@ rules:
         - field: steth_eth_ratio
           operator: lt
           value: 0.95  # stETH trading at <95% of ETH
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -370,16 +370,16 @@ rules:
   # ==========================================================================
   # GENERIC DEFI RULES
   # ==========================================================================
-  
+
   - id: defi-reentrancy-pattern-001
     name: Potential Reentrancy Attack Pattern
     description: |
-      Detects patterns consistent with reentrancy attacks - multiple 
+      Detects patterns consistent with reentrancy attacks - multiple
       calls to same function in single transaction.
     severity: critical
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: reentrancy
@@ -390,7 +390,7 @@ rules:
         - field: same_transaction
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -434,7 +434,7 @@ rules:
     severity: medium
     confidence: 0.60
     enabled: true
-    
+
     detection:
       type: event
       event_type: Approval
@@ -445,9 +445,8 @@ rules:
         - field: spender_age_hours
           operator: lt
           value: 24
-    
+
     actions:
       - type: alert
         channels: [slack]
         priority: P3
-

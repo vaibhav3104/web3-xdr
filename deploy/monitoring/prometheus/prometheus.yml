@@ -34,7 +34,7 @@ scrape_configs:
         labels:
           app: 'sentinel3'
           environment: 'production'
-    
+
     # For Kubernetes service discovery
     # kubernetes_sd_configs:
     #   - role: pod
@@ -51,4 +51,3 @@ scrape_configs:
     static_configs:
       - targets: []
         # - node-exporter:9100
-

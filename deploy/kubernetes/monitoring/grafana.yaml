@@ -226,4 +226,3 @@ spec:
       name: http
   selector:
     app: grafana
-

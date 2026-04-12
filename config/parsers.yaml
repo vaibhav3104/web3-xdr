@@ -18,7 +18,7 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # Token Events (Low Severity - Normal Operations)
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
     name: "Transfer"
     description: "ERC20/ERC721 Token Transfer"
@@ -26,7 +26,7 @@ evm_signatures:
     estimated_usd: 0
     abi: "Transfer(address indexed from, address indexed to, uint256 value)"
     category: "token"
-    
+
   - signature: "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
     name: "Approval"
     description: "ERC20 Token Approval"
@@ -38,7 +38,7 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # Bridge Events - Wormhole (High/Critical Severity)
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0x6eb224fb001ed210e379b335e35efe88672a8ce935d981a6896b27ffdf52a3b2"
     name: "LogMessagePublished"
     description: "Wormhole cross-chain message published"
@@ -47,7 +47,7 @@ evm_signatures:
     abi: "LogMessagePublished(address indexed sender, uint64 sequence, uint32 nonce, bytes payload, uint8 consistencyLevel)"
     category: "bridge"
     protocol: "wormhole"
-    
+
   - signature: "0x1b2a7ff080b8cb6ff436ce0372e399692bbfb6d4ae5766fd8d58a7b8cc6142e6"
     name: "TransferRedeemed"
     description: "Wormhole transfer redeemed (tokens unlocked)"
@@ -60,7 +60,7 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # Bridge Events - Generic (Medium/High Severity)
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c"
     name: "Deposit"
     description: "Generic bridge deposit"
@@ -68,7 +68,7 @@ evm_signatures:
     estimated_usd: 10000
     abi: "Deposit(address indexed dst, uint256 wad)"
     category: "bridge"
-    
+
   - signature: "0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65"
     name: "Withdrawal"
     description: "Generic bridge withdrawal"
@@ -80,7 +80,7 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # LayerZero Events
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0x44b559f101f8fbcc8a0ea43fa91a05a729a5ea6e14a7c75aa750374690137208"
     name: "PacketSent"
     description: "LayerZero cross-chain packet sent"
@@ -89,7 +89,7 @@ evm_signatures:
     abi: "PacketSent(bytes encodedPayload, bytes options, address sendLibrary)"
     category: "bridge"
     protocol: "layerzero"
-    
+
   - signature: "0xe9bded5f24a4168e4f3bf44e00298c993b22376aad8c58c7dda9718a54cbea82"
     name: "PacketReceived"
     description: "LayerZero cross-chain packet received"
@@ -102,20 +102,23 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # Stargate Events
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0x34660fc8af304464529f48a778e03d03e4d34bcd5f9b6f0cfbf3cd238c642f7f"
     name: "Swap"
     description: "Stargate cross-chain swap"
     severity: "medium"
     estimated_usd: 5000
-    abi: "Swap(uint16 chainId, uint256 dstPoolId, address from, uint256 amountSD, uint256 eqReward, uint256 eqFee, uint256 protocolFee, uint256 lpFee)"
+    abi: >-
+      Swap(uint16 chainId, uint256 dstPoolId, address from,
+      uint256 amountSD, uint256 eqReward, uint256 eqFee,
+      uint256 protocolFee, uint256 lpFee)
     category: "bridge"
     protocol: "stargate"
 
   # ─────────────────────────────────────────────────────────────────────────
   # DeFi Events - Flash Loans
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0x631042c832b07452973831137f2d73e395028b44b250dedc5abb0ee766e168ac"
     name: "FlashLoan"
     description: "Aave flash loan executed"
@@ -128,7 +131,7 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # Governance Events (High Severity - Admin Actions)
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0"
     name: "OwnershipTransferred"
     description: "Contract ownership transferred"
@@ -136,7 +139,7 @@ evm_signatures:
     estimated_usd: 0
     abi: "OwnershipTransferred(address indexed previousOwner, address indexed newOwner)"
     category: "governance"
-    
+
   - signature: "0x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d"
     name: "RoleGranted"
     description: "Access control role granted"
@@ -144,7 +147,7 @@ evm_signatures:
     estimated_usd: 0
     abi: "RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)"
     category: "governance"
-    
+
   - signature: "0xf6391f5c32d9c69d2a47ea670b442974b53935d1edc7fd64eb21e047a839171b"
     name: "RoleRevoked"
     description: "Access control role revoked"
@@ -156,7 +159,7 @@ evm_signatures:
   # ─────────────────────────────────────────────────────────────────────────
   # Contract Upgrade Events (Critical)
   # ─────────────────────────────────────────────────────────────────────────
-  
+
   - signature: "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b"
     name: "Upgraded"
     description: "Proxy contract upgraded to new implementation"
@@ -176,32 +179,32 @@ cosmos_events:
     description: "Inter-Blockchain Communication transfer"
     severity: "medium"
     category: "bridge"
-    
+
   - type: "send_packet"
     name: "Send Packet"
     description: "IBC packet sent"
     severity: "low"
     category: "bridge"
-    
+
   - type: "recv_packet"
     name: "Receive Packet"
     description: "IBC packet received"
     severity: "medium"
     category: "bridge"
-    
+
   - type: "acknowledge_packet"
     name: "Acknowledge Packet"
     description: "IBC packet acknowledged"
     severity: "low"
     category: "bridge"
-    
+
   # Governance
   - type: "submit_proposal"
     name: "Submit Proposal"
     description: "Governance proposal submitted"
     severity: "high"
     category: "governance"
-    
+
   - type: "proposal_vote"
     name: "Proposal Vote"
     description: "Vote on governance proposal"
@@ -221,7 +224,7 @@ move_events:
     - "token_bridge::transfer_tokens"
     - "portal::deposit"
     - "portal::withdraw"
-    
+
   # Severity mapping by function pattern
   severity_patterns:
     - pattern: "transfer"
@@ -248,19 +251,19 @@ near_events:
     - type: "FunctionCall"
       name: "Function Call"
       severity: "low"
-      
+
     - type: "Transfer"
       name: "NEAR Transfer"
       severity: "low"
-      
+
     - type: "DeployContract"
       name: "Deploy Contract"
       severity: "high"
-      
+
     - type: "DeleteAccount"
       name: "Delete Account"
       severity: "critical"
-      
+
   # Bridge contracts to monitor
   bridge_contracts:
     - "aurora"
@@ -277,19 +280,19 @@ severity_levels:
     color: "#4ade80"
     description: "Normal operations, informational"
     response: "Log only"
-    
+
   medium:
     value: 2
     color: "#facc15"
     description: "Unusual activity, worth monitoring"
     response: "Alert if threshold exceeded"
-    
+
   high:
     value: 3
     color: "#f97316"
     description: "Suspicious activity, potential attack"
     response: "Immediate alert, investigate"
-    
+
   critical:
     value: 4
     color: "#ef4444"
@@ -305,19 +308,18 @@ categories:
     name: "Token Operations"
     description: "ERC20/ERC721 token transfers and approvals"
     icon: "💰"
-    
+
   bridge:
     name: "Bridge Operations"
     description: "Cross-chain bridge deposits, withdrawals, and messages"
     icon: "🌉"
-    
+
   governance:
     name: "Governance"
     description: "Admin actions, role changes, and contract upgrades"
     icon: "🏛️"
-    
+
   defi:
     name: "DeFi Operations"
     description: "Flash loans, swaps, and liquidity operations"
     icon: "📊"
-

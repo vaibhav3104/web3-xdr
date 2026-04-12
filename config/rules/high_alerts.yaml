@@ -12,19 +12,19 @@ rules:
     description: |
       Detects unusually large transfers through monitored bridges.
       Could indicate whale activity or potential attack preparation.
-    
+
     severity: high
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: event
-      event_type: 
+      event_type:
         - Lock
         - Mint
         - Transfer
       chain: any
-    
+
     thresholds:
       min_amount_usd: 10000000  # $10M+ (raised from $1M — whale activity below $10M is routine)
 
@@ -36,10 +36,13 @@ rules:
         - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"  # WETH — routine wraps/unwraps
         - "0x4200000000000000000000000000000000000006"  # Optimism native WETH bridge
         - "0x85f17cf997934a597031b2e18a9ab6ebd4b9f6a4"  # Staking contract (generated $1.1B FP)
+        - "0xbb2b8038a1640196fbe3e38816f3e67cba72d940"  # Uniswap V2 WBTC/WETH LP — DEX pair, not bridge
+        - "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc"  # Uniswap V2 USDC/WETH LP — DEX pair, not bridge
       addresses:
         - "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59"  # Recurring Base bridge pair (4x repeat)
         - "0x787fd1dc3b533171781e4ae1a563c1ac7b4435e4"  # Recurring Base bridge counterparty
         - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet (routine exchange deposits)
+        - "0x00eb00c6f847740000884d00e03f00c761998feb"  # MEV bot/router — appears across multiple FPs
 
     rate_limit:
       max_alerts: 3
@@ -58,11 +61,11 @@ rules:
     description: |
       Detects when Total Value Locked decreases faster than normal,
       which could indicate coordinated withdrawal or exploit.
-    
+
     severity: high
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: TVL_VELOCITY
@@ -73,9 +76,9 @@ rules:
         - field: drain_amount_usd
           operator: gt
           value: 100000  # >$100K
-    
+
     time_window: 1h
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -95,7 +98,7 @@ rules:
     description: |
       Detects unusual spike in bridge message publications,
       which could indicate attack preparation or ongoing exploit.
-    
+
     severity: high
     confidence: 0.75
     enabled: false  # DISABLED 2026-04-11: 100% FP — normal bridge message volume trivially exceeds threshold
@@ -110,7 +113,7 @@ rules:
         group_by: [chain, bridge_id]
         time_window: 5m
         threshold: 10  # >10 messages per 5 minutes
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -124,19 +127,19 @@ rules:
     description: |
       Detects withdrawal events from bridge contracts.
       Requires investigation to determine if legitimate.
-    
+
     severity: high
     confidence: 0.60
     enabled: true
-    
+
     detection:
       type: event
       event_type: Withdrawal
       chain: any
-    
+
     thresholds:
       min_amount_usd: 100000  # $100K+
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -150,11 +153,11 @@ rules:
     description: |
       Detects when governance actions are executed faster than
       the required timelock delay.
-    
+
     severity: high
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: TIMELOCK_RESPECTED
@@ -162,7 +165,7 @@ rules:
         - field: execution_delay
           operator: lt
           compare_to: required_delay
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -176,11 +179,11 @@ rules:
     description: |
       Detects patterns consistent with flash loan attacks:
       large borrowed amounts with high-value operations in same block.
-    
+
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: flash_loan_attack
@@ -194,7 +197,7 @@ rules:
         - field: same_block
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -205,4 +208,3 @@ rules:
           - "2. Identify flash loan source (Aave, dYdX, etc.)"
           - "3. Trace fund flow through protocols"
           - "4. Assess impact and affected protocols"
-

@@ -86,4 +86,3 @@ spec:
   selector:
     matchLabels:
       app: sentinel3
-

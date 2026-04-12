@@ -34,7 +34,7 @@ data:
     # --- Macro: Allowed processes in sentinel3 containers ---
     - macro: sentinel3_allowed_processes
       condition: >
-        proc.name in (python3, python, gunicorn, uvicorn, celery, bash, sh, 
+        proc.name in (python3, python, gunicorn, uvicorn, celery, bash, sh,
                        anvil, curl, wget, pip, git)
 
     # =========================================================================

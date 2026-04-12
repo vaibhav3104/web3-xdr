@@ -81,7 +81,7 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
-      
+
       # DNS policy: prevent DNS exfiltration
       dnsPolicy: ClusterFirst
       dnsConfig:

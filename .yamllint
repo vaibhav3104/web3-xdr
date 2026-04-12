@@ -1,0 +1,28 @@
+---
+extends: default
+
+rules:
+  # Hex addresses and URLs are inherently long — 150 chars is practical
+  line-length:
+    max: 150
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+
+  # Config files use comments as section headers; relax spacing
+  comments:
+    require-starting-space: true
+    ignore-shebangs: true
+    min-spaces-from-content: 1
+
+  comments-indentation: disable
+
+  # Many config files omit document-start; not worth enforcing
+  document-start: disable
+
+  # Allow single blank line between sections for readability
+  empty-lines:
+    max: 1
+
+  truthy:
+    allowed-values: ["true", "false", "yes", "no"]
+    check-keys: false

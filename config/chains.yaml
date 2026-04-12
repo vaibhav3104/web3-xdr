@@ -1,7 +1,7 @@
 # ============================================================================
 # Sentinel3 - Real Bridge Monitoring Configuration
 # ============================================================================
-# 
+#
 # SETUP INSTRUCTIONS (using INFURA):
 # 1. Go to https://app.infura.io/register and create free account
 # 2. Create a new API key (Web3 API)
@@ -26,7 +26,7 @@ chains:
     # Infura (if you have API key):
     # rpc_url: "https://mainnet.infura.io/v3/YOUR_API_KEY"
     ws_url: "wss://ethereum-rpc.publicnode.com"
-    
+
     # All monitored bridge contracts on Ethereum
     bridge_contracts:
       # Wormhole
@@ -54,7 +54,7 @@ chains:
       - "0x6b7a87899490EcE95443e979cA9485CBE7E71522"  # Multichain Router
       # Polygon PoS
       - "0xA0c68C638235ee32657e8f720a23ceC1bFc77C77"  # Root Chain Manager
-      
+
     # Popular tokens to monitor
     token_contracts:
       - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"  # WETH
@@ -62,7 +62,7 @@ chains:
       - "0xdAC17F958D2ee523a2206206994597C13D831ec7"  # USDT
       - "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"  # WBTC
       - "0x6B175474E89094C44Da98b954EescdeCB5cC7e9B"  # DAI
-    
+
     # DeFi Protocol Contracts
     defi_contracts:
       # AAVE V3
@@ -98,10 +98,10 @@ chains:
       # Lido
       - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"  # Lido stETH
       - "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"  # Lido wstETH
-      
+
     poll_interval_seconds: 12  # ~1 block
     confirmations_required: 2   # Wait for 2 confirmations
-    
+
   # -------------------------------------------------------------------------
   # POLYGON MAINNET
   # -------------------------------------------------------------------------
@@ -114,7 +114,7 @@ chains:
     # rpc_url: "https://polygon.llamarpc.com"
     # rpc_url: "https://1rpc.io/matic"
     ws_url: "wss://polygon.publicnode.com"
-    
+
     bridge_contracts:
       # LayerZero
       - "0x3c2269811836af69497E5F486A85D7316753cf62"  # LayerZero Endpoint
@@ -130,15 +130,15 @@ chains:
       - "0x8F5BBB2BB8c2Ee94639E55d5F41de9b4839C1280"  # Synapse Bridge
       # Celer
       - "0x88DCDC47D2f83a99CF0000FDF667A468bB958a78"  # cBridge
-      
+
     token_contracts:
       - "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"  # WETH
       - "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"  # USDC
       - "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"  # USDT
-      
+
     poll_interval_seconds: 2   # Polygon is faster
     confirmations_required: 10  # More confirmations for Polygon
-    
+
   # -------------------------------------------------------------------------
   # ARBITRUM ONE
   # -------------------------------------------------------------------------
@@ -150,7 +150,7 @@ chains:
     # rpc_url: "https://rpc.ankr.com/arbitrum"
     # rpc_url: "https://arbitrum.llamarpc.com"
     # rpc_url: "https://1rpc.io/arb"
-    
+
     bridge_contracts:
       # Native Arbitrum
       - "0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a"  # Arbitrum Bridge
@@ -168,7 +168,7 @@ chains:
       - "0x6F4e8eBa4D337f874Ab57478AcC2Cb5BACdc19c9"  # Synapse Bridge
       # Celer
       - "0x1619DE6B6B20eD217a58d00f37B9d47C7663feca"  # cBridge
-      
+
     poll_interval_seconds: 1
     confirmations_required: 5
 
@@ -180,18 +180,18 @@ chains:
     chain_type: "solana"  # Non-EVM chain
     # Free public RPC (rate limited) - get better one from https://www.quicknode.com/
     rpc_url: "https://api.mainnet-beta.solana.com"
-    
+
     # Wormhole contracts on Solana
     bridge_contracts:
       - "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb"   # Wormhole Token Bridge
       - "worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth"   # Wormhole Core Bridge
-      
+
     # Popular SPL tokens
     token_contracts:
       - "So11111111111111111111111111111111111111112"    # Wrapped SOL
       - "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # USDC
       - "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"  # USDT
-      
+
     poll_interval_seconds: 1   # Solana is very fast
     confirmations_required: 32  # Solana finality
 
@@ -201,7 +201,7 @@ chains:
   - chain_id: "avalanche"
     chain_name: "Avalanche C-Chain"
     rpc_url: "https://api.avax.network/ext/bc/C/rpc"
-    
+
     bridge_contracts:
       # Wormhole
       - "0x0e082F06FF657D94310cB8cE8B0D9a04541d8052"  # Wormhole on Avalanche
@@ -214,7 +214,7 @@ chains:
       - "0xC05e61d0E7a63D27546389B7aD62FdFf5A91aACE"  # Synapse Bridge
       # Celer
       - "0xef3c714c9425a8F3697A9C969Dc1af30ba82e5d4"  # cBridge
-      
+
     poll_interval_seconds: 2
     confirmations_required: 3
 
@@ -224,7 +224,7 @@ chains:
   - chain_id: "bsc"
     chain_name: "BNB Smart Chain"
     rpc_url: "https://bsc-dataseed.binance.org"
-    
+
     bridge_contracts:
       # Wormhole
       - "0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B"  # Wormhole on BSC
@@ -237,7 +237,7 @@ chains:
       - "0xd123f70AE324d34A9E76b67a27bf77593bA8749f"  # Synapse Bridge
       # Celer
       - "0xdd90E5E87A2081Dcf0391920868eBc2FFB81a1aF"  # cBridge
-      
+
     poll_interval_seconds: 3
     confirmations_required: 15
 
@@ -247,7 +247,7 @@ chains:
   - chain_id: "optimism"
     chain_name: "Optimism"
     rpc_url: "https://mainnet.optimism.io"
-    
+
     bridge_contracts:
       # LayerZero
       - "0x3c2269811836af69497E5F486A85D7316753cf62"  # LayerZero Endpoint
@@ -261,7 +261,7 @@ chains:
       - "0xAf41a65F786339e7911F4acDAD6BD49426F2Dc6b"  # Synapse Bridge
       # Celer
       - "0x9D39Fc627A6d9d9F8C831c16995b209548cc3401"  # cBridge
-      
+
     poll_interval_seconds: 2
     confirmations_required: 10
 
@@ -271,7 +271,7 @@ chains:
   - chain_id: "base"
     chain_name: "Base"
     rpc_url: "https://mainnet.base.org"
-    
+
     bridge_contracts:
       # LayerZero
       - "0xb6319cC6c8c27A8F5dAF0dD3DF91EA35C4720dd7"  # LayerZero Endpoint
@@ -281,7 +281,7 @@ chains:
       - "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64"  # Spoke Pool
       # Synapse
       - "0xf07d1C752fAb503E47FEF309bf14fbDD3E867089"  # Synapse Bridge
-      
+
     poll_interval_seconds: 2
     confirmations_required: 10
 
@@ -399,7 +399,7 @@ bridges:
       - "0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B"  # Core Bridge
     required_signatures: 13
     total_validators: 19
-    
+
   # -------------------------------------------------------------------------
   # LAYERZERO - Omnichain interoperability protocol ($5B+ TVL)
   # -------------------------------------------------------------------------
@@ -410,25 +410,25 @@ bridges:
       - "0x66A71Dcef29A0fFBDBE3c6a460a3B5BC225Cd675"  # LayerZero Endpoint
       - "0x4D73AdB72bC3DD368966edD0f0b2148401A178E2"  # Ultra Light Node
       - "0x902F09715B6303d4173037652FA7377e5b98089E"  # Relayer
-    
+
   - id: "layerzero_polygon"
     name: "LayerZero Polygon"
     source_chain: "polygon"
     contracts:
       - "0x3c2269811836af69497E5F486A85D7316753cf62"  # LayerZero Endpoint
-      
+
   - id: "layerzero_arbitrum"
     name: "LayerZero Arbitrum"
     source_chain: "arbitrum"
     contracts:
       - "0x3c2269811836af69497E5F486A85D7316753cf62"  # LayerZero Endpoint
-      
+
   - id: "layerzero_avalanche"
     name: "LayerZero Avalanche"
     source_chain: "avalanche"
     contracts:
       - "0x3c2269811836af69497E5F486A85D7316753cf62"  # LayerZero Endpoint
-      
+
   - id: "layerzero_bsc"
     name: "LayerZero BSC"
     source_chain: "bsc"
@@ -446,7 +446,7 @@ bridges:
       - "0xdf0770dF86a8034b3EFEf0A1Bb3c889B8332FF56"  # USDC Pool
       - "0x38EA452219524Bb87e18dE1C24D3bB59510BD783"  # USDT Pool
       - "0x101816545F6bd2b1076434B54383a1E633390A2E"  # ETH Pool
-      
+
   - id: "stargate_polygon"
     name: "Stargate Polygon"
     source_chain: "polygon"
@@ -454,7 +454,7 @@ bridges:
       - "0x45A01E4e04F14f7A4a6702c74187c5F6222033cd"  # Stargate Router
       - "0x1205f31718499dBf1fCa446663B532Ef87481fe1"  # USDC Pool
       - "0x29e38769f23701A2e4A8Ef0492e19dA4604Be62c"  # USDT Pool
-      
+
   - id: "stargate_arbitrum"
     name: "Stargate Arbitrum"
     source_chain: "arbitrum"
@@ -462,14 +462,14 @@ bridges:
       - "0x53Bf833A5d6c4ddA888F69c22C88C9f356a41614"  # Stargate Router
       - "0x892785f33CdeE22A30AEF750F285E18c18040c3e"  # USDC Pool
       - "0xB6CfcF89a7B22988bfC96632aC2A9D6daB60d641"  # USDT Pool
-      
+
   - id: "stargate_avalanche"
     name: "Stargate Avalanche"
     source_chain: "avalanche"
     contracts:
       - "0x45A01E4e04F14f7A4a6702c74187c5F6222033cd"  # Stargate Router
       - "0x1205f31718499dBf1fCa446663B532Ef87481fe1"  # USDC Pool
-      
+
   - id: "stargate_bsc"
     name: "Stargate BSC"
     source_chain: "bsc"
@@ -488,19 +488,19 @@ bridges:
       - "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5"  # Spoke Pool V3
       - "0xc186fA914353c44b2E33eBE05f21846F1048bEda"  # Hub Pool
       - "0x4D9079Bb4165aeb4084c526a32695dCfd2F77381"  # Spoke Pool (Legacy)
-      
+
   - id: "across_polygon"
     name: "Across Protocol Polygon"
     source_chain: "polygon"
     contracts:
       - "0x9295ee1d8C5b022Be115A2AD3c30C72E34e7F096"  # Spoke Pool V3
-      
+
   - id: "across_arbitrum"
     name: "Across Protocol Arbitrum"
     source_chain: "arbitrum"
     contracts:
       - "0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A"  # Spoke Pool V3
-      
+
   - id: "across_optimism"
     name: "Across Protocol Optimism"
     source_chain: "optimism"
@@ -518,14 +518,14 @@ bridges:
       - "0x3E4a3a4796d16c0Cd582C382691998f7c06420B6"  # USDC Bridge
       - "0x3d4Cc8A61c7528Fd86C55cfe061a78dCBA48EDd1"  # USDT Bridge
       - "0xb8901acB165ed027E32754E0FFe830802919727f"  # DAI Bridge
-      
+
   - id: "hop_polygon"
     name: "Hop Protocol Polygon"
     source_chain: "polygon"
     contracts:
       - "0x553bC791D746767166fA3888432038193cEED5E2"  # Polygon AMM Wrapper
       - "0x25D8039bB044dC227f741a9e381CA4cEAE2E6aE8"  # USDC Bridge
-      
+
   - id: "hop_arbitrum"
     name: "Hop Protocol Arbitrum"
     source_chain: "arbitrum"
@@ -542,25 +542,25 @@ bridges:
     contracts:
       - "0x2796317b0fF8538F253012862c06787Adfb8cEb6"  # Synapse Bridge
       - "0x1116898DdA4015eD8dDefb84b6e8Bc24528Af2d8"  # nUSD Pool
-      
+
   - id: "synapse_polygon"
     name: "Synapse Polygon"
     source_chain: "polygon"
     contracts:
       - "0x8F5BBB2BB8c2Ee94639E55d5F41de9b4839C1280"  # Synapse Bridge
-      
+
   - id: "synapse_arbitrum"
     name: "Synapse Arbitrum"
     source_chain: "arbitrum"
     contracts:
       - "0x6F4e8eBa4D337f874Ab57478AcC2Cb5BACdc19c9"  # Synapse Bridge
-      
+
   - id: "synapse_avalanche"
     name: "Synapse Avalanche"
     source_chain: "avalanche"
     contracts:
       - "0xC05e61d0E7a63D27546389B7aD62FdFf5A91aACE"  # Synapse Bridge
-      
+
   - id: "synapse_bsc"
     name: "Synapse BSC"
     source_chain: "bsc"
@@ -577,25 +577,25 @@ bridges:
       - "0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820"  # cBridge V2
       - "0xB37D31b2A74029B5951a2778F959282E2D518595"  # Liquidity Bridge
       - "0x7510792A3B1969F9307F3845CE88e39578f2bAE1"  # Peg Bridge V2
-      
+
   - id: "celer_polygon"
     name: "Celer cBridge Polygon"
     source_chain: "polygon"
     contracts:
       - "0x88DCDC47D2f83a99CF0000FDF667A468bB958a78"  # cBridge
-      
+
   - id: "celer_arbitrum"
     name: "Celer cBridge Arbitrum"
     source_chain: "arbitrum"
     contracts:
       - "0x1619DE6B6B20eD217a58d00f37B9d47C7663feca"  # cBridge
-      
+
   - id: "celer_avalanche"
     name: "Celer cBridge Avalanche"
     source_chain: "avalanche"
     contracts:
       - "0xef3c714c9425a8F3697A9C969Dc1af30ba82e5d4"  # cBridge
-      
+
   - id: "celer_bsc"
     name: "Celer cBridge BSC"
     source_chain: "bsc"
@@ -613,7 +613,7 @@ bridges:
     contracts:
       - "0x6b7a87899490EcE95443e979cA9485CBE7E71522"  # Multichain Router
       - "0xBa8Da9dcF11B50B03fd5284f164Ef5cdEF910705"  # anyETH
-      
+
   # -------------------------------------------------------------------------
   # POLYGON POS BRIDGE
   # -------------------------------------------------------------------------
@@ -635,25 +635,25 @@ invariants:
     enabled: true
     tolerance_window_minutes: 10
     tolerance_amount: 0.01
-    
+
   # TVL drain detection
   tvl_velocity:
     enabled: true
     max_drain_percent_per_hour: 10.0
     min_drain_usd: 100000
-    
+
   # Transaction velocity
   transaction_velocity:
     enabled: true
     max_tx_per_hour: 1000
     spike_multiplier: 5.0
-    
+
   # Large transaction detection
   large_transaction:
     enabled: true
     threshold_usd: 100000
     max_per_hour: 5
-    
+
   # Admin action monitoring
   admin_action:
     enabled: true
@@ -668,13 +668,13 @@ alerting:
   telegram_bot_token: ""  # Get from @BotFather
   telegram_critical_channel: ""  # Channel ID for critical alerts
   telegram_general_channel: ""   # Channel ID for all alerts
-  
+
   # Slack
   slack_enabled: false
   slack_webhook_url: ""  # Incoming webhook URL
   slack_critical_channel: "#security-critical"
   slack_general_channel: "#security-alerts"
-  
+
   # Rate limiting
   min_alert_interval_seconds: 60
   max_alerts_per_hour: 50
@@ -686,4 +686,3 @@ dashboard:
   enabled: true
   host: "0.0.0.0"
   port: 8080
-

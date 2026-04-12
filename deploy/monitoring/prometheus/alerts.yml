@@ -87,4 +87,3 @@ groups:
         annotations:
           summary: "No events being processed"
           description: "No blockchain events received in the last 10 minutes"
-

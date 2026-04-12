@@ -7,7 +7,7 @@ rules:
   # ==========================================================================
   # ETHEREUM MAINNET RULES
   # ==========================================================================
-  
+
   - id: eth-gas-spike-001
     name: Ethereum Gas Price Spike
     description: |
@@ -16,7 +16,7 @@ rules:
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: metric
       chain: ethereum
@@ -28,9 +28,9 @@ rules:
         - field: gas_increase_percent
           operator: gt
           value: 100  # 2x increase
-    
+
     time_window: 5m
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -50,7 +50,7 @@ rules:
       chain: ethereum
       metric: pending_transactions
       threshold: 50000  # >50K pending txs
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -64,7 +64,7 @@ rules:
     severity: critical
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: event
       chain: ethereum
@@ -73,7 +73,7 @@ rules:
         - field: reorg_depth
           operator: gt
           value: 2
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -82,7 +82,7 @@ rules:
   # ==========================================================================
   # POLYGON RULES
   # ==========================================================================
-  
+
   - id: polygon-checkpoint-delay-001
     name: Polygon Checkpoint Delay
     description: |
@@ -91,7 +91,7 @@ rules:
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: metric
       chain: polygon
@@ -100,7 +100,7 @@ rules:
         - field: delay_minutes
           operator: gt
           value: 60  # >1 hour delay
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -114,7 +114,7 @@ rules:
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: event
       chain: polygon
@@ -123,7 +123,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 1000000
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -132,7 +132,7 @@ rules:
   # ==========================================================================
   # ARBITRUM RULES
   # ==========================================================================
-  
+
   - id: arbitrum-sequencer-down-001
     name: Arbitrum Sequencer Downtime
     description: |
@@ -141,7 +141,7 @@ rules:
     severity: critical
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: metric
       chain: arbitrum
@@ -153,7 +153,7 @@ rules:
         - field: duration_minutes
           operator: gt
           value: 5
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -169,14 +169,14 @@ rules:
     # DISABLED: Rule was triggering on non-Arbitrum chains (false positives)
     # Re-enable when Arbitrum-specific event detection is implemented
     enabled: false
-    
+
     detection:
       type: velocity
       chain: arbitrum
       metric: delayed_inbox_messages
       threshold: 100
       time_window: 10m
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -185,7 +185,7 @@ rules:
   # ==========================================================================
   # OPTIMISM RULES
   # ==========================================================================
-  
+
   - id: optimism-proposer-fault-001
     name: Optimism Proposer Fault
     description: |
@@ -194,12 +194,12 @@ rules:
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       chain: optimism
       event_type: ProposerFault
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -213,12 +213,12 @@ rules:
     severity: high
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       chain: optimism
       event_type: WithdrawalChallenged
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -227,7 +227,7 @@ rules:
   # ==========================================================================
   # BASE RULES
   # ==========================================================================
-  
+
   - id: base-sequencer-feed-001
     name: Base Sequencer Feed Anomaly
     description: |
@@ -236,7 +236,7 @@ rules:
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: metric
       chain: base
@@ -245,7 +245,7 @@ rules:
         - field: delay_ms
           operator: gt
           value: 5000  # >5 second delay
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -254,7 +254,7 @@ rules:
   # ==========================================================================
   # BSC (BINANCE SMART CHAIN) RULES
   # ==========================================================================
-  
+
   - id: bsc-validator-slash-001
     name: BSC Validator Slashing
     description: |
@@ -263,12 +263,12 @@ rules:
     severity: high
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       chain: bsc
       event_type: ValidatorSlashed
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -282,7 +282,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: pattern
       chain: bsc
@@ -296,7 +296,7 @@ rules:
         - field: same_block_trades
           operator: gt
           value: 3
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -305,7 +305,7 @@ rules:
   # ==========================================================================
   # AVALANCHE RULES
   # ==========================================================================
-  
+
   - id: avax-subnet-anomaly-001
     name: Avalanche Subnet Anomaly
     description: |
@@ -314,7 +314,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: metric
       chain: avalanche
@@ -323,7 +323,7 @@ rules:
         - field: latency_ms
           operator: gt
           value: 10000  # >10 second latency
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -337,7 +337,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: pattern
       chain: avalanche
@@ -348,7 +348,7 @@ rules:
         - field: unusual_call_sequence
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -357,7 +357,7 @@ rules:
   # ==========================================================================
   # SOLANA RULES (Non-EVM)
   # ==========================================================================
-  
+
   - id: solana-validator-delinquent-001
     name: Solana Validator Delinquency
     description: |
@@ -366,7 +366,7 @@ rules:
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: metric
       chain: solana
@@ -375,7 +375,7 @@ rules:
         - field: delinquent_percent
           operator: gt
           value: 10  # >10% stake delinquent
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -389,7 +389,7 @@ rules:
     severity: critical
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: pattern
       chain: solana
@@ -401,7 +401,7 @@ rules:
         - field: compute_units
           operator: gt
           value: 1000000
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -410,7 +410,7 @@ rules:
   # ==========================================================================
   # COSMOS RULES (Non-EVM)
   # ==========================================================================
-  
+
   - id: cosmos-ibc-timeout-001
     name: Cosmos IBC Packet Timeout
     description: |
@@ -419,7 +419,7 @@ rules:
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: event
       chain: cosmos
@@ -428,7 +428,7 @@ rules:
         - field: timeout_count_per_hour
           operator: gt
           value: 10
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -442,16 +442,15 @@ rules:
     severity: medium
     confidence: 0.65
     enabled: true
-    
+
     detection:
       type: velocity
       chain: cosmos
       event_type: ProposalSubmitted
       threshold: 5
       time_window: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
         priority: P3
-

@@ -14,4 +14,3 @@ commonLabels:
   app.kubernetes.io/component: core
   app.kubernetes.io/part-of: sentinel3
   app.kubernetes.io/managed-by: kustomize
-

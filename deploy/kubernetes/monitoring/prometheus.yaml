@@ -39,7 +39,7 @@ data:
               severity: critical
             annotations:
               summary: "Critical security incident detected"
-              
+
           - alert: ChainDisconnected
             expr: web3_xdr_chain_connected == 0
             for: 2m
@@ -133,4 +133,3 @@ spec:
       name: http
   selector:
     app: prometheus
-

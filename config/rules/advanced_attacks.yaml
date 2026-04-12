@@ -7,16 +7,16 @@ rules:
   # ==========================================================================
   # MEV & FRONT-RUNNING ATTACKS
   # ==========================================================================
-  
+
   - id: mev-frontrun-001
     name: Front-Running Attack Detected
     description: |
-      Detects front-running patterns where an attacker inserts their 
+      Detects front-running patterns where an attacker inserts their
       transaction before a victim's pending transaction.
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: frontrun
@@ -30,7 +30,7 @@ rules:
         - field: tx_position_diff
           operator: lte
           value: 3  # Within 3 positions
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -43,12 +43,12 @@ rules:
   - id: mev-backrun-002
     name: Back-Running Attack Detected
     description: |
-      Detects back-running where attacker exploits state changes 
+      Detects back-running where attacker exploits state changes
       from a victim's transaction.
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: backrun
@@ -59,7 +59,7 @@ rules:
         - field: uses_flashbots
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -68,12 +68,12 @@ rules:
   - id: mev-jit-liquidity-003
     name: JIT Liquidity Attack
     description: |
-      Detects Just-In-Time liquidity provision attacks where attacker 
+      Detects Just-In-Time liquidity provision attacks where attacker
       adds/removes liquidity around a large swap.
     severity: medium
     confidence: 0.65
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: jit_liquidity
@@ -84,7 +84,7 @@ rules:
         - field: profit_usd
           operator: gt
           value: 500
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -93,7 +93,7 @@ rules:
   # ==========================================================================
   # ORACLE MANIPULATION ATTACKS
   # ==========================================================================
-  
+
   - id: oracle-twap-manipulation-001
     name: TWAP Oracle Manipulation
     description: |
@@ -102,7 +102,7 @@ rules:
     severity: critical
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: ORACLE_PRICE_VALIDITY
@@ -113,11 +113,11 @@ rules:
         - field: sustained_blocks
           operator: gt
           value: 5
-    
+
     thresholds:
       min_deviation_percent: 15
       min_sustained_blocks: 5
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -136,7 +136,7 @@ rules:
     severity: critical
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       event_type: PriceUpdated
@@ -147,7 +147,7 @@ rules:
         - field: time_since_last_update
           operator: lt
           value: 60  # Within 60 seconds
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -156,7 +156,7 @@ rules:
   # ==========================================================================
   # GOVERNANCE ATTACKS
   # ==========================================================================
-  
+
   - id: governance-flashloan-vote-001
     name: Flash Loan Governance Attack
     description: |
@@ -165,7 +165,7 @@ rules:
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: flash_governance
@@ -179,7 +179,7 @@ rules:
         - field: tokens_returned_same_block
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -196,7 +196,7 @@ rules:
     severity: high
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: event
       event_type: ProposalCreated
@@ -207,7 +207,7 @@ rules:
         - field: proposer_token_balance_percent
           operator: lt
           value: 1  # Proposer owns <1% of tokens
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -220,7 +220,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
       event_type: QueueTransaction
@@ -228,7 +228,7 @@ rules:
         - field: target_is_critical_contract
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -241,7 +241,7 @@ rules:
   # ==========================================================================
   # NFT & TOKEN ATTACKS
   # ==========================================================================
-  
+
   - id: nft-wash-trading-001
     name: NFT Wash Trading Detected
     description: |
@@ -251,7 +251,7 @@ rules:
     severity: medium
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: wash_trade
@@ -269,7 +269,7 @@ rules:
         - field: time_window
           operator: lt
           value: 24h
-    
+
     # EXCLUSIONS: Contracts and addresses that should NOT trigger this rule
     exclusions:
       # Known stablecoins (ERC-20, not NFTs)
@@ -289,7 +289,7 @@ rules:
       addresses:
         - "0x0000000000000000000000000000000000000000"  # Zero address (mint/burn)
         - "0x000000000000000000000000000000000000dead"  # Dead address (burn)
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -302,7 +302,7 @@ rules:
     severity: high
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: honeypot
@@ -313,7 +313,7 @@ rules:
         - field: sell_success_rate
           operator: lt
           value: 0.1  # <10% of sells succeed
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -326,12 +326,12 @@ rules:
   - id: token-rugpull-pattern-003
     name: Rug Pull Pattern Detected
     description: |
-      Detects common rug pull patterns - liquidity removal, 
+      Detects common rug pull patterns - liquidity removal,
       ownership renounced after mint, etc.
     severity: critical
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: rug_pull
@@ -345,7 +345,7 @@ rules:
         - field: holder_count
           operator: gt
           value: 100
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -354,16 +354,16 @@ rules:
   # ==========================================================================
   # CROSS-CHAIN ATTACKS
   # ==========================================================================
-  
+
   - id: bridge-replay-attack-001
     name: Cross-Chain Replay Attack
     description: |
-      Detects replay attacks where valid messages are reused on 
+      Detects replay attacks where valid messages are reused on
       different chains or multiple times.
     severity: critical
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: invariant
       invariant: MESSAGE_UNIQUENESS
@@ -371,7 +371,7 @@ rules:
         - field: message_hash_seen_before
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -388,7 +388,7 @@ rules:
     severity: critical
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: validator_collusion
@@ -399,7 +399,7 @@ rules:
         - field: suspicious_message_count
           operator: gt
           value: 3
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -413,7 +413,7 @@ rules:
     severity: critical
     confidence: 0.90
     enabled: true
-    
+
     detection:
       type: event
       event_type: TransferInitiated
@@ -427,7 +427,7 @@ rules:
         - field: amount_usd
           operator: gt
           value: 100000
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -436,7 +436,7 @@ rules:
   # ==========================================================================
   # SMART CONTRACT EXPLOITS
   # ==========================================================================
-  
+
   - id: contract-selfdestruct-001
     name: Contract Self-Destruct Detected
     description: |
@@ -445,7 +445,7 @@ rules:
     severity: critical
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: event
       event_type: SelfDestruct
@@ -453,7 +453,7 @@ rules:
         - field: contract_is_monitored
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack, pagerduty]
@@ -467,7 +467,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: delegatecall_exploit
@@ -478,7 +478,7 @@ rules:
         - field: target_not_whitelisted
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -492,7 +492,7 @@ rules:
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: storage_collision
@@ -503,7 +503,7 @@ rules:
         - field: storage_layout_mismatch
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -512,7 +512,7 @@ rules:
   # ==========================================================================
   # PHISHING & SOCIAL ENGINEERING
   # ==========================================================================
-  
+
   - id: phishing-approval-drain-001
     name: Approval Phishing Attack
     description: |
@@ -521,7 +521,7 @@ rules:
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
       event_type: Approval
@@ -529,7 +529,7 @@ rules:
         - field: spender_is_known_phisher
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [telegram, slack]
@@ -547,7 +547,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: event
       event_type: Permit
@@ -561,9 +561,8 @@ rules:
         - field: amount
           operator: eq
           value: unlimited
-    
+
     actions:
       - type: alert
         channels: [slack]
         priority: P2
-

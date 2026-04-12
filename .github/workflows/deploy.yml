@@ -12,12 +12,11 @@
 name: Deploy Sentinel3
 
 on:
-  # GCP Artifact Registry requires billing — disabled auto-deploy until configured.
-  # Re-enable push trigger once billing is active on GCP project.
-  workflow_dispatch:  # Manual trigger only
+  workflow_dispatch:
   push:
+    branches: [main]
     tags:
-      - 'v*'  # Only deploy on version tags
+      - 'v*'
 
 env:
   GCP_REGION: us-central1

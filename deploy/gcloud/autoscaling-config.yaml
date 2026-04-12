@@ -10,17 +10,17 @@ metadata:
     # Scale to 0 when no requests (saves GPU costs)
     autoscaling.knative.dev/minScale: "0"
     autoscaling.knative.dev/maxScale: "3"
-    
+
     # Scale up quickly when needed
     autoscaling.knative.dev/target: "80"  # Target 80% CPU utilization
     autoscaling.knative.dev/targetUtilizationPercentage: "80"
-    
+
     # Keep warm for 5 minutes after last request
     autoscaling.knative.dev/scale-to-zero-grace-period: "5m"
-    
+
     # Startup time allowance for GPU initialization
     run.googleapis.com/startup-cpu-boost: "true"
-    
+
 spec:
   template:
     metadata:
@@ -28,11 +28,11 @@ spec:
         # Request timeout
         run.googleapis.com/execution-environment: gen2
         run.googleapis.com/cpu-throttling: "false"  # Always-on CPU for GPU workloads
-        
+
     spec:
       containerConcurrency: 80  # Max concurrent requests per instance
       timeoutSeconds: 300  # 5 minute timeout for ML inference
-      
+
       containers:
         - image: us-central1-docker.pkg.dev/web3-xdr/sentinel3/sentinel3-gpu:latest
           resources:
@@ -40,7 +40,7 @@ spec:
               cpu: "4"
               memory: "16Gi"
               nvidia.com/gpu: "1"
-          
+
           # Startup probe - allow time for model loading
           startupProbe:
             httpGet:
@@ -49,7 +49,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 30  # 150 seconds max startup
-          
+
           # Liveness probe
           livenessProbe:
             httpGet:

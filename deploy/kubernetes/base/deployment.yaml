@@ -36,7 +36,7 @@ spec:
     spec:
       serviceAccountName: sentinel3-api
       automountServiceAccountToken: false
-      
+
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -45,23 +45,23 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
-      
+
       containers:
         - name: sentinel3
           image: sentinel3:latest
           imagePullPolicy: IfNotPresent
-          
+
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
-          
+
           envFrom:
             - configMapRef:
                 name: sentinel3-config
             - secretRef:
                 name: sentinel3-secrets
-          
+
           env:
             - name: POD_NAME
               valueFrom:
@@ -71,7 +71,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-          
+
           resources:
             requests:
               cpu: 500m
@@ -79,7 +79,7 @@ spec:
             limits:
               cpu: 2000m
               memory: 2Gi
-          
+
           livenessProbe:
             httpGet:
               path: /health
@@ -88,7 +88,7 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
-          
+
           readinessProbe:
             httpGet:
               path: /health
@@ -97,7 +97,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-          
+
           startupProbe:
             httpGet:
               path: /health
@@ -106,7 +106,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 30
-          
+
           volumeMounts:
             - name: config
               mountPath: /app/config
@@ -118,7 +118,7 @@ spec:
               mountPath: /tmp
             - name: cache
               mountPath: /app/.cache
-          
+
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -130,7 +130,7 @@ spec:
                 - ALL
             seccompProfile:
               type: RuntimeDefault
-      
+
       volumes:
         - name: config
           configMap:
@@ -147,7 +147,7 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
-      
+
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -157,7 +157,7 @@ spec:
                   matchLabels:
                     app: sentinel3
                 topologyKey: kubernetes.io/hostname
-      
+
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
@@ -194,4 +194,3 @@ metadata:
   labels:
     app: sentinel3
 automountServiceAccountToken: false
-

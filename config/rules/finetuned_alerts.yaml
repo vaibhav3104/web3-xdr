@@ -13,11 +13,11 @@ rules:
     description: |
       Detects large token transfers based on raw token amount.
       Works without price feed dependency.
-    
+
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -29,7 +29,7 @@ rules:
           value: 1000  # > 1000 tokens (raised from 100 — too noisy)
 
     thresholds:
-      min_amount_usd: 50000  # $50K+ (raised from $10K — $10-50K transfers are routine, not whale-grade)
+      min_amount_usd: 2000000  # $2M+ (raised from $50K — sub-$2M transfers are routine DeFi activity)
 
     # Known whale/institutional addresses — suppress repeat alerts
     exclusions:
@@ -38,6 +38,11 @@ rules:
         - "0x1e90cb21b770d170821c0ebf56ce6ffd2942e5d4"  # Recurring Base whale counterparty
         - "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb"  # Morpho protocol address
         - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet
+        - "0x82321f3beb69f503380d6b233857d5c43562e2d0"  # Base whale generating $104K FPs
+        - "0x10cf8d4eeb51e9becf9c4e8febcfd735376a05bc"  # Ethereum address generating $499K FPs
+      contracts:
+        - "0x940181a94a35a4569e4529a3cdfb74e38fd98631"  # Base token — routine transfers
+        - "0x4c9edd5852cd905f086c759e8383e09bff1e68b3"  # Ethena USDe — routine stablecoin activity
 
     rate_limit:
       max_alerts: 3
@@ -56,11 +61,11 @@ rules:
     description: |
       Detects when same address is active on multiple chains within short window.
       Potential cross-chain attack preparation.
-    
+
     severity: high
     confidence: 0.70
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: multichain_activity
@@ -71,7 +76,7 @@ rules:
         - field: time_window
           operator: lt
           value: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -89,7 +94,7 @@ rules:
     severity: medium
     confidence: 0.65
     enabled: false  # DISABLED 2026-04-11: 100% FP — $5K threshold too low, normal DEX volume
-    
+
     detection:
       type: event
       event_types:
@@ -101,15 +106,15 @@ rules:
         - field: amount
           operator: gt
           value: 100  # > 100 tokens (lowered for testing)
-    
+
     # Also check USD if available
     thresholds:
       min_amount_usd: 5000  # $5K+ swaps (lowered for testing)
-    
+
     rate_limit:
       max_alerts: 10
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -127,7 +132,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: false  # DISABLED 2026-04-11: 100% FP — $10K threshold too low, routine LP operations
-    
+
     detection:
       type: event
       event_types:
@@ -141,14 +146,14 @@ rules:
         - field: amount
           operator: gt
           value: 50  # > 50 tokens (lowered for testing)
-    
+
     thresholds:
       min_amount_usd: 10000  # $10K+ liquidity removal (lowered for testing)
-    
+
     rate_limit:
       max_alerts: 5
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -162,11 +167,11 @@ rules:
     description: |
       Monitors large flash loan events. Flash loans are often used
       in attacks for instant capital access.
-    
+
     severity: critical
     confidence: 0.85
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -179,14 +184,14 @@ rules:
         - field: amount
           operator: gt
           value: 10  # > 10 tokens (lowered for testing)
-    
+
     thresholds:
       min_amount_usd: 50000  # $50K+ flash loans (lowered for testing)
-    
+
     rate_limit:
       max_alerts: 20
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack, telegram]
@@ -200,11 +205,11 @@ rules:
     description: |
       Monitors large liquidation events across DeFi protocols.
       High liquidation activity may indicate market stress or attacks.
-    
+
     severity: high
     confidence: 0.80
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -219,14 +224,14 @@ rules:
         - field: amount
           operator: gt
           value: 10  # > 10 tokens (lowered for testing)
-    
+
     thresholds:
       min_amount_usd: 5000  # $5K+ liquidations (lowered for testing)
-    
+
     rate_limit:
       max_alerts: 10
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -266,7 +271,7 @@ rules:
     rate_limit:
       max_alerts: 5
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack, telegram]
@@ -283,7 +288,7 @@ rules:
     severity: high
     confidence: 0.75
     enabled: false  # DISABLED 2026-04-11: 100% FP — overlaps with large-bridge-transfer-101, $10K too low
-    
+
     detection:
       type: event
       event_types:
@@ -298,14 +303,14 @@ rules:
         - field: amount
           operator: gt
           value: 50  # > 50 tokens (lowered for testing)
-    
+
     thresholds:
       min_amount_usd: 10000  # $10K+ bridge transfers (lowered for testing)
-    
+
     rate_limit:
       max_alerts: 10
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -351,11 +356,11 @@ rules:
     name: Emergency Protocol Action
     description: |
       Monitors pause, emergency shutdown, and critical governance actions.
-    
+
     severity: critical
     confidence: 0.95
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -364,7 +369,7 @@ rules:
         - Cage
         - SelfDestruct
       chain: any
-    
+
     actions:
       - type: alert
         channels: [slack, telegram, pagerduty]
@@ -377,11 +382,11 @@ rules:
     name: Oracle Price Update
     description: |
       Monitors oracle price updates for potential manipulation.
-    
+
     severity: medium
     confidence: 0.60
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -389,12 +394,12 @@ rules:
         - AnswerUpdated
         - price_update
       chain: any
-    
+
     # Rate limit to avoid noise
     rate_limit:
       max_alerts: 5
       period: 1h
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -421,7 +426,7 @@ rules:
       threshold: 50
 
     time_window: 5m
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -447,7 +452,7 @@ rules:
       threshold: 20
 
     time_window: 1m
-    
+
     actions:
       - type: alert
         channels: [slack]
@@ -461,11 +466,11 @@ rules:
     description: |
       Monitors zero-value transfers which are often used for
       address poisoning attacks or spam.
-    
+
     severity: low
     confidence: 0.40
     enabled: true
-    
+
     detection:
       type: event
       event_types:
@@ -475,11 +480,11 @@ rules:
         - field: amount
           operator: eq
           value: 0
-    
+
     rate_limit:
       max_alerts: 5
       period: 1h
-    
+
     actions:
       - type: log
         level: warning
@@ -492,11 +497,11 @@ rules:
     description: |
       Detects multiple transactions from same address in same block.
       Strong indicator of MEV or sandwich attack.
-    
+
     severity: high
     confidence: 0.75
     enabled: true
-    
+
     detection:
       type: pattern
       pattern: same_block_multi_tx
@@ -507,7 +512,7 @@ rules:
         - field: same_sender
           operator: eq
           value: true
-    
+
     actions:
       - type: alert
         channels: [slack]
