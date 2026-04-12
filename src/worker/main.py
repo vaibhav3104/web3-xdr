@@ -2632,12 +2632,13 @@ class Sentinel3Worker:
                             "token_symbol": "",
                             "raw_data": json.dumps({
                                 "threat_category": analysis.threat_category,
-                                "risk_score": analysis.risk_score,
-                                "confidence": analysis.confidence,
+                                "risk_score": round(analysis.risk_score, 4),
+                                "confidence": round(analysis.confidence, 4),
                                 "is_threat": analysis.is_threat,
                                 "alerts": analysis.alerts,
                                 "bytecode_size": contract.bytecode_length,
-                                "source": "continuous_learning"
+                                "source": "continuous_learning",
+                                "severity": severity.name,
                             })
                         }
                         

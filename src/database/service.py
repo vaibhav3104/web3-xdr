@@ -784,14 +784,12 @@ class DatabaseService:
                 by_chain = {row.chain_id: row.count for row in chain_result}
                 total = sum(by_chain.values())
                 
-                # Count threats: MEDIUM+ severity with is_threat=true in raw_data
+                # Count threats: CRITICAL or HIGH severity only
                 threat_sql = text("""
                     SELECT COUNT(*) as count
                     FROM events
                     WHERE event_type = 'contract_deploy'
-                    AND LOWER(severity) IN ('critical', 'high', 'medium')
-                    AND raw_data IS NOT NULL
-                    AND raw_data->>'is_threat' = 'true'
+                    AND LOWER(severity) IN ('critical', 'high')
                 """)
                 threat_result = await session.execute(threat_sql)
                 total_threats = threat_result.scalar() or 0
@@ -801,9 +799,7 @@ class DatabaseService:
                     SELECT COUNT(*) as count
                     FROM events
                     WHERE event_type = 'contract_deploy'
-                    AND LOWER(severity) IN ('critical', 'high', 'medium')
-                    AND raw_data IS NOT NULL
-                    AND raw_data->>'is_threat' = 'true'
+                    AND LOWER(severity) IN ('critical', 'high')
                     AND created_at >= NOW() - INTERVAL '24 hours'
                 """)
                 threat_24h_result = await session.execute(threat_24h_sql)
@@ -877,25 +873,28 @@ class DatabaseService:
         async with DatabaseManager.get_session() as session:
             try:
                 # Recalculate severity based on raw_data risk_score + confidence
+                # raw_data may be double-encoded (json.dumps stored in JSONB),
+                # so use (raw_data #>> '{}')::jsonb to unwrap first
                 migrate_sql = text("""
                     UPDATE events
                     SET severity = CASE
-                        WHEN (raw_data->>'risk_score')::float >= 0.80
-                             AND (raw_data->>'confidence')::float >= 0.85
+                        WHEN ((raw_data #>> '{}')::jsonb->>'risk_score')::float >= 0.80
+                             AND ((raw_data #>> '{}')::jsonb->>'confidence')::float >= 0.85
                             THEN 'CRITICAL'
-                        WHEN (raw_data->>'risk_score')::float >= 0.65
-                             AND (raw_data->>'confidence')::float >= 0.70
+                        WHEN ((raw_data #>> '{}')::jsonb->>'risk_score')::float >= 0.65
+                             AND ((raw_data #>> '{}')::jsonb->>'confidence')::float >= 0.70
                             THEN 'HIGH'
-                        WHEN (raw_data->>'risk_score')::float >= 0.50
-                             AND (raw_data->>'confidence')::float >= 0.55
+                        WHEN ((raw_data #>> '{}')::jsonb->>'risk_score')::float >= 0.50
+                             AND ((raw_data #>> '{}')::jsonb->>'confidence')::float >= 0.55
                             THEN 'MEDIUM'
                         ELSE 'LOW'
                     END
                     WHERE event_type = 'contract_deploy'
                     AND raw_data IS NOT NULL
-                    AND raw_data->>'risk_score' IS NOT NULL
-                    AND raw_data->>'confidence' IS NOT NULL
-                    AND raw_data->>'is_threat' = 'true'
+                    AND (raw_data #>> '{}')::jsonb->>'is_threat' = 'true'
+                    AND (raw_data #>> '{}')::jsonb->>'risk_score' IS NOT NULL
+                    AND (raw_data #>> '{}')::jsonb->>'confidence' IS NOT NULL
+                    AND (raw_data #>> '{}')::jsonb->>'risk_score' NOT LIKE '0x%%'
                 """)
                 result = await session.execute(migrate_sql)
                 await session.commit()
