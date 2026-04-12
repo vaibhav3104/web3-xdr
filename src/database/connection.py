@@ -87,9 +87,12 @@ class DatabaseManager:
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5432")
         user = os.getenv("POSTGRES_USER", "xdr")
-        password = os.getenv("POSTGRES_PASSWORD", "xdr_password")
+        password = os.getenv("POSTGRES_PASSWORD")
         database = os.getenv("POSTGRES_DB", "web3_xdr")
-        
+
+        if not password:
+            raise ValueError("POSTGRES_PASSWORD (or DATABASE_URL) must be set")
+
         # Use asyncpg driver for async support
         return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
     

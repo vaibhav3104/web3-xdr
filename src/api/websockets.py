@@ -57,9 +57,10 @@ class ConnectionManager:
             self.redis_client = aioredis.from_url(redis_url, decode_responses=True)
             self.pubsub = self.redis_client.pubsub()
             
-            # Subscribe to runtime intents channel
-            await self.pubsub.subscribe("runtime_intents")
-            logger.info("redis_pubsub_subscribed", channel="runtime_intents")
+            # Subscribe to all security event channels
+            channels = ["runtime_intents", "security_events", "incidents", "contract_threats"]
+            await self.pubsub.subscribe(*channels)
+            logger.info("redis_pubsub_subscribed", channels=channels)
             
             self._running = True
             self._redis_task = asyncio.create_task(self._redis_listener())
@@ -78,7 +79,7 @@ class ConnectionManager:
                 pass
         
         if self.pubsub:
-            await self.pubsub.unsubscribe("runtime_intents")
+            await self.pubsub.unsubscribe("runtime_intents", "security_events", "incidents", "contract_threats")
             await self.pubsub.close()
         
         if self.redis_client:
@@ -161,13 +162,19 @@ class ConnectionManager:
         }
         """
         msg_type = message.get("type", "intent")
-        
+
         # Map backend types to frontend types
-        if msg_type in ["threat", "incident", "predicted_incident"]:
-            frontend_type = "THREAT"
-        else:
-            frontend_type = "SCAN"
-        
+        type_map = {
+            "threat": "THREAT",
+            "incident": "INCIDENT",
+            "predicted_incident": "THREAT",
+            "contract_deploy": "DEPLOY",
+            "contract_threat": "THREAT",
+            "security_event": "EVENT",
+            "bridge_event": "BRIDGE",
+        }
+        frontend_type = type_map.get(msg_type, "SCAN")
+
         # Map status
         status_map = {
             "scanning": "Scanning...",
@@ -175,15 +182,18 @@ class ConnectionManager:
             "safe": "Safe",
             "malicious": "MALICIOUS",
             "confirmed": "MALICIOUS",
-            "violated": "MALICIOUS"
+            "violated": "MALICIOUS",
+            "deployed": "Deployed",
+            "open": "Open",
+            "resolved": "Resolved",
         }
         status = status_map.get(message.get("status", "scanning"), "Scanning...")
-        
+
         # Extract risk score
         risk_score = message.get("risk_score", 0.0)
         if risk_score is None:
             risk_score = 0.0
-        
+
         return {
             "type": frontend_type,
             "timestamp": message.get("timestamp", int(datetime.now(timezone.utc).timestamp())),
@@ -192,6 +202,8 @@ class ConnectionManager:
             "contract": message.get("contract_address", message.get("to_address", "")),
             "risk_score": float(risk_score),
             "status": status,
+            "severity": message.get("severity", ""),
+            "title": message.get("title", ""),
             "details": message.get("details", {}),
             "protocol": message.get("protocol_id", ""),
         }

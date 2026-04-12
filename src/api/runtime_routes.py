@@ -168,10 +168,6 @@ async def simulate_transaction(
             details={"chain_id": chain_id, "mode": mode, "manual": True}
         )
         
-        # TODO: Actually trigger simulation
-        # This would require access to RuntimeEngine instance
-        # For now, return a placeholder response
-        
         logger.info(
             "manual_simulation_requested",
             chain_id=chain_id,
@@ -179,13 +175,42 @@ async def simulate_transaction(
             mode=mode,
             user=current_user.username
         )
-        
+
+        # Publish simulation request to Redis so the worker picks it up
+        try:
+            import redis.asyncio as aioredis
+            import json as _json
+            redis_url = os.getenv("REDIS_URL")
+            if redis_url:
+                r = aioredis.from_url(redis_url, decode_responses=True)
+                await r.publish("simulation_requests", _json.dumps({
+                    "chain_id": chain_id,
+                    "tx_hash": tx_hash,
+                    "mode": mode,
+                    "requested_by": current_user.username,
+                }))
+                await r.close()
+        except Exception as pub_err:
+            logger.warning("simulation_publish_failed", error=str(pub_err))
+
+        # Also check DB for an existing simulation result
+        from ..database.service import DatabaseService
+        existing = await DatabaseService.get_simulation_by_tx(tx_hash)
+        if existing:
+            return {
+                "chain_id": chain_id,
+                "tx_hash": tx_hash,
+                "mode": mode,
+                "status": existing.get("status", "completed"),
+                "result": existing,
+            }
+
         return {
-            "message": "Simulation requested (not yet implemented in API)",
             "chain_id": chain_id,
             "tx_hash": tx_hash,
             "mode": mode,
-            "status": "pending"
+            "status": "queued",
+            "message": "Simulation request published to worker pipeline"
         }
     
     except Exception as e:

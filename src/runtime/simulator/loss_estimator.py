@@ -62,35 +62,57 @@ class LossEstimator:
                 return {"loss_usd": Decimal("0.0"), "loss_by_token": {}, "primary_token": None, "primary_token_symbol": None}
             
             # Step 2: Get balances before
-            await self._get_balances(web3, protected_addresses, watched_tokens)
-            
-            # Step 3: Execute transaction (simulate)
+            balances_before = await self._get_balances(web3, protected_addresses, watched_tokens)
+
+            # Step 3: Execute transaction in Anvil (actually mutates forked state)
             try:
-                # Use eth_call for simulation (doesn't actually execute, but we'll trace it)
-                # For actual balance changes, we need to use debug_traceCall or actually execute
-                # This is a simplified version - full implementation would trace execution
-                await web3.eth.call(tx_params)
-                
-                # Step 4: Get balances after (would need actual execution or trace)
-                # For now, we'll use the state diff fingerprint approach
-                # This is a placeholder - real implementation would compare actual balances
-                
+                tx_hash = await web3.eth.send_transaction(tx_params)
+                await web3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
             except Exception as e:
                 logger.warning("simulation_execution_failed", error=str(e))
-                # Revert snapshot
                 await self._revert_snapshot(web3, snapshot_id)
                 return {"loss_usd": Decimal("0.0"), "loss_by_token": {}, "primary_token": None, "primary_token_symbol": None}
-            
-            # Step 5: Calculate loss
-            # Note: This is simplified - real implementation would:
-            # 1. Actually execute transaction in Anvil
-            # 2. Use debug_traceCall to get state diff
-            # 3. Compare balances before/after
-            
-            # For now, return empty (will be calculated from state diff fingerprint)
+
+            # Step 4: Get balances after
+            balances_after = await self._get_balances(web3, protected_addresses, watched_tokens)
+
+            # Step 5: Revert fork to original state
             await self._revert_snapshot(web3, snapshot_id)
-            
-            return {"loss_usd": Decimal("0.0"), "loss_by_token": {}, "primary_token": None, "primary_token_symbol": None}
+
+            # Step 6: Calculate loss per token per address
+            loss_by_token: Dict[str, Decimal] = {}
+            for addr in protected_addresses:
+                before = balances_before.get(addr, {})
+                after = balances_after.get(addr, {})
+                for token_key in set(list(before.keys()) + list(after.keys())):
+                    diff = before.get(token_key, Decimal("0")) - after.get(token_key, Decimal("0"))
+                    if diff > 0:
+                        loss_by_token[token_key] = loss_by_token.get(token_key, Decimal("0")) + diff
+
+            # Step 7: Convert to USD using price oracle
+            total_loss_usd = Decimal("0.0")
+            primary_token = None
+            primary_symbol = None
+            max_loss = Decimal("0.0")
+            for token_key, amount_wei in loss_by_token.items():
+                try:
+                    usd = await self.financial_calculator.token_amount_to_usd(
+                        chain_id, token_key, amount_wei
+                    )
+                    total_loss_usd += usd
+                    if usd > max_loss:
+                        max_loss = usd
+                        primary_token = token_key
+                        primary_symbol = token_key if token_key == "native" else token_key[:10]
+                except Exception:
+                    pass
+
+            return {
+                "loss_usd": total_loss_usd,
+                "loss_by_token": {k: str(v) for k, v in loss_by_token.items()},
+                "primary_token": primary_token,
+                "primary_token_symbol": primary_symbol,
+            }
         
         except Exception as e:
             logger.error("loss_estimation_failed", error=str(e))
@@ -134,14 +156,25 @@ class LossEstimator:
             except Exception as e:
                 logger.warning("failed_to_get_native_balance", address=addr[:16], error=str(e))
         
-        # Get ERC20 balances (simplified - would need contract calls)
-        # This is a placeholder - real implementation would call balanceOf for each token
+        # Get ERC20 balances via balanceOf(address) call
+        ERC20_BALANCE_OF = "0x70a08231"  # balanceOf(address) selector
         for token in tokens:
             for addr in addresses:
                 if addr not in balances:
                     balances[addr] = {}
-                # Placeholder - would call token.balanceOf(addr)
-                balances[addr][token] = Decimal("0")
+                try:
+                    # ABI-encode: balanceOf(address) — pad address to 32 bytes
+                    padded = addr.lower().replace("0x", "").zfill(64)
+                    call_data = ERC20_BALANCE_OF + padded
+                    result = await web3.eth.call({
+                        "to": token,
+                        "data": call_data,
+                    })
+                    balance_wei = int(result.hex(), 16) if result else 0
+                    balances[addr][token] = Decimal(str(balance_wei))
+                except Exception as e:
+                    logger.debug("erc20_balance_failed", token=token[:16], addr=addr[:16], error=str(e))
+                    balances[addr][token] = Decimal("0")
         
         return balances
 

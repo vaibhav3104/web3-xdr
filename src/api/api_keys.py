@@ -571,6 +571,149 @@ class APIKeyManager:
                 }
         return None
 
+    # =========================================================================
+    # Database Persistence
+    # =========================================================================
+
+    async def load_from_db(self) -> int:
+        """Load customers and API keys from the database. Returns count loaded."""
+        try:
+            from ..database.connection import DatabaseManager
+            from ..database.models import CustomerModel, APIKeyModel
+            from sqlalchemy import select
+
+            loaded = 0
+            async with DatabaseManager.get_session() as session:
+                # Load customers
+                result = await session.execute(select(CustomerModel))
+                for row in result.scalars():
+                    customer = Customer(
+                        id=row.customer_id,
+                        name=row.name,
+                        tier=row.tier,
+                        active=row.active,
+                        max_api_keys=row.max_api_keys,
+                        max_contracts=row.max_contracts,
+                        max_chains=row.max_chains,
+                        rate_limit_multiplier=row.rate_limit_multiplier,
+                        features=set(row.features) if row.features else {"events", "incidents", "alerts"},
+                        admin_email=row.admin_email or "",
+                        alert_emails=row.alert_emails or [],
+                        telegram_chat_id=row.telegram_chat_id,
+                        slack_webhook=row.slack_webhook,
+                        contracts=row.contracts or [],
+                        created_at=row.created_at,
+                    )
+                    self.customers[row.customer_id] = customer
+
+                # Load API keys
+                result = await session.execute(
+                    select(APIKeyModel).where(APIKeyModel.status != "deleted")
+                )
+                for row in result.scalars():
+                    api_key = APIKey(
+                        id=row.key_id,
+                        customer_id=row.customer_id,
+                        name=row.name,
+                        key_hash=row.key_hash,
+                        key_prefix=row.key_prefix,
+                        scopes={KeyScope(s) for s in row.scopes},
+                        status=KeyStatus(row.status),
+                        created_at=row.created_at,
+                        expires_at=row.expires_at,
+                        last_used_at=row.last_used_at,
+                        revoked_at=row.revoked_at,
+                        rate_limit_requests=row.rate_limit_requests,
+                        rate_limit_window=row.rate_limit_window,
+                        total_requests=row.total_requests,
+                        created_by=row.created_by,
+                        description=row.description or "",
+                        allowed_ips=row.allowed_ips or [],
+                    )
+                    self.api_keys[row.key_hash] = api_key
+                    self.key_prefix_map[row.key_prefix] = row.key_hash
+                    loaded += 1
+
+            logger.info("api_keys_loaded_from_db", customers=len(self.customers), keys=loaded)
+            return loaded
+        except Exception as e:
+            logger.warning("api_keys_db_load_failed", error=str(e))
+            return 0
+
+    async def save_customer_to_db(self, customer: Customer):
+        """Persist a customer record to the database."""
+        try:
+            from ..database.connection import DatabaseManager
+            from ..database.models import CustomerModel
+            from sqlalchemy import select
+
+            async with DatabaseManager.get_session() as session:
+                existing = await session.execute(
+                    select(CustomerModel).where(CustomerModel.customer_id == customer.id)
+                )
+                row = existing.scalar_one_or_none()
+                if row:
+                    row.name = customer.name
+                    row.tier = customer.tier
+                    row.active = customer.active
+                    row.admin_email = customer.admin_email
+                    row.features = list(customer.features)
+                    row.max_api_keys = customer.max_api_keys
+                    row.contracts = customer.contracts
+                else:
+                    session.add(CustomerModel(
+                        customer_id=customer.id,
+                        name=customer.name,
+                        tier=customer.tier,
+                        active=customer.active,
+                        admin_email=customer.admin_email or None,
+                        features=list(customer.features),
+                        max_api_keys=customer.max_api_keys,
+                        max_contracts=customer.max_contracts,
+                        max_chains=customer.max_chains,
+                        rate_limit_multiplier=customer.rate_limit_multiplier,
+                        contracts=customer.contracts,
+                    ))
+        except Exception as e:
+            logger.error("customer_db_save_failed", error=str(e), customer_id=customer.id)
+
+    async def save_key_to_db(self, api_key: APIKey):
+        """Persist an API key record to the database."""
+        try:
+            from ..database.connection import DatabaseManager
+            from ..database.models import APIKeyModel
+            from sqlalchemy import select
+
+            async with DatabaseManager.get_session() as session:
+                existing = await session.execute(
+                    select(APIKeyModel).where(APIKeyModel.key_id == api_key.id)
+                )
+                row = existing.scalar_one_or_none()
+                if row:
+                    row.status = api_key.status.value
+                    row.total_requests = api_key.total_requests
+                    row.last_used_at = api_key.last_used_at
+                    row.revoked_at = api_key.revoked_at
+                else:
+                    session.add(APIKeyModel(
+                        key_id=api_key.id,
+                        customer_id=api_key.customer_id,
+                        name=api_key.name,
+                        key_hash=api_key.key_hash,
+                        key_prefix=api_key.key_prefix,
+                        scopes=[s.value for s in api_key.scopes],
+                        status=api_key.status.value,
+                        description=api_key.description,
+                        allowed_ips=api_key.allowed_ips or None,
+                        rate_limit_requests=api_key.rate_limit_requests,
+                        rate_limit_window=api_key.rate_limit_window,
+                        total_requests=api_key.total_requests,
+                        expires_at=api_key.expires_at,
+                        created_by=api_key.created_by,
+                    ))
+        except Exception as e:
+            logger.error("api_key_db_save_failed", error=str(e), key_id=api_key.id)
+
 
 # Global instance
 api_key_manager = APIKeyManager()

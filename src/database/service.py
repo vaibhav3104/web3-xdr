@@ -15,6 +15,7 @@ from .connection import DatabaseManager
 from .models import (
     EventModel,
     IncidentModel,
+    SimulationRunModel,
 )
 
 logger = structlog.get_logger()
@@ -1132,26 +1133,39 @@ class DatabaseService:
     async def get_incidents(
         severity: Optional[str] = None,
         status: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
+        cursor: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Get incidents from the database with optional filtering.
+        Get incidents from the database with optional filtering and cursor pagination.
+
+        Cursor is the ISO timestamp of the last item returned; the next page
+        returns incidents created before that timestamp.
         """
         async with DatabaseManager.get_session() as session:
             try:
                 query = select(IncidentModel).order_by(IncidentModel.created_at.desc())
-                
+
                 if severity:
                     query = query.where(IncidentModel.severity == severity.upper())
-                
+
                 if status:
                     query = query.where(IncidentModel.status == status.upper())
-                
+
+                # Cursor-based pagination: fetch items older than the cursor
+                if cursor:
+                    try:
+                        from datetime import datetime as _dt
+                        cursor_dt = _dt.fromisoformat(cursor.replace("Z", "+00:00"))
+                        query = query.where(IncidentModel.created_at < cursor_dt)
+                    except Exception:
+                        pass  # Ignore invalid cursor, fall through to full result
+
                 query = query.limit(limit)
-                
+
                 result = await session.execute(query)
                 incidents = result.scalars().all()
-                
+
                 return [
                     {
                         "id": inc.incident_id,
@@ -1164,11 +1178,12 @@ class DatabaseService:
                         "affected_chains": inc.affected_chains or [],
                         "created_at": inc.created_at,
                         "event_count": inc.event_count or 0,
-                        # Additional fields for ML-detected threats
                         "affected_contracts": inc.affected_contracts or [],
                         "affected_addresses": inc.affected_addresses or [],
                         "summary": inc.summary,
                         "recommended_actions": inc.recommended_actions or [],
+                        "rule_ids": inc.rule_ids or [],
+                        "cluster_key": inc.cluster_key or "",
                     }
                     for inc in incidents
                 ]
@@ -1540,3 +1555,36 @@ class DatabaseService:
                     "affected_count": 0,
                     "fixed_count": 0
                 }
+
+    # =========================================================================
+    # SIMULATION OPERATIONS
+    # =========================================================================
+
+    @staticmethod
+    async def get_simulation_by_tx(tx_hash: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent simulation result for a transaction."""
+        try:
+            async with DatabaseManager.get_session() as session:
+                result = await session.execute(
+                    select(SimulationRunModel)
+                    .where(SimulationRunModel.tx_hash == tx_hash)
+                    .order_by(SimulationRunModel.created_at.desc())
+                    .limit(1)
+                )
+                row = result.scalar_one_or_none()
+                if not row:
+                    return None
+                return {
+                    "id": str(row.id),
+                    "chain_id": row.chain_id,
+                    "tx_hash": row.tx_hash,
+                    "mode": row.mode,
+                    "status": row.status,
+                    "duration_ms": row.duration_ms,
+                    "confidence": row.confidence,
+                    "invariant_results": row.invariant_results,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+        except Exception as e:
+            logger.warning("get_simulation_by_tx_failed", tx_hash=tx_hash[:16], error=str(e))
+            return None

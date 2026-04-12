@@ -157,18 +157,45 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Skip rate limiting for exempt paths
         if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)
-        
+
         # Get client IP
         client_ip = request.client.host if request.client else "unknown"
-        
+
         # Check forwarded headers (for load balancers)
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             client_ip = forwarded.split(",")[0].strip()
-        
-        # Check rate limit
+
+        # --- Per-key rate limiting ---
+        # If the request carries an API key, apply per-key limits from APIKeyManager
+        api_key_raw = request.headers.get("X-API-Key") or ""
+        if not api_key_raw:
+            auth = request.headers.get("Authorization") or ""
+            if auth.startswith("Bearer "):
+                api_key_raw = auth[7:]
+
+        if api_key_raw and api_key_raw.startswith("s3_"):
+            try:
+                from src.api.api_keys import api_key_manager
+                is_valid, api_key_obj, err = api_key_manager.validate_key(api_key_raw, client_ip=client_ip)
+                if not is_valid:
+                    return Response(
+                        content='{"error": "' + err + '"}',
+                        status_code=401 if "Invalid" in err else 429 if "Rate limit" in err else 403,
+                        headers={"Content-Type": "application/json"}
+                    )
+                # Per-key validation passed (includes built-in rate limit check)
+                response = await call_next(request)
+                response.headers["X-RateLimit-Limit"] = str(api_key_obj.rate_limit_requests)
+                remaining = max(0, api_key_obj.rate_limit_requests - api_key_obj.requests_this_window)
+                response.headers["X-RateLimit-Remaining"] = str(remaining)
+                return response
+            except Exception:
+                pass  # Fall through to IP-based limiting
+
+        # --- IP-based rate limiting (no API key) ---
         allowed, info = await rate_limiter.is_allowed(client_ip)
-        
+
         if not allowed:
             logger.warning(
                 "rate_limit_exceeded",
@@ -186,14 +213,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "X-RateLimit-Remaining": "0"
                 }
             )
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Add rate limit headers
         response.headers["X-RateLimit-Limit"] = str(rate_limiter.rpm)
         response.headers["X-RateLimit-Remaining"] = str(info.get("remaining_minute", 0))
-        
+
         return response
 
 

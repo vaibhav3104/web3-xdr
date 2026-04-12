@@ -476,12 +476,15 @@ class Sentinel3Worker:
             from src.rules.feedback_loop import get_feedback_loop
             import psycopg2
             fl = get_feedback_loop()
+            pg_password = os.getenv("POSTGRES_PASSWORD")
+            if not pg_password:
+                raise ValueError("POSTGRES_PASSWORD not set")
             pg_conn = psycopg2.connect(
                 host=os.getenv("POSTGRES_HOST", "postgres"),
                 port=os.getenv("POSTGRES_PORT", "5432"),
                 dbname=os.getenv("POSTGRES_DB", "sentinel"),
                 user=os.getenv("POSTGRES_USER", "sentinel"),
-                password=os.getenv("POSTGRES_PASSWORD", "sentinel"),
+                password=pg_password,
             )
             loaded = fl.load_from_db(pg_conn.cursor())
             pg_conn.close()
@@ -1449,7 +1452,20 @@ class Sentinel3Worker:
             else:
                 result[key] = value
         return result
-    
+
+    async def _publish_to_ws(self, channel: str, data: dict):
+        """Publish a message to Redis for WebSocket streaming to dashboards."""
+        try:
+            redis_url = os.getenv("REDIS_URL")
+            if not redis_url:
+                return
+            import redis.asyncio as aioredis
+            r = aioredis.from_url(redis_url, decode_responses=True)
+            await r.publish(channel, json.dumps(data))
+            await r.close()
+        except Exception:
+            pass  # Non-critical - don't block event processing
+
     async def _save_event_to_db(self, event: SecurityEvent):
         """
         Event handler to save SecurityEvent to database.
@@ -1511,7 +1527,23 @@ class Sentinel3Worker:
                 event_type=event_type_str,
                 tx_hash=event.tx_hash[:20] + "..."
             )
-            
+
+            # Publish high-severity events to Redis for WebSocket streaming
+            if severity_str in ("CRITICAL", "HIGH"):
+                await self._publish_to_ws(
+                    channel="security_events",
+                    data={
+                        "type": "security_event",
+                        "chain_id": chain_id,
+                        "event_type": event_type_str,
+                        "tx_hash": event.tx_hash,
+                        "contract_address": event.contract_address,
+                        "severity": severity_str,
+                        "status": "open",
+                        "timestamp": int(datetime.now(timezone.utc).timestamp()),
+                    },
+                )
+
             # ========================================
             # YAML RULE EVALUATION (in event handler)
             # ========================================
@@ -1940,6 +1972,7 @@ class Sentinel3Worker:
                     violation_amount=violation_amount,
                 )
                 asyncio.create_task(self._send_alert_notification(incident_data))
+                asyncio.create_task(self._trigger_guardian_response(incident_data))
         except Exception as e:
             logger.error("invariant_violation_handler_failed", error=str(e), exc_info=True)
 
@@ -2258,9 +2291,12 @@ class Sentinel3Worker:
 
                 # Send alert notification (fire-and-forget for HIGH/CRITICAL)
                 asyncio.create_task(self._send_alert_notification(incident_data))
+
+                # Guardian auto-response (fire-and-forget)
+                asyncio.create_task(self._trigger_guardian_response(incident_data))
         except Exception as e:
             logger.error("incident_creation_failed", error=str(e), rule_id=rule.id, exc_info=True)
-    
+
     async def _create_ml_incident(
         self,
         event: SecurityEvent,
@@ -2388,8 +2424,40 @@ class Sentinel3Worker:
 
                 # Send alert notification (fire-and-forget for HIGH/CRITICAL)
                 asyncio.create_task(self._send_alert_notification(incident_data))
+
+                # Guardian auto-response (fire-and-forget)
+                asyncio.create_task(self._trigger_guardian_response(incident_data))
         except Exception as e:
             logger.error("ml_incident_creation_failed", error=str(e), exc_info=True)
+
+    async def _trigger_guardian_response(self, incident_data: Dict):
+        """Trigger Guardian auto-response for critical incidents. Fire-and-forget."""
+        severity = incident_data.get("severity", "LOW")
+        if severity not in ("CRITICAL", "HIGH"):
+            return
+        try:
+            from src.response.guardian import auto_respond_to_incident
+
+            chains = incident_data.get("affected_chains", [])
+            contracts = incident_data.get("affected_contracts", [])
+            record = await auto_respond_to_incident(
+                incident_id=incident_data.get("incident_id", "unknown"),
+                severity=severity.lower(),
+                attack_type=incident_data.get("attack_type", "unknown"),
+                protocol=incident_data.get("explanation_json", {}).get("protocol", "unknown") if incident_data.get("explanation_json") else "unknown",
+                estimated_loss_usd=float(incident_data.get("total_loss_usd", 0) or 0),
+                chain=chains[0] if chains else "unknown",
+                contract=contracts[0] if contracts else "unknown",
+            )
+            if record:
+                logger.info(
+                    "guardian_response_triggered",
+                    incident_id=incident_data.get("incident_id"),
+                    action=record.action.value,
+                    status=record.status.value,
+                )
+        except Exception as e:
+            logger.debug("guardian_response_skipped", error=str(e))
 
     async def _send_alert_notification(self, incident_data: Dict):
         """
@@ -2862,10 +2930,63 @@ class Sentinel3Worker:
 
         feedback_task = asyncio.create_task(feedback_loop_evaluation())
 
+        # Start periodic data retention/cleanup (runs every 6 hours)
+        async def data_retention_job():
+            """Delete events older than retention period to prevent unbounded DB growth."""
+            retention_days = int(os.getenv("EVENT_RETENTION_DAYS", "90"))
+            incident_retention_days = int(os.getenv("INCIDENT_RETENTION_DAYS", "365"))
+            interval_hours = int(os.getenv("RETENTION_INTERVAL_HOURS", "6"))
+
+            # Wait 5 minutes after startup before first run
+            await asyncio.sleep(300)
+
+            while self.running:
+                try:
+                    from src.database.service import DatabaseService
+
+                    # Clean old events
+                    events_deleted = await DatabaseService.cleanup_old_events(days=retention_days)
+                    if events_deleted > 0:
+                        logger.info(
+                            "retention_events_cleaned",
+                            deleted=events_deleted,
+                            retention_days=retention_days,
+                        )
+
+                    # Clean old resolved incidents
+                    try:
+                        from src.database.models import IncidentModel
+                        from sqlalchemy import delete as sa_delete
+                        from src.database.connection import DatabaseManager
+
+                        cutoff = datetime.now(timezone.utc) - timedelta(days=incident_retention_days)
+                        async with DatabaseManager.get_session() as session:
+                            stmt = sa_delete(IncidentModel).where(
+                                IncidentModel.created_at < cutoff,
+                                IncidentModel.status.in_(["RESOLVED", "FALSE_POSITIVE", "CLOSED"]),
+                            )
+                            result = await session.execute(stmt)
+                            incidents_deleted = result.rowcount
+                            if incidents_deleted > 0:
+                                logger.info(
+                                    "retention_incidents_cleaned",
+                                    deleted=incidents_deleted,
+                                    retention_days=incident_retention_days,
+                                )
+                    except Exception as e:
+                        logger.warning("incident_retention_error", error=str(e))
+
+                except Exception as e:
+                    logger.warning("data_retention_error", error=str(e))
+
+                await asyncio.sleep(interval_hours * 3600)
+
+        retention_task = asyncio.create_task(data_retention_job())
+
         logger.info("worker_started", health_port=WORKER_HEALTH_PORT, runtime_enabled=self.runtime_enabled, continuous_learning=continuous_learning_enabled)
 
         # Wait for tasks
-        tasks = [ingestion_task, detection_task, uptime_task, feedback_task] + non_evm_tasks
+        tasks = [ingestion_task, detection_task, uptime_task, feedback_task, retention_task] + non_evm_tasks
         if runtime_task:
             tasks.append(runtime_task)
         if continuous_learning_task:

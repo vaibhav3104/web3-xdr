@@ -546,7 +546,7 @@ class ContinuousLearningSystem:
                 port=os.getenv("POSTGRES_PORT", "5432"),
                 dbname=os.getenv("POSTGRES_DB", "sentinel"),
                 user=os.getenv("POSTGRES_USER", "sentinel"),
-                password=os.getenv("POSTGRES_PASSWORD", "sentinel"),
+                password=os.getenv("POSTGRES_PASSWORD", ""),
             )
             cursor = pg_conn.cursor()
             cursor.execute("""

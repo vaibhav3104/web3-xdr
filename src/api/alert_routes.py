@@ -121,23 +121,65 @@ async def analyze_contract(request: ContractAnalysisRequest, background_tasks: B
     4. Send notifications
     """
     try:
-        # Import here to avoid circular imports
         from ..ai.models.contract_classifier import ContractThreatClassifier, ThreatCategory
-        
-        # This would connect to the blockchain and analyze
-        # For now, return a placeholder
-        return {
-            "status": "analysis_queued",
-            "contract_address": request.contract_address,
-            "chain_id": request.chain_id,
-            "message": "Analysis will be performed and results will appear in alerts if threat detected"
-        }
-        
     except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="ML analysis module not available"
-        )
+        raise HTTPException(status_code=503, detail="ML analysis module not available")
+
+    async def _run_analysis(address: str, chain_id: str):
+        """Background task: fetch bytecode and classify."""
+        try:
+            import aiohttp
+            # Fetch bytecode from RPC
+            rpc_url = os.getenv(f"{chain_id.upper()}_RPC_URL") or os.getenv("INFURA_RPC_URL")
+            if not rpc_url:
+                infura_key = os.getenv("INFURA_API_KEY", "")
+                rpc_url = f"https://mainnet.infura.io/v3/{infura_key}" if infura_key else None
+
+            if not rpc_url:
+                logger.warning("no_rpc_url_for_analysis", chain_id=chain_id)
+                return
+
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    "jsonrpc": "2.0", "id": 1, "method": "eth_getCode",
+                    "params": [address, "latest"],
+                }
+                async with session.post(rpc_url, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    data = await resp.json()
+                    bytecode = data.get("result", "0x")
+
+            if not bytecode or bytecode == "0x":
+                logger.info("contract_has_no_bytecode", address=address)
+                return
+
+            classifier = ContractThreatClassifier()
+            result = classifier.classify(bytecode)
+
+            if result.category != ThreatCategory.SAFE and result.confidence > 0.5:
+                from datetime import datetime, timezone
+                alert_entry = {
+                    "alert_id": f"manual-{address[:10]}-{int(datetime.now(timezone.utc).timestamp())}",
+                    "contract_address": address,
+                    "chain_id": chain_id,
+                    "threat_category": result.category.value,
+                    "confidence": result.confidence,
+                    "risk_level": "HIGH" if result.confidence > 0.7 else "MEDIUM",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "source": "manual_analysis",
+                }
+                contract_threat_alerts.append(alert_entry)
+                logger.info("manual_analysis_threat_found", address=address, category=result.category.value)
+        except Exception as e:
+            logger.error("background_analysis_failed", address=address, error=str(e))
+
+    background_tasks.add_task(_run_analysis, request.contract_address, request.chain_id)
+
+    return {
+        "status": "analysis_queued",
+        "contract_address": request.contract_address,
+        "chain_id": request.chain_id,
+        "message": "Analysis running in background. Check /alerts/contracts for results."
+    }
 
 
 # ============================================================================

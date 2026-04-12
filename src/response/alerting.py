@@ -184,9 +184,24 @@ class AlertRouter:
             await self.slack.send_info(incident, explanation)
     
     async def _send_pagerduty(self, incident: Incident, explanation: Explanation):
-        """Send PagerDuty alert."""
-        # TODO: Implement PagerDuty integration
-        logger.info("pagerduty_alert_would_be_sent", incident_id=incident.id)
+        """Send PagerDuty alert via the centralized alert_notifier."""
+        try:
+            from ..notifications.alert_notifier import get_notifier
+            notifier = get_notifier()
+            if not notifier.config.pagerduty_routing_key:
+                logger.debug("pagerduty_not_configured")
+                return
+            await notifier._send_pagerduty({
+                "alert_id": incident.id,
+                "risk_level": incident.severity.name,
+                "chain_id": ",".join(incident.affected_chains) if hasattr(incident, 'affected_chains') else "unknown",
+                "threat_category": incident.attack_type.value if hasattr(incident.attack_type, 'value') else str(incident.attack_type),
+                "confidence": incident.confidence if hasattr(incident, 'confidence') else 0.0,
+                "contract_address": "",
+                "tx_hash": "",
+            })
+        except Exception as e:
+            logger.error("pagerduty_alert_failed", incident_id=incident.id, error=str(e))
     
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""

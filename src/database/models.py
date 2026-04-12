@@ -631,3 +631,70 @@ class IncidentAuditLog(Base):
         Index("ix_audit_incident_time", "incident_id", "created_at"),
     )
 
+
+class CustomerModel(Base):
+    """Persisted customer/organization for API key management."""
+    __tablename__ = "customers"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    customer_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    tier: Mapped[str] = mapped_column(String(32), nullable=False, default="starter")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    admin_email: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    alert_emails: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
+    telegram_chat_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    slack_webhook: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    contracts: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # List of monitored contracts
+    features: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
+    max_api_keys: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    max_contracts: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    max_chains: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    rate_limit_multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    def __repr__(self):
+        return f"<Customer {self.customer_id} [{self.tier}] {self.name}>"
+
+
+class APIKeyModel(Base):
+    """Persisted API key record."""
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    customer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    key_prefix: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    scopes: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    allowed_ips: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
+    rate_limit_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
+    rate_limit_window: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
+    total_requests: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_api_keys_customer_status", "customer_id", "status"),
+    )
+
+    def __repr__(self):
+        return f"<APIKey {self.key_id} [{self.status}] {self.key_prefix}...>"
+

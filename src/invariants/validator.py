@@ -110,7 +110,7 @@ class RuleValidator:
             # Get database session
             database_url = os.getenv("DATABASE_URL")
             if not database_url:
-                database_url = f"postgresql://{os.getenv('POSTGRES_USER', 'xdr')}:{os.getenv('POSTGRES_PASSWORD', 'xdr_password')}@{os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'web3_xdr')}"
+                database_url = f"postgresql://{os.getenv('POSTGRES_USER', 'xdr')}:{os.getenv('POSTGRES_PASSWORD', '')}@{os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'web3_xdr')}"
             
             engine = create_engine(database_url)
             SessionLocal = sessionmaker(bind=engine)

@@ -38,7 +38,7 @@ def get_sync_connection():
             host=os.getenv("POSTGRES_HOST", "localhost"),
             port=os.getenv("POSTGRES_PORT", "5432"),
             user=os.getenv("POSTGRES_USER", "xdr"),
-            password=os.getenv("POSTGRES_PASSWORD", "xdr_password"),
+            password=os.getenv("POSTGRES_PASSWORD", ""),
             database=os.getenv("POSTGRES_DB", "web3_xdr"),
         )
         return conn

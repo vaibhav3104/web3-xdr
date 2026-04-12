@@ -87,83 +87,86 @@ class ThreatTypes:
     ]
 
 
-class ThreatDetectorModel(nn.Module):
-    """
-    PyTorch model for threat detection.
-    
-    Architecture:
-    - Input: Feature vector from FeatureExtractor
-    - Hidden layers with attention
-    - Output: Multi-class classification + risk score
-    """
-    
-    def __init__(
-        self,
-        input_dim: int = 100,
-        hidden_dim: int = 256,
-        num_classes: int = len(ThreatTypes.ALL_TYPES),
-        dropout: float = 0.3
-    ):
-        super().__init__()
-        
-        self.input_dim = input_dim
-        self.num_classes = num_classes
-        
-        # Feature processing
-        self.input_norm = nn.BatchNorm1d(input_dim)
-        
-        # Main network
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, hidden_dim // 2)
-        
-        # Attention mechanism
-        self.attention = nn.MultiheadAttention(
-            embed_dim=hidden_dim // 2,
-            num_heads=4,
-            dropout=dropout,
-            batch_first=True
-        )
-        
-        # Output heads
-        self.classifier = nn.Linear(hidden_dim // 2, num_classes)
-        self.risk_scorer = nn.Linear(hidden_dim // 2, 1)
-        
-        # Regularization
-        self.dropout = nn.Dropout(dropout)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-    
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+if TORCH_AVAILABLE:
+    class ThreatDetectorModel(nn.Module):
         """
-        Forward pass.
-        
-        Args:
-            x: Input tensor of shape (batch_size, input_dim)
-            
-        Returns:
-            Tuple of (class_logits, risk_scores)
+        PyTorch model for threat detection.
+
+        Architecture:
+        - Input: Feature vector from FeatureExtractor
+        - Hidden layers with attention
+        - Output: Multi-class classification + risk score
         """
-        # Normalize input
-        x = self.input_norm(x)
-        
-        # Process through layers
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.relu(self.fc2(x))
-        x = self.dropout(x)
-        x = self.relu(self.fc3(x))
-        
-        # Self-attention (reshape for attention)
-        x = x.unsqueeze(1)  # (batch, 1, hidden_dim//2)
-        x, _ = self.attention(x, x, x)
-        x = x.squeeze(1)  # (batch, hidden_dim//2)
-        
-        # Output heads
-        class_logits = self.classifier(x)
-        risk_scores = self.sigmoid(self.risk_scorer(x)) * 100  # Scale to 0-100
-        
-        return class_logits, risk_scores
+
+        def __init__(
+            self,
+            input_dim: int = 100,
+            hidden_dim: int = 256,
+            num_classes: int = len(ThreatTypes.ALL_TYPES),
+            dropout: float = 0.3
+        ):
+            super().__init__()
+
+            self.input_dim = input_dim
+            self.num_classes = num_classes
+
+            # Feature processing
+            self.input_norm = nn.BatchNorm1d(input_dim)
+
+            # Main network
+            self.fc1 = nn.Linear(input_dim, hidden_dim)
+            self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+            self.fc3 = nn.Linear(hidden_dim, hidden_dim // 2)
+
+            # Attention mechanism
+            self.attention = nn.MultiheadAttention(
+                embed_dim=hidden_dim // 2,
+                num_heads=4,
+                dropout=dropout,
+                batch_first=True
+            )
+
+            # Output heads
+            self.classifier = nn.Linear(hidden_dim // 2, num_classes)
+            self.risk_scorer = nn.Linear(hidden_dim // 2, 1)
+
+            # Regularization
+            self.dropout = nn.Dropout(dropout)
+            self.relu = nn.ReLU()
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+            """
+            Forward pass.
+
+            Args:
+                x: Input tensor of shape (batch_size, input_dim)
+
+            Returns:
+                Tuple of (class_logits, risk_scores)
+            """
+            # Normalize input
+            x = self.input_norm(x)
+
+            # Process through layers
+            x = self.relu(self.fc1(x))
+            x = self.dropout(x)
+            x = self.relu(self.fc2(x))
+            x = self.dropout(x)
+            x = self.relu(self.fc3(x))
+
+            # Self-attention (reshape for attention)
+            x = x.unsqueeze(1)  # (batch, 1, hidden_dim//2)
+            x, _ = self.attention(x, x, x)
+            x = x.squeeze(1)  # (batch, hidden_dim//2)
+
+            # Output heads
+            class_logits = self.classifier(x)
+            risk_scores = self.sigmoid(self.risk_scorer(x)) * 100  # Scale to 0-100
+
+            return class_logits, risk_scores
+else:
+    ThreatDetectorModel = None
 
 
 class ThreatDetector:

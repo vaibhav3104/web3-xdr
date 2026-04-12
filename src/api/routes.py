@@ -150,6 +150,7 @@ async def list_incidents(
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(50, le=500, description="Max results (up to 500)"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
+    cursor: Optional[str] = Query(None, description="Cursor (ISO timestamp) for keyset pagination"),
     time_range: Optional[str] = Query(None, description="Time range: 1h, 6h, 24h, 7d, 30d"),
     chain: Optional[str] = Query(None, description="Filter by chain"),
     attack_type: Optional[str] = Query(None, description="Filter by attack type"),
@@ -209,7 +210,8 @@ async def list_incidents(
         db_incidents = await DatabaseService.get_incidents(
             severity=severity,
             status=status,
-            limit=limit * 2  # Fetch more to account for overlap
+            limit=limit * 2,  # Fetch more to account for overlap
+            cursor=cursor,
         )
         for inc in db_incidents:
             if inc["id"] not in seen_ids:

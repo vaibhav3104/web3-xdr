@@ -109,17 +109,28 @@ def create_app(
         except Exception:
             pass
 
+        # Load API keys from database
+        try:
+            from .api_keys import api_key_manager
+            loaded = await api_key_manager.load_from_db()
+            logger.info("api_keys_loaded", count=loaded)
+        except Exception as e:
+            logger.warning("api_keys_load_failed", error=str(e))
+
         # Bootstrap TP/FP feedback loop from historical incident data
         try:
             import psycopg2
             from ..rules.feedback_loop import get_feedback_loop
             fl = get_feedback_loop()
+            pg_password = os.getenv("POSTGRES_PASSWORD")
+            if not pg_password:
+                raise ValueError("POSTGRES_PASSWORD not set")
             pg_conn = psycopg2.connect(
                 host=os.getenv("POSTGRES_HOST", "postgres"),
                 port=os.getenv("POSTGRES_PORT", "5432"),
                 dbname=os.getenv("POSTGRES_DB", "sentinel"),
                 user=os.getenv("POSTGRES_USER", "sentinel"),
-                password=os.getenv("POSTGRES_PASSWORD", "sentinel"),
+                password=pg_password,
             )
             loaded = fl.load_from_db(pg_conn.cursor())
             pg_conn.close()
@@ -128,15 +139,20 @@ def create_app(
             logger.warning("feedback_loop_bootstrap_failed", error=str(e))
 
     # ── CORS ────────────────────────────────────────────────────────
-    default_origins = [
-        "https://web3-xdr-production-api-1003459948096.us-central1.run.app",
-        "https://sentinel3-gpu-1003459948096.us-central1.run.app",
-        "http://localhost:3000", "http://localhost:8000", "http://localhost:8080",
-        "http://127.0.0.1:3000", "http://127.0.0.1:8000", "http://127.0.0.1:8080",
-    ]
+    # All origins come from env; localhost defaults only in non-production
     env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
     if env_cors:
-        default_origins.extend(o.strip() for o in env_cors.split(",") if o.strip())
+        default_origins = [o.strip() for o in env_cors.split(",") if o.strip()]
+    elif os.getenv("ENVIRONMENT", "").lower() == "production":
+        # Production MUST set CORS_ALLOWED_ORIGINS explicitly
+        default_origins = []
+        logger.warning("cors_origins_not_configured", hint="Set CORS_ALLOWED_ORIGINS env var")
+    else:
+        # Development defaults only
+        default_origins = [
+            "http://localhost:3000", "http://localhost:8000", "http://localhost:8080",
+            "http://127.0.0.1:3000", "http://127.0.0.1:8000", "http://127.0.0.1:8080",
+        ]
 
     app.add_middleware(
         CORSMiddleware,
@@ -177,6 +193,13 @@ def create_app(
             registered.append(name)
 
     logger.info("routes_registered", count=len(registered), modules=registered)
+
+    # ── OpenTelemetry tracing ──────────────────────────────────────────
+    try:
+        from ..telemetry.tracing import init_tracing
+        init_tracing(app)
+    except Exception as e:
+        logger.debug("otel_init_skipped", error=str(e))
 
     # ── Static routes ───────────────────────────────────────────────
     @app.get("/health")
