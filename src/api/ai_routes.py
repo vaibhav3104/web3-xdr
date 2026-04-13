@@ -3,7 +3,7 @@ AI/ML API Routes
 Endpoints for contract analysis, auto-collection, and deep learning models
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -57,6 +57,15 @@ class TrainResponse(BaseModel):
     accuracy: float
     training_samples: int
     message: str
+
+
+class LLMBytecodeRequest(BaseModel):
+    bytecode: str
+    contract_address: Optional[str] = None
+
+
+class LLMTriageRequest(BaseModel):
+    alert_match: Dict
 
 
 # =============================================================================
@@ -871,4 +880,101 @@ async def force_retrain_endpoint() -> Dict:
         raise
     except Exception as e:
         logger.error("force_retrain_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# LLM-POWERED ANALYSIS ENDPOINTS
+# =============================================================================
+
+@router.post("/llm/analyze/bytecode", summary="LLM-powered bytecode analysis")
+async def llm_analyze_bytecode(request: LLMBytecodeRequest) -> Dict:
+    """
+    Analyze contract bytecode using LLM (Claude) for deep semantic analysis.
+
+    Returns detailed analysis including vulnerability identification,
+    code quality assessment, and risk scoring.
+    """
+    try:
+        from ..ai.llm import BytecodeAnalyzer
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM module unavailable. Ensure ANTHROPIC_API_KEY is set and dependencies are installed."
+        )
+
+    try:
+        analyzer = BytecodeAnalyzer()
+        result = analyzer.analyze(request.bytecode, request.contract_address)
+        return result.to_dict()
+    except Exception as e:
+        logger.error("llm_bytecode_analysis_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/llm/triage", summary="LLM-powered incident triage")
+async def llm_triage_incident(request: LLMTriageRequest) -> Dict:
+    """
+    Triage an alert match using LLM for intelligent severity assessment,
+    root cause hypothesis, and recommended response actions.
+    """
+    try:
+        from ..ai.llm import IncidentTriage
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM module unavailable. Ensure ANTHROPIC_API_KEY is set and dependencies are installed."
+        )
+
+    try:
+        triage = IncidentTriage()
+        result = triage.analyze(request.alert_match)
+        return result.to_dict()
+    except Exception as e:
+        logger.error("llm_triage_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/llm/rules/recommendations", summary="LLM-powered detection rule recommendations")
+async def llm_rule_recommendations() -> List[Dict]:
+    """
+    Analyze current detection rules and return LLM-generated recommendations
+    for tuning, optimization, and new rule creation.
+    """
+    try:
+        from ..ai.llm import RuleTuner
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM module unavailable. Ensure ANTHROPIC_API_KEY is set and dependencies are installed."
+        )
+
+    try:
+        tuner = RuleTuner()
+        recommendations = tuner.analyze_and_recommend()
+        return [rec.to_dict() for rec in recommendations]
+    except Exception as e:
+        logger.error("llm_rule_recommendations_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/llm/usage", summary="Get LLM rate limiter usage stats")
+async def llm_usage_stats() -> Dict:
+    """
+    Return current LLM API usage statistics including token counts,
+    request rates, and remaining quota.
+    """
+    try:
+        from ..ai.llm.rate_limiter import get_rate_limiter
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM rate limiter module unavailable."
+        )
+
+    try:
+        limiter = get_rate_limiter()
+        return limiter.get_usage_stats()
+    except Exception as e:
+        logger.error("llm_usage_stats_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

@@ -493,6 +493,17 @@ class Sentinel3Worker:
         except Exception as e:
             logger.warning("feedback_loop_bootstrap_failed", error=str(e))
 
+        # Start periodic LLM rule tuner
+        try:
+            from src.ai.llm.rule_tuner import RuleTuner
+            from src.ai.llm.rate_limiter import get_rate_limiter
+            tuner_interval = int(os.getenv("RULE_TUNER_INTERVAL_HOURS", "6"))
+            if os.getenv("ANTHROPIC_API_KEY"):
+                asyncio.create_task(self._run_periodic_rule_tuner(tuner_interval))
+                logger.info("llm_rule_tuner_scheduled", interval_hours=tuner_interval)
+        except ImportError:
+            pass
+
         # Initialize Security Graph (Wiz-for-Web3)
         if self.graph_enabled:
             try:
@@ -1618,6 +1629,10 @@ class Sentinel3Worker:
                                     db_event=db_event,
                                     match_details=match.match_details
                                 )
+                                # LLM triage (non-blocking background task)
+                                asyncio.create_task(
+                                    self._run_llm_triage(match, db_event)
+                                )
                 except Exception as rule_err:
                     logger.debug("event_handler_rule_evaluation_error", error=str(rule_err))
             
@@ -2023,6 +2038,75 @@ class Sentinel3Worker:
                 asyncio.create_task(self._trigger_guardian_response(incident_data))
         except Exception as e:
             logger.error("invariant_violation_handler_failed", error=str(e), exc_info=True)
+
+    async def _run_llm_triage(self, match, db_event: dict):
+        """Run LLM-powered triage on an alert match (non-blocking)."""
+        try:
+            from src.ai.llm.incident_triage import IncidentTriage
+            from src.ai.llm.rate_limiter import get_rate_limiter
+
+            # Check rate limit before calling LLM
+            limiter = get_rate_limiter()
+            if not limiter.can_make_request():
+                logger.debug("llm_triage_rate_limited", rule_id=match.rule.id)
+                return
+
+            triage = IncidentTriage(auto_feed_feedback=True)
+            # Run sync LLM call in thread pool to avoid blocking event loop
+            verdict = await asyncio.get_event_loop().run_in_executor(
+                None, triage.analyze, match.to_dict()
+            )
+
+            if verdict:
+                logger.info(
+                    "llm_triage_complete",
+                    rule_id=match.rule.id,
+                    verdict=verdict.verdict,
+                    confidence=verdict.confidence,
+                    action=verdict.suggested_action,
+                )
+        except ImportError:
+            pass  # LLM modules not available
+        except Exception as e:
+            logger.debug("llm_triage_error", error=str(e))
+
+    async def _run_periodic_rule_tuner(self, interval_hours: int = 6):
+        """Periodically run LLM rule tuner to suggest threshold changes."""
+        import asyncio as _asyncio
+        while True:
+            await _asyncio.sleep(interval_hours * 3600)
+            try:
+                from src.ai.llm.rule_tuner import RuleTuner
+                from src.ai.llm.rate_limiter import get_rate_limiter
+
+                limiter = get_rate_limiter()
+                if not limiter.can_make_request():
+                    logger.debug("rule_tuner_rate_limited")
+                    continue
+
+                tuner = RuleTuner()
+                recommendations = await asyncio.get_event_loop().run_in_executor(
+                    None, tuner.analyze_and_recommend
+                )
+
+                for rec in recommendations:
+                    logger.info(
+                        "rule_tuner_recommendation",
+                        rule_id=rec.rule_id,
+                        change_type=rec.change_type,
+                        confidence=rec.confidence,
+                        reasoning=rec.reasoning,
+                    )
+                    # Auto-apply only high-confidence recommendations
+                    if rec.confidence >= 0.85 and os.getenv("RULE_TUNER_AUTO_APPLY", "").lower() == "true":
+                        applied = await asyncio.get_event_loop().run_in_executor(
+                            None, tuner.apply, rec
+                        )
+                        if applied:
+                            logger.info("rule_tuner_auto_applied", rule_id=rec.rule_id)
+
+            except Exception as e:
+                logger.debug("rule_tuner_error", error=str(e))
 
     async def _create_incident_from_rule(
         self,

@@ -70,6 +70,12 @@ EXPLOIT_CONTRACTS = {
         {"address": "0x2eDe22e7a08F0A41A685A3CF40e2259137699879", "label": "oracle_manipulation", "attack": "Cheese Bank"},
         # bZx Exploiter (Attack Contract 2)
         {"address": "0xb8c6ad5a72efdd04a86e6B1d0f30fa3c74B9b325", "label": "flash_loan_exploit", "attack": "bZx Protocol"},
+        # Poly Network Exploiter
+        {"address": "0xC8a65Fadf0e0dDAf421F28FEAb69Bf6E2E589963", "label": "bridge_exploit", "attack": "Poly Network"},
+        # Ronin Bridge Exploiter
+        {"address": "0x098B716B8Aaf21512996dC57EB0615e2383E2f96", "label": "bridge_exploit", "attack": "Ronin Bridge"},
+        # Harmony Horizon Exploiter
+        {"address": "0x0d043128146654C7683FBf30ac98D7B2285DeD00", "label": "bridge_exploit", "attack": "Harmony Horizon"},
     ],
     "arbitrum": [
         # Penpie Arbitrum Exploiter
@@ -88,7 +94,14 @@ EXPLOIT_CONTRACTS = {
     "polygon": [
         # QiDAO Exploiter
         {"address": "0x118203b0f2a3ef9e749d871c8fef5e5e55ef5c91", "label": "flash_loan_exploit", "attack": "QiDAO"},
-    ]
+    ],
+    "optimism": [
+        {"address": "0x4f3a120E72C76c22ae802D129F599BFDbc31cb81", "label": "reentrancy_exploit", "attack": "Exactly Protocol"},
+    ],
+    "avalanche": [
+        {"address": "0x67afdd6489d40a01dae65f709367e1b1d18a5322", "label": "flash_loan_exploit", "attack": "Platypus Finance AVAX"},
+        {"address": "0xB0f8e42F44Ea221bf1e49ee4e4828F1e0f52F6F5", "label": "flash_loan_exploit", "attack": "Nereus Finance"},
+    ],
 }
 
 # Safe contracts (verified, audited protocols)
@@ -140,6 +153,18 @@ SAFE_CONTRACTS = {
         {"address": "0x3ee18B2214AFF97000D974cf647E7C347E8fa585", "label": "safe", "protocol": "Wormhole Token Bridge"},
         {"address": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1", "label": "safe", "protocol": "Optimism Gateway"},
         {"address": "0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f", "label": "safe", "protocol": "Arbitrum Inbox"},
+        # EigenLayer
+        {"address": "0x858646372CC42E1A627fcE94aa7A7033e7CF075A", "label": "safe", "protocol": "EigenLayer StrategyManager"},
+        # Morpho
+        {"address": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb", "label": "safe", "protocol": "Morpho"},
+        # Pendle
+        {"address": "0x0000000001E4ef00d069e71d6bA041b0A16F7eA0", "label": "safe", "protocol": "Pendle Router V4"},
+        # Ethena
+        {"address": "0x4c9EDD5852cd905f086C759E8383e09bFF1E68B3", "label": "safe", "protocol": "Ethena USDe"},
+        # Rocket Pool
+        {"address": "0xae78736Cd615f374D3085123A210448E74Fc6393", "label": "safe", "protocol": "Rocket Pool rETH"},
+        # Convex
+        {"address": "0xF403C135812408BFbE8713b5A23a04b3D48AAE31", "label": "safe", "protocol": "Convex Booster"},
     ],
     "arbitrum": [
         {"address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", "label": "safe", "protocol": "WETH"},
@@ -156,7 +181,16 @@ SAFE_CONTRACTS = {
         {"address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "label": "safe", "protocol": "WBNB"},
         {"address": "0x55d398326f99059fF775485246999027B3197955", "label": "safe", "protocol": "BSC-USD"},
         {"address": "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", "label": "safe", "protocol": "BUSD"},
-    ]
+    ],
+    "optimism": [
+        {"address": "0x4200000000000000000000000000000000000006", "label": "safe", "protocol": "WETH"},
+        {"address": "0x4200000000000000000000000000000000000042", "label": "safe", "protocol": "OP Token"},
+        {"address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "label": "safe", "protocol": "USDC"},
+    ],
+    "avalanche": [
+        {"address": "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7", "label": "safe", "protocol": "WAVAX"},
+        {"address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "label": "safe", "protocol": "USDC"},
+    ],
 }
 
 # Honeypot/Rug Pull contracts (known scams)
@@ -164,6 +198,7 @@ SCAM_CONTRACTS = {
     "ethereum": [
         {"address": "0x6b4c7a5e3f0b99fcd83e9c089bddd6c7fce5c611", "label": "honeypot", "scam": "Known Honeypot"},
         {"address": "0x30f7a0c13b2e1c7a72f7ddb72bd9de4e56f99acd", "label": "rug_pull", "scam": "Squid Game Token"},
+        {"address": "0x59068075A799594db03C0255eDd68CbC6c8af4e1", "label": "rug_pull", "scam": "AnubisDAO"},
     ],
     "bsc": [
         {"address": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82", "label": "honeypot", "scam": "Known BSC Honeypot"},
@@ -197,6 +232,7 @@ class BytecodeCollector:
         "bsc": os.getenv("BSC_RPC_URL", "https://bsc-dataseed.binance.org"),
         "optimism": os.getenv("OP_RPC_URL", "https://mainnet.optimism.io"),
         "base": os.getenv("BASE_RPC_URL", "https://mainnet.base.org"),
+        "avalanche": os.getenv("AVAX_RPC_URL", "https://api.avax.network/ext/bc/C/rpc"),
     }
     
     def __init__(self, output_dir: str = "./data/bytecode"):
