@@ -87,31 +87,39 @@ class ContractThreatClassifier:
                     continue
     
     def _init_rule_weights(self):
-        """Initialize weights for rule-based classification"""
+        """Initialize weights for rule-based classification.
+
+        Weights are intentionally spread across categories so that no single
+        feature can dominate the final score (previous 0.7 reentrancy weight
+        caused every exploit to be classified as reentrancy).
+        """
         self.rule_weights = {
             "has_flash_loan_callback": {
-                ThreatCategory.FLASH_LOAN_EXPLOIT: 0.6,
-                ThreatCategory.REENTRANCY_EXPLOIT: 0.2,
+                ThreatCategory.FLASH_LOAN_EXPLOIT: 0.55,
+                ThreatCategory.REENTRANCY_EXPLOIT: 0.15,
+                ThreatCategory.ORACLE_MANIPULATION: 0.10,
             },
             "has_reentrancy_pattern": {
-                ThreatCategory.REENTRANCY_EXPLOIT: 0.7,
-                ThreatCategory.FLASH_LOAN_EXPLOIT: 0.2,
+                ThreatCategory.REENTRANCY_EXPLOIT: 0.45,
+                ThreatCategory.FLASH_LOAN_EXPLOIT: 0.15,
+                ThreatCategory.UNKNOWN_THREAT: 0.10,
             },
             "has_delegatecall_pattern": {
-                ThreatCategory.UNKNOWN_THREAT: 0.4,
-                ThreatCategory.RUG_PULL: 0.3,
+                ThreatCategory.RUG_PULL: 0.35,
+                ThreatCategory.UNKNOWN_THREAT: 0.25,
+                ThreatCategory.GOVERNANCE_ATTACK: 0.10,
             },
             "has_selfdestruct": {
-                ThreatCategory.RUG_PULL: 0.5,
-                ThreatCategory.HONEYPOT: 0.3,
+                ThreatCategory.RUG_PULL: 0.40,
+                ThreatCategory.HONEYPOT: 0.25,
             },
             "has_mint_function": {
-                ThreatCategory.BRIDGE_EXPLOIT: 0.3,
-                ThreatCategory.RUG_PULL: 0.2,
+                ThreatCategory.BRIDGE_EXPLOIT: 0.30,
+                ThreatCategory.RUG_PULL: 0.15,
             },
             "has_admin_functions": {
-                ThreatCategory.GOVERNANCE_ATTACK: 0.2,
-                ThreatCategory.RUG_PULL: 0.2,
+                ThreatCategory.GOVERNANCE_ATTACK: 0.25,
+                ThreatCategory.RUG_PULL: 0.15,
             },
         }
     
@@ -177,17 +185,24 @@ class ContractThreatClassifier:
         # Determine final category
         final_category = max(category_scores, key=category_scores.get)
         confidence = category_scores[final_category]
-        
+
+        # Risk score: combine ML confidence with bytecode heuristic
+        # instead of using only the raw heuristic (which can be 0-100)
+        if final_category != ThreatCategory.SAFE:
+            risk_score = max(features.risk_score, confidence * 100)
+        else:
+            risk_score = features.risk_score
+
         # Generate recommendation
         recommendation = self._generate_recommendation(
-            final_category, confidence, features.risk_score
+            final_category, confidence, risk_score
         )
-        
+
         return ClassificationResult(
             contract_address=contract_address or "unknown",
             threat_category=final_category,
             confidence=confidence,
-            risk_score=features.risk_score,
+            risk_score=risk_score,
             risk_factors=features.risk_factors,
             similar_exploits=similar,
             recommendation=recommendation
@@ -210,7 +225,7 @@ class ContractThreatClassifier:
         if features.has_reentrancy_pattern:
             for cat, weight in self.rule_weights["has_reentrancy_pattern"].items():
                 scores[cat] += weight
-            scores[ThreatCategory.SAFE] -= 0.5
+            scores[ThreatCategory.SAFE] -= 0.35
         
         if features.has_delegatecall_pattern:
             for cat, weight in self.rule_weights["has_delegatecall_pattern"].items():
@@ -237,7 +252,12 @@ class ContractThreatClassifier:
         features: BytecodeFeatures,
         bytecode: str = None,
     ) -> Dict[ThreatCategory, float]:
-        """Apply ML model classification. Handles both 20 and 43 feature models."""
+        """Apply ML model classification. Handles both 20 and 43 feature models.
+
+        For binary classifiers (safe vs exploit), distributes the exploit
+        probability across specific threat categories using feature-based
+        signals instead of dumping everything into UNKNOWN_THREAT.
+        """
         if not self.model:
             return {}
 
@@ -252,21 +272,40 @@ class ContractThreatClassifier:
             else:
                 vector = np.array(features_to_vector(features)).reshape(1, -1)
 
-            # Binary classifier returns [safe_prob, exploit_prob]
             probabilities = self.model.predict_proba(vector)[0]
             classes = self.model.classes_
 
             if len(classes) == 2:
-                # Binary: map exploit probability to threat categories
                 exploit_prob = float(probabilities[list(classes).index(1)] if 1 in classes else probabilities[1])
-                # Apply confidence cap for mock-trained models
                 if self._confidence_cap < 1.0:
                     exploit_prob = min(exploit_prob, self._confidence_cap)
                 safe_prob = 1.0 - exploit_prob
-                return {
-                    ThreatCategory.SAFE: safe_prob,
-                    ThreatCategory.UNKNOWN_THREAT: exploit_prob,
-                }
+
+                # Distribute exploit probability across threat categories
+                # based on which features are actually present, rather than
+                # collapsing everything into UNKNOWN_THREAT.
+                threat_signals: Dict[ThreatCategory, float] = {}
+                if features.has_flash_loan_callback:
+                    threat_signals[ThreatCategory.FLASH_LOAN_EXPLOIT] = 0.5
+                if features.has_reentrancy_pattern:
+                    threat_signals[ThreatCategory.REENTRANCY_EXPLOIT] = 0.4
+                if features.has_delegatecall_pattern:
+                    threat_signals[ThreatCategory.RUG_PULL] = 0.3
+                if features.has_selfdestruct:
+                    threat_signals[ThreatCategory.RUG_PULL] = threat_signals.get(ThreatCategory.RUG_PULL, 0) + 0.3
+                if getattr(features, 'has_mint_function', False) and getattr(features, 'has_burn_function', False):
+                    threat_signals[ThreatCategory.BRIDGE_EXPLOIT] = 0.3
+
+                if not threat_signals:
+                    # No specific signals — default to UNKNOWN_THREAT
+                    threat_signals[ThreatCategory.UNKNOWN_THREAT] = 1.0
+
+                # Normalize signal weights and multiply by exploit probability
+                total_signal = sum(threat_signals.values())
+                result = {ThreatCategory.SAFE: safe_prob}
+                for cat, weight in threat_signals.items():
+                    result[cat] = exploit_prob * (weight / total_signal)
+                return result
             else:
                 return {ThreatCategory(cat): prob for cat, prob in zip(classes, probabilities)}
         except Exception as e:
