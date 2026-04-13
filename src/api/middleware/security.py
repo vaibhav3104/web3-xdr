@@ -18,12 +18,6 @@ from fastapi.security import APIKeyHeader, HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-try:
-    import redis as _redis_pkg
-    _RedisError = _redis_pkg.RedisError
-except ImportError:
-    _RedisError = type(None)  # Never matches if redis not installed
-
 logger = structlog.get_logger(__name__)
 
 # ============================================================================
@@ -68,7 +62,8 @@ class RateLimiter:
             await self._redis.ping()
             logger.info("rate_limiter_redis_connected")
             return self._redis
-        except (ConnectionError, OSError, ImportError, _RedisError) as e:
+        except Exception as e:
+            # Broad catch: rate limiter must always fall back gracefully
             logger.warning("rate_limiter_redis_fallback", error=str(e))
             self._redis_failed = True
             return None
@@ -110,8 +105,8 @@ class RateLimiter:
                 "remaining_minute": self.rpm - minute_count - 1,
                 "remaining_hour": self.rph - hour_count - 1
             }
-        except (ConnectionError, OSError, _RedisError):
-            # Redis error — fall back to memory
+        except Exception:
+            # Broad catch: rate limiter must always fall back gracefully
             return await self._check_memory(client_ip, now)
 
     async def _check_memory(self, client_ip: str, now: float) -> tuple[bool, dict]:
@@ -196,7 +191,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 remaining = max(0, api_key_obj.rate_limit_requests - api_key_obj.requests_this_window)
                 response.headers["X-RateLimit-Remaining"] = str(remaining)
                 return response
-            except (ValueError, KeyError, AttributeError, ImportError):
+            except Exception:
                 pass  # Fall through to IP-based limiting
 
         # --- IP-based rate limiting (no API key) ---
