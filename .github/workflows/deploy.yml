@@ -262,7 +262,7 @@ jobs:
               --vpc-connector sentinel3-vpc \
               --vpc-egress private-ranges-only \
               --remove-cloudsql-instances web3-xdr:us-central1:web3-xdr-db \
-              --set-env-vars "ENVIRONMENT=production,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=api,API_PORT=8080,REDIS_ENABLED=true,REDIS_URL=redis://10.74.131.163:6379/0,CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS || '*' }},LAST_DEPLOY=$(date +%s)" \
+              --set-env-vars "^@^ENVIRONMENT=production@GCP_PROJECT=${{ env.GCP_PROJECT }}@PROC_TYPE=api@API_PORT=8080@REDIS_ENABLED=true@REDIS_URL=redis://10.74.131.163:6379/0@CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS || '*' }}@LAST_DEPLOY=$(date +%s)" \
               --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,XDR_USER_ADMIN=web3-xdr-admin-user:latest"; then
               echo "✅ API deployed successfully"
               break
