@@ -9,14 +9,17 @@
 # - Cloud SQL Proxy for PostgreSQL
 # =============================================================================
 
-name: Deploy Sentinel3
+name: Deploy Sentinel3 (DISABLED - using Cloud Build)
 
+# DISABLED: Cloud Build trigger "deploy-on-push-main" handles deployment.
+# This workflow was causing duplicate deploys on every push to main.
+# To re-enable, uncomment the triggers below.
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-    tags:
-      - 'v*'
+  workflow_dispatch:  # Keep manual trigger as emergency fallback
+  # push:
+  #   branches: [main]
+  #   tags:
+  #     - 'v*'
 
 env:
   GCP_REGION: us-central1
