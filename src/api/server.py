@@ -222,7 +222,7 @@ def create_app(
                 from sqlalchemy import text
                 await session.execute(text("SELECT 1"))
             checks["postgres"] = "connected"
-        except (ConnectionError, OSError, ImportError, RuntimeError) as e:
+        except Exception as e:
             checks["postgres"] = f"error: {str(e)[:80]}"
 
         # Check Redis
@@ -233,7 +233,7 @@ def create_app(
             await r.ping()
             await r.aclose()
             checks["redis"] = "connected"
-        except (ConnectionError, OSError, ImportError, RuntimeError) as e:
+        except Exception as e:
             checks["redis"] = f"error: {str(e)[:80]}"
 
         all_ok = all(v == "connected" for v in checks.values())
