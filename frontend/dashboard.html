@@ -276,6 +276,68 @@
             </div>
         </div>
 
+        <!-- LLM Intelligence Panel -->
+        <div class="card p-5 mb-6 animate-in" style="animation-delay: 0.7s">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                    </div>
+                    <h3 class="font-semibold">LLM Intelligence (Claude)</h3>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span class="text-xs px-2 py-1 rounded-full"
+                          :class="llmStats.circuit_breaker === 'closed' ? 'bg-green-500/20 text-green-400' : llmStats.circuit_breaker === 'open' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'"
+                          x-text="'Circuit: ' + (llmStats.circuit_breaker || 'closed').toUpperCase()"></span>
+                    <span class="text-xs text-zinc-500" x-text="'Day: ' + (llmStats.utc_day || '-')"></span>
+                </div>
+            </div>
+            <div class="grid grid-cols-6 gap-4">
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Requests Today</div>
+                    <div class="text-2xl font-bold text-purple-400" x-text="llmStats.daily_request_count || 0">0</div>
+                    <div class="text-xs text-zinc-600 mt-1">Cap: <span x-text="llmStats.daily_request_cap || 1000"></span></div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Current RPM</div>
+                    <div class="text-2xl font-bold"
+                         :class="(llmStats.current_rpm || 0) > llmStats.rpm_limit * 0.8 ? 'text-orange-400' : 'text-blue-400'"
+                         x-text="llmStats.current_rpm || 0">0</div>
+                    <div class="text-xs text-zinc-600 mt-1">Limit: <span x-text="llmStats.rpm_limit || 30"></span>/min</div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Daily Spend</div>
+                    <div class="text-2xl font-bold text-emerald-400" x-text="'$' + (llmStats.daily_spend_usd || 0).toFixed(2)">$0.00</div>
+                    <div class="text-xs text-zinc-600 mt-1">Cap: $<span x-text="llmStats.daily_spend_cap || 50"></span></div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Success Rate</div>
+                    <div class="text-2xl font-bold"
+                         :class="llmSuccessRate >= 90 ? 'text-green-400' : llmSuccessRate >= 70 ? 'text-yellow-400' : 'text-red-400'"
+                         x-text="llmSuccessRate + '%'">-%</div>
+                    <div class="text-xs text-zinc-600 mt-1"><span x-text="llmStats.total_successes || 0"></span> ok / <span x-text="llmStats.total_failures || 0"></span> fail</div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Consecutive Fails</div>
+                    <div class="text-2xl font-bold"
+                         :class="(llmStats.consecutive_failures || 0) >= 3 ? 'text-red-400' : 'text-zinc-400'"
+                         x-text="llmStats.consecutive_failures || 0">0</div>
+                    <div class="text-xs text-zinc-600 mt-1">Threshold: 5</div>
+                </div>
+                <div class="scanner-stat">
+                    <div class="text-xs text-zinc-500 mb-1">Usage</div>
+                    <div class="w-full bg-zinc-700 rounded-full h-3 mt-2">
+                        <div class="h-full rounded-full transition-all"
+                             :class="llmUsagePercent > 80 ? 'bg-red-500' : llmUsagePercent > 50 ? 'bg-yellow-500' : 'bg-purple-500'"
+                             :style="'width: ' + llmUsagePercent + '%'"></div>
+                    </div>
+                    <div class="text-xs text-zinc-600 mt-1" x-text="llmUsagePercent + '% of daily cap'"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Charts Row -->
         <div class="grid grid-cols-3 gap-6 mb-6">
             <!-- Events Over Time -->
@@ -495,6 +557,21 @@
                     contractsByChain: {},
                     lastRefresh: 'never'
                 },
+                llmStats: {
+                    current_rpm: 0, rpm_limit: 30,
+                    daily_request_count: 0, daily_request_cap: 1000,
+                    daily_spend_usd: 0, daily_spend_cap: 50,
+                    utc_day: '-', circuit_breaker: 'closed',
+                    consecutive_failures: 0, total_failures: 0, total_successes: 0
+                },
+                get llmSuccessRate() {
+                    const total = (this.llmStats.total_successes || 0) + (this.llmStats.total_failures || 0);
+                    return total === 0 ? 100 : Math.round((this.llmStats.total_successes / total) * 100);
+                },
+                get llmUsagePercent() {
+                    const cap = this.llmStats.daily_request_cap || 1000;
+                    return Math.min(100, Math.round(((this.llmStats.daily_request_count || 0) / cap) * 100));
+                },
                 incidents: [],
                 incidentTimeline: [],
                 events: [],
@@ -529,11 +606,12 @@
                     const apiBase = window.SENTINEL3_API_BASE || '';
                     try {
                         // Load all data sources in parallel
-                        const [statsRes, incRes, evtRes, contractRes] = await Promise.allSettled([
+                        const [statsRes, incRes, evtRes, contractRes, llmRes] = await Promise.allSettled([
                             fetch(apiBase + '/api/stats'),
                             fetch(apiBase + '/api/incidents?limit=50'),
                             fetch(apiBase + '/api/events?limit=20'),
-                            fetch(apiBase + '/api/contracts/stats')
+                            fetch(apiBase + '/api/contracts/stats'),
+                            fetch(apiBase + '/api/ai/llm/usage')
                         ]);
 
                         // Process stats
@@ -608,6 +686,11 @@
                                 contractsByChain: cData.contracts_by_chain || {},
                                 lastRefresh: new Date().toLocaleTimeString()
                             };
+                        }
+
+                        // Process LLM stats
+                        if (llmRes.status === 'fulfilled' && llmRes.value.ok) {
+                            this.llmStats = await llmRes.value.json();
                         }
                     } catch (e) {
                         console.log('Error loading data:', e);

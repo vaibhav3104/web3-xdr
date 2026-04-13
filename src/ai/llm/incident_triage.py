@@ -17,6 +17,7 @@ from typing import Dict, Any, Optional, List
 import structlog
 
 from .client import get_client, get_async_client, MODEL, MAX_TOKENS
+from .rate_limiter import get_rate_limiter
 
 logger = structlog.get_logger(__name__)
 
@@ -314,10 +315,12 @@ class IncidentTriage:
                 confidence=verdict.confidence,
                 action=verdict.suggested_action,
             )
+            get_rate_limiter().record_success()
             return verdict
 
         except Exception as e:
             logger.error("triage_async_failed", rule_id=rule_id, error=str(e))
+            get_rate_limiter().record_failure()
             return None
 
     def analyze_batch(

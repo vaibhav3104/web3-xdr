@@ -19,6 +19,7 @@ from typing import Dict, Any, Optional, List
 import structlog
 
 from .client import get_client, get_async_client, MODEL
+from .rate_limiter import get_rate_limiter
 
 logger = structlog.get_logger(__name__)
 
@@ -424,6 +425,7 @@ class BytecodeAnalyzer:
                 assessment=analysis.threat_assessment,
                 threat_level=analysis.threat_level,
             )
+            get_rate_limiter().record_success()
             return analysis
 
         except Exception as e:
@@ -432,6 +434,7 @@ class BytecodeAnalyzer:
                 contract=contract_address or "unknown",
                 error=str(e),
             )
+            get_rate_limiter().record_failure()
             return None
 
     def analyze_batch(

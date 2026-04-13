@@ -39,17 +39,24 @@ _OUTPUT_COST_PER_MTOK = 15.0
 @dataclass
 class LLMRateLimiter:
     """
-    Thread-safe rate limiter with RPM throttling and daily spend/request caps.
+    Thread-safe rate limiter with RPM throttling, daily spend/request caps,
+    and circuit breaker for automatic failure recovery.
 
     Config is read from environment variables at init time:
-        LLM_RPM_LIMIT          — max requests per minute (default: 30)
-        LLM_DAILY_SPEND_CAP    — max estimated daily spend in USD (default: 50.0)
-        LLM_DAILY_REQUEST_CAP  — max requests per day (default: 1000)
+        LLM_RPM_LIMIT              — max requests per minute (default: 30)
+        LLM_DAILY_SPEND_CAP        — max estimated daily spend in USD (default: 50.0)
+        LLM_DAILY_REQUEST_CAP      — max requests per day (default: 1000)
+        LLM_CB_FAILURE_THRESHOLD   — consecutive failures to open circuit (default: 5)
+        LLM_CB_COOLDOWN_SECONDS    — seconds to wait before retrying (default: 300)
     """
 
     rpm_limit: int = field(init=False)
     daily_spend_cap: float = field(init=False)
     daily_request_cap: int = field(init=False)
+
+    # Circuit breaker config
+    cb_failure_threshold: int = field(init=False)
+    cb_cooldown_seconds: int = field(init=False)
 
     # Internal state
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -58,10 +65,18 @@ class LLMRateLimiter:
     _daily_spend_usd: float = field(default=0.0, repr=False)
     _current_day: str = field(default="", repr=False)
 
+    # Circuit breaker state
+    _consecutive_failures: int = field(default=0, repr=False)
+    _circuit_open_since: Optional[datetime] = field(default=None, repr=False)
+    _total_failures: int = field(default=0, repr=False)
+    _total_successes: int = field(default=0, repr=False)
+
     def __post_init__(self) -> None:
         self.rpm_limit = int(os.getenv("LLM_RPM_LIMIT", "30"))
         self.daily_spend_cap = float(os.getenv("LLM_DAILY_SPEND_CAP", "50.0"))
         self.daily_request_cap = int(os.getenv("LLM_DAILY_REQUEST_CAP", "1000"))
+        self.cb_failure_threshold = int(os.getenv("LLM_CB_FAILURE_THRESHOLD", "5"))
+        self.cb_cooldown_seconds = int(os.getenv("LLM_CB_COOLDOWN_SECONDS", "300"))
         self._current_day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         logger.info(
@@ -69,6 +84,8 @@ class LLMRateLimiter:
             rpm_limit=self.rpm_limit,
             daily_spend_cap=self.daily_spend_cap,
             daily_request_cap=self.daily_request_cap,
+            cb_failure_threshold=self.cb_failure_threshold,
+            cb_cooldown_seconds=self.cb_cooldown_seconds,
         )
 
     # ------------------------------------------------------------------
@@ -76,10 +93,27 @@ class LLMRateLimiter:
     # ------------------------------------------------------------------
 
     def can_make_request(self) -> bool:
-        """Check whether a new request is allowed under all limits."""
+        """Check whether a new request is allowed under all limits and circuit breaker."""
         with self._lock:
             self._reset_if_new_day()
             self._evict_old_timestamps()
+
+            # Circuit breaker check
+            if self._circuit_open_since is not None:
+                elapsed = (datetime.now(timezone.utc) - self._circuit_open_since).total_seconds()
+                if elapsed < self.cb_cooldown_seconds:
+                    logger.warning(
+                        "circuit_breaker_open",
+                        consecutive_failures=self._consecutive_failures,
+                        cooldown_remaining=round(self.cb_cooldown_seconds - elapsed),
+                    )
+                    return False
+                # Cooldown expired — half-open: allow one request to probe
+                logger.info(
+                    "circuit_breaker_half_open",
+                    elapsed=round(elapsed),
+                    allowing_probe=True,
+                )
 
             if len(self._request_timestamps) >= self.rpm_limit:
                 logger.warning(
@@ -107,6 +141,38 @@ class LLMRateLimiter:
 
             return True
 
+    def record_success(self) -> None:
+        """Record a successful LLM call — resets circuit breaker."""
+        with self._lock:
+            self._total_successes += 1
+            if self._consecutive_failures > 0 or self._circuit_open_since is not None:
+                logger.info(
+                    "circuit_breaker_closed",
+                    previous_failures=self._consecutive_failures,
+                )
+            self._consecutive_failures = 0
+            self._circuit_open_since = None
+
+    def record_failure(self) -> None:
+        """Record a failed LLM call — may trip the circuit breaker."""
+        with self._lock:
+            self._consecutive_failures += 1
+            self._total_failures += 1
+
+            if self._consecutive_failures >= self.cb_failure_threshold and self._circuit_open_since is None:
+                self._circuit_open_since = datetime.now(timezone.utc)
+                logger.error(
+                    "circuit_breaker_opened",
+                    consecutive_failures=self._consecutive_failures,
+                    cooldown_seconds=self.cb_cooldown_seconds,
+                )
+            else:
+                logger.warning(
+                    "llm_failure_recorded",
+                    consecutive_failures=self._consecutive_failures,
+                    threshold=self.cb_failure_threshold,
+                )
+
     def record_request(self, input_tokens: int, output_tokens: int) -> None:
         """Record a completed request's token usage."""
         cost = self._estimate_cost(input_tokens, output_tokens)
@@ -128,10 +194,20 @@ class LLMRateLimiter:
         )
 
     def get_usage_stats(self) -> Dict[str, Any]:
-        """Return a snapshot of current usage vs. limits."""
+        """Return a snapshot of current usage vs. limits, including circuit breaker state."""
         with self._lock:
             self._reset_if_new_day()
             self._evict_old_timestamps()
+
+            cb_state = "closed"
+            cb_cooldown_remaining = 0
+            if self._circuit_open_since is not None:
+                elapsed = (datetime.now(timezone.utc) - self._circuit_open_since).total_seconds()
+                if elapsed < self.cb_cooldown_seconds:
+                    cb_state = "open"
+                    cb_cooldown_remaining = round(self.cb_cooldown_seconds - elapsed)
+                else:
+                    cb_state = "half_open"
 
             return {
                 "current_rpm": len(self._request_timestamps),
@@ -141,6 +217,11 @@ class LLMRateLimiter:
                 "daily_spend_usd": round(self._daily_spend_usd, 4),
                 "daily_spend_cap": self.daily_spend_cap,
                 "utc_day": self._current_day,
+                "circuit_breaker": cb_state,
+                "circuit_breaker_cooldown_remaining": cb_cooldown_remaining,
+                "consecutive_failures": self._consecutive_failures,
+                "total_failures": self._total_failures,
+                "total_successes": self._total_successes,
             }
 
     # ------------------------------------------------------------------

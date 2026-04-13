@@ -16,7 +16,21 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(name: str) -> bool:
+    """Check if a table already exists in the database."""
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :t)"),
+        {"t": name},
+    )
+    return result.scalar()
+
+
 def upgrade() -> None:
+    # Skip if tables already exist (idempotent migration for existing databases)
+    if _table_exists("events"):
+        return
+
     # Events table
     op.create_table(
         "events",
