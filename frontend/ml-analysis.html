@@ -254,6 +254,60 @@
                         <p id="recommendation" class="mt-1 font-medium"></p>
                     </div>
 
+                    <!-- LLM Deep Analysis Section -->
+                    <div id="llmSection" class="mt-4 border-t border-[#2a2a3a] pt-4">
+                        <button id="llmAnalyzeBtn" onclick="runLLMAnalysis()"
+                            class="w-full py-3 px-6 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition flex items-center justify-center">
+                            <i class="fas fa-brain mr-2"></i>
+                            Run LLM Deep Analysis (Claude)
+                        </button>
+                        <div id="llmLoading" class="hidden text-center py-4">
+                            <i class="fas fa-spinner fa-spin text-2xl text-purple-400 mb-2"></i>
+                            <p class="text-sm text-[#a0a0b0]">Claude is analyzing bytecode...</p>
+                        </div>
+                        <div id="llmResults" class="hidden mt-4 space-y-3">
+                            <div class="flex items-center space-x-2 mb-3">
+                                <i class="fas fa-brain text-purple-400"></i>
+                                <span class="font-semibold text-purple-400">LLM Analysis (Claude)</span>
+                                <span id="llmThreatBadge" class="threat-badge text-xs">-</span>
+                            </div>
+                            <div class="bg-[#1a1a24] rounded-lg p-4">
+                                <span class="text-sm text-[#a0a0b0]">Summary</span>
+                                <p id="llmSummary" class="mt-1 text-sm"></p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-[#1a1a24] rounded-lg p-3">
+                                    <span class="text-xs text-[#a0a0b0]">Threat Level</span>
+                                    <div class="flex items-center mt-1">
+                                        <span id="llmThreatLevel" class="text-2xl font-bold">-</span>
+                                        <span class="text-[#a0a0b0] text-sm ml-1">/1.0</span>
+                                    </div>
+                                </div>
+                                <div class="bg-[#1a1a24] rounded-lg p-3">
+                                    <span class="text-xs text-[#a0a0b0]">Assessment</span>
+                                    <p id="llmAssessment" class="text-lg font-bold mt-1">-</p>
+                                </div>
+                            </div>
+                            <div class="bg-[#1a1a24] rounded-lg p-4">
+                                <span class="text-sm text-[#a0a0b0]">Identified Functions</span>
+                                <ul id="llmFunctions" class="mt-2 space-y-1 text-sm font-mono"></ul>
+                            </div>
+                            <div class="bg-[#1a1a24] rounded-lg p-4">
+                                <span class="text-sm text-[#a0a0b0]">Attack Vectors</span>
+                                <ul id="llmAttackVectors" class="mt-2 space-y-1 text-sm"></ul>
+                            </div>
+                            <div class="bg-[#1a1a24] rounded-lg p-4">
+                                <span class="text-sm text-[#a0a0b0]">Similar Known Exploits</span>
+                                <ul id="llmSimilarTo" class="mt-2 space-y-1 text-sm"></ul>
+                            </div>
+                            <div class="bg-[#1a1a24] rounded-lg p-4">
+                                <span class="text-sm text-[#a0a0b0]">Recommendations</span>
+                                <ul id="llmRecommendations" class="mt-2 space-y-1 text-sm"></ul>
+                            </div>
+                        </div>
+                        <div id="llmError" class="hidden mt-3 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-sm text-red-400"></div>
+                    </div>
+
                     <!-- Analysis Time -->
                     <div class="mt-4 text-center text-sm text-[#a0a0b0]">
                         Analysis completed in <span id="analysisTime">-</span>ms
@@ -502,6 +556,91 @@
 
             // Update analysis time
             document.getElementById('analysisTime').textContent = data.analysis_time_ms.toFixed(1);
+        }
+
+        async function runLLMAnalysis() {
+            const bytecode = document.getElementById('bytecodeInput').value.trim();
+            const address = document.getElementById('contractAddress').value.trim();
+
+            if (!bytecode) { alert('Enter bytecode first'); return; }
+
+            document.getElementById('llmAnalyzeBtn').classList.add('hidden');
+            document.getElementById('llmLoading').classList.remove('hidden');
+            document.getElementById('llmResults').classList.add('hidden');
+            document.getElementById('llmError').classList.add('hidden');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ai/llm/analyze/bytecode`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bytecode, contract_address: address || null })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayLLMResults(data);
+            } catch (error) {
+                document.getElementById('llmError').textContent = `LLM analysis failed: ${error.message}`;
+                document.getElementById('llmError').classList.remove('hidden');
+                document.getElementById('llmAnalyzeBtn').classList.remove('hidden');
+            } finally {
+                document.getElementById('llmLoading').classList.add('hidden');
+            }
+        }
+
+        function displayLLMResults(data) {
+            document.getElementById('llmResults').classList.remove('hidden');
+
+            // Threat badge
+            const badge = document.getElementById('llmThreatBadge');
+            const assessment = data.threat_assessment || 'unknown';
+            const colors = {
+                safe: 'bg-green-500 text-white',
+                suspicious: 'bg-yellow-500 text-black',
+                malicious: 'bg-red-500 text-white',
+                unknown: 'bg-gray-500 text-white'
+            };
+            badge.className = `threat-badge text-xs ${colors[assessment] || colors.unknown}`;
+            badge.textContent = assessment.toUpperCase();
+
+            // Summary
+            document.getElementById('llmSummary').textContent = data.summary || 'No summary available';
+
+            // Threat level
+            const level = data.threat_level || 0;
+            const levelEl = document.getElementById('llmThreatLevel');
+            levelEl.textContent = level.toFixed(2);
+            levelEl.className = `text-2xl font-bold ${level > 0.7 ? 'text-red-400' : level > 0.4 ? 'text-yellow-400' : 'text-green-400'}`;
+
+            // Assessment
+            const assessEl = document.getElementById('llmAssessment');
+            assessEl.textContent = assessment.toUpperCase();
+            assessEl.className = `text-lg font-bold mt-1 ${level > 0.7 ? 'text-red-400' : level > 0.4 ? 'text-yellow-400' : 'text-green-400'}`;
+
+            // Lists
+            renderList('llmFunctions', data.identified_functions, 'fas fa-code text-blue-400');
+            renderList('llmAttackVectors', data.attack_vectors, 'fas fa-crosshairs text-red-400');
+            renderList('llmSimilarTo', data.similar_to, 'fas fa-link text-purple-400');
+            renderList('llmRecommendations', data.recommendations, 'fas fa-check-circle text-green-400');
+        }
+
+        function renderList(elementId, items, iconClass) {
+            const el = document.getElementById(elementId);
+            el.innerHTML = '';
+            if (items && items.length > 0) {
+                items.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-start';
+                    li.innerHTML = `<i class="${iconClass} mr-2 mt-0.5 text-xs"></i><span>${DOMPurify.sanitize(item)}</span>`;
+                    el.appendChild(li);
+                });
+            } else {
+                el.innerHTML = '<li class="text-[#a0a0b0]">None detected</li>';
+            }
         }
 
         function loadSample(type) {

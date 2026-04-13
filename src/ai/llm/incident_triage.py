@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 import structlog
 
-from .client import get_client, MODEL, MAX_TOKENS
+from .client import get_client, get_async_client, MODEL, MAX_TOKENS
 
 logger = structlog.get_logger(__name__)
 
@@ -254,6 +254,70 @@ class IncidentTriage:
 
         except Exception as e:
             logger.error("triage_failed", rule_id=rule_id, error=str(e))
+            return None
+
+    async def analyze_async(self, alert_match_dict: Dict[str, Any]) -> Optional[TriageVerdict]:
+        """Async version of analyze() — uses AsyncAnthropic for non-blocking calls."""
+        client = get_async_client()
+        if not client:
+            return None
+
+        context = self._build_context(alert_match_dict)
+        rule_id = alert_match_dict.get("rule_id", "unknown")
+
+        try:
+            response = await client.messages.create(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                system=TRIAGE_SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Triage this alert:\n\n{context}",
+                    }
+                ],
+            )
+
+            raw = response.content[0].text.strip()
+            if "```" in raw:
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+
+            result = json.loads(raw)
+
+            verdict = TriageVerdict(
+                rule_id=rule_id,
+                is_tp=result["verdict"] == "true_positive",
+                confidence=float(result.get("confidence", 0.5)),
+                verdict=result["verdict"],
+                reasoning=result.get("reasoning", ""),
+                suggested_action=result.get("suggested_action", "investigate"),
+                risk_factors=result.get("risk_factors", []),
+                mitigating_factors=result.get("mitigating_factors", []),
+            )
+
+            if self._auto_feed and self._feedback and verdict.confidence >= 0.8:
+                self._feedback.record_feedback(rule_id, verdict.is_tp)
+                logger.info(
+                    "triage_verdict_fed_to_feedback",
+                    rule_id=rule_id,
+                    verdict=verdict.verdict,
+                    confidence=verdict.confidence,
+                )
+
+            logger.info(
+                "incident_triaged_async",
+                rule_id=rule_id,
+                verdict=verdict.verdict,
+                confidence=verdict.confidence,
+                action=verdict.suggested_action,
+            )
+            return verdict
+
+        except Exception as e:
+            logger.error("triage_async_failed", rule_id=rule_id, error=str(e))
             return None
 
     def analyze_batch(

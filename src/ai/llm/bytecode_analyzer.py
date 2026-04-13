@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 import structlog
 
-from .client import get_client, MODEL
+from .client import get_client, get_async_client, MODEL
 
 logger = structlog.get_logger(__name__)
 
@@ -347,6 +347,88 @@ class BytecodeAnalyzer:
         except Exception as e:
             logger.error(
                 "bytecode_analysis_failed",
+                contract=contract_address or "unknown",
+                error=str(e),
+            )
+            return None
+
+    async def analyze_async(
+        self,
+        bytecode: str,
+        contract_address: Optional[str] = None,
+    ) -> Optional[ContractAnalysis]:
+        """Async version of analyze() — uses AsyncAnthropic for non-blocking calls."""
+        client = get_async_client()
+        if not client:
+            return None
+
+        disassembly = self._disassemble(bytecode, max_opcodes=400)
+        patterns = self._extract_patterns(bytecode)
+
+        context_parts = []
+        if contract_address:
+            context_parts.append(f"Contract Address: {contract_address}")
+        context_parts.append(f"Bytecode Size: {patterns['bytecode_size']} bytes")
+        context_parts.append("")
+        context_parts.append("=== DETECTED PATTERNS ===")
+        for k, v in patterns.items():
+            if k not in ("bytecode_size", "detected_functions"):
+                context_parts.append(f"  {k}: {v}")
+
+        if patterns.get("detected_functions"):
+            context_parts.append("\n=== KNOWN FUNCTION SELECTORS ===")
+            for fn in patterns["detected_functions"]:
+                context_parts.append(f"  {fn}")
+
+        context_parts.append("\n=== DISASSEMBLED OPCODES ===")
+        context_parts.append(disassembly)
+        context = "\n".join(context_parts)
+
+        try:
+            response = await client.messages.create(
+                model=MODEL,
+                max_tokens=1500,
+                system=ANALYZER_SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Analyze this EVM contract:\n\n{context}",
+                    }
+                ],
+            )
+
+            raw = response.content[0].text.strip()
+            if "```" in raw:
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+
+            result = json.loads(raw)
+
+            analysis = ContractAnalysis(
+                contract_address=contract_address,
+                summary=result.get("summary", "Analysis unavailable"),
+                threat_assessment=result.get("threat_assessment", "unknown"),
+                threat_level=float(result.get("threat_level", 0.5)),
+                identified_functions=result.get("identified_functions", []),
+                attack_vectors=result.get("attack_vectors", []),
+                similar_to=result.get("similar_to", []),
+                recommendations=result.get("recommendations", []),
+                decompiled_highlights=disassembly[:500],
+            )
+
+            logger.info(
+                "bytecode_analyzed_async",
+                contract=contract_address or "unknown",
+                assessment=analysis.threat_assessment,
+                threat_level=analysis.threat_level,
+            )
+            return analysis
+
+        except Exception as e:
+            logger.error(
+                "bytecode_analysis_async_failed",
                 contract=contract_address or "unknown",
                 error=str(e),
             )

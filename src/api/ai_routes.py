@@ -905,8 +905,15 @@ async def llm_analyze_bytecode(request: LLMBytecodeRequest) -> Dict:
 
     try:
         analyzer = BytecodeAnalyzer()
-        result = analyzer.analyze(request.bytecode, request.contract_address)
+        result = await analyzer.analyze_async(request.bytecode, request.contract_address)
+        if result is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM analysis unavailable. ANTHROPIC_API_KEY may not be configured."
+            )
         return result.to_dict()
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("llm_bytecode_analysis_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -928,8 +935,15 @@ async def llm_triage_incident(request: LLMTriageRequest) -> Dict:
 
     try:
         triage = IncidentTriage()
-        result = triage.analyze(request.alert_match)
+        result = await triage.analyze_async(request.alert_match)
+        if result is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM triage unavailable. ANTHROPIC_API_KEY may not be configured."
+            )
         return result.to_dict()
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("llm_triage_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -952,7 +966,14 @@ async def llm_rule_recommendations() -> List[Dict]:
     try:
         tuner = RuleTuner()
         recommendations = tuner.analyze_and_recommend()
+        if recommendations is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM rule analysis unavailable. ANTHROPIC_API_KEY may not be configured."
+            )
         return [rec.to_dict() for rec in recommendations]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("llm_rule_recommendations_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

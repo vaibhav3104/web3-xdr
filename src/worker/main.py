@@ -2040,22 +2040,18 @@ class Sentinel3Worker:
             logger.error("invariant_violation_handler_failed", error=str(e), exc_info=True)
 
     async def _run_llm_triage(self, match, db_event: dict):
-        """Run LLM-powered triage on an alert match (non-blocking)."""
+        """Run LLM-powered triage on an alert match (non-blocking, native async)."""
         try:
             from src.ai.llm.incident_triage import IncidentTriage
             from src.ai.llm.rate_limiter import get_rate_limiter
 
-            # Check rate limit before calling LLM
             limiter = get_rate_limiter()
             if not limiter.can_make_request():
                 logger.debug("llm_triage_rate_limited", rule_id=match.rule.id)
                 return
 
             triage = IncidentTriage(auto_feed_feedback=True)
-            # Run sync LLM call in thread pool to avoid blocking event loop
-            verdict = await asyncio.get_event_loop().run_in_executor(
-                None, triage.analyze, match.to_dict()
-            )
+            verdict = await triage.analyze_async(match.to_dict())
 
             if verdict:
                 logger.info(

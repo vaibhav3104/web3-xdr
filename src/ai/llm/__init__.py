@@ -15,6 +15,7 @@ from .incident_triage import IncidentTriage, TriageVerdict
 from .rule_tuner import RuleTuner, TuningRecommendation
 from .bytecode_analyzer import BytecodeAnalyzer, ContractAnalysis
 from .rate_limiter import LLMRateLimiter, get_rate_limiter, make_llm_call
+from .client import get_async_client
 
 __all__ = [
     "IncidentTriage",
@@ -26,4 +27,5 @@ __all__ = [
     "LLMRateLimiter",
     "get_rate_limiter",
     "make_llm_call",
+    "get_async_client",
 ]

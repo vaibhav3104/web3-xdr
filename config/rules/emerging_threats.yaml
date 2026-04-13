@@ -1,0 +1,439 @@
+# ============================================================================
+# EMERGING THREAT DETECTION RULES
+# New attack patterns targeting DeFi, L2, and cross-chain ecosystems
+# ============================================================================
+
+rules:
+  # ==========================================================================
+  # ACCESS CONTROL & PRIVILEGE ESCALATION
+  # ==========================================================================
+
+  - id: access-uninitialized-proxy-001
+    name: Uninitialized Proxy Exploitation
+    description: |
+      Detects when an uninitialized proxy contract's initialize() function
+      is called by a non-deployer address, indicating potential takeover.
+      Pattern used in Wormhole, Audius, and Harvest Finance exploits.
+    severity: critical
+    confidence: 0.90
+    enabled: true
+
+    detection:
+      type: event
+      event_type: ContractCall
+      conditions:
+        - field: function_selector
+          operator: in
+          value: ["0x8129fc1c", "0xc4d66de8", "0xf8c8765e"]  # initialize(), initialize(address), initialize(address,address,address,address)
+        - field: caller_is_deployer
+          operator: eq
+          value: false
+        - field: contract_is_proxy
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: access-ownership-hijack-002
+    name: Multi-Step Ownership Hijack
+    description: |
+      Detects rapid ownership changes — transferOwnership followed by
+      renounceOwnership within the same block or adjacent blocks,
+      indicating a rugpull or attack finalization.
+    severity: critical
+    confidence: 0.85
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: ownership_hijack
+      conditions:
+        - field: transfer_then_renounce_same_block
+          operator: eq
+          value: true
+        - field: new_owner_age_hours
+          operator: lt
+          value: 1
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  # ==========================================================================
+  # FLASH LOAN ATTACK VARIANTS
+  # ==========================================================================
+
+  - id: flash-multi-pool-drain-001
+    name: Multi-Pool Flash Loan Drain
+    description: |
+      Detects flash loan attacks that drain multiple liquidity pools
+      in a single transaction. Pattern seen in Euler Finance ($197M)
+      and Platypus Finance attacks.
+    severity: critical
+    confidence: 0.90
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: multi_pool_drain
+      conditions:
+        - field: flash_loan_in_tx
+          operator: eq
+          value: true
+        - field: pools_drained_count
+          operator: gt
+          value: 2
+        - field: total_drain_usd
+          operator: gt
+          value: 100000
+
+    thresholds:
+      min_drain_usd: 100000
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: flash-read-only-reentrancy-002
+    name: Read-Only Reentrancy via Flash Loan
+    description: |
+      Detects read-only reentrancy where an attacker uses a flash loan
+      to manipulate a view function's return value during a callback.
+      Exploited in Curve/Vyper reentrancy bug and multiple Balancer forks.
+    severity: high
+    confidence: 0.80
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: read_only_reentrancy
+      conditions:
+        - field: staticcall_during_callback
+          operator: eq
+          value: true
+        - field: price_deviation_during_callback
+          operator: gt
+          value: 5
+
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # L2 & ROLLUP SPECIFIC THREATS
+  # ==========================================================================
+
+  - id: l2-sequencer-downtime-001
+    name: L2 Sequencer Downtime Exploitation
+    description: |
+      Detects large DeFi operations initiated immediately after an L2
+      sequencer comes back online, which may exploit stale oracle prices.
+      Relevant to Arbitrum, Optimism, and Base ecosystems.
+    severity: high
+    confidence: 0.75
+    enabled: true
+
+    detection:
+      type: event
+      event_type: DeFiOperation
+      conditions:
+        - field: sequencer_uptime_seconds
+          operator: lt
+          value: 300  # Within 5 min of sequencer restart
+        - field: amount_usd
+          operator: gt
+          value: 500000
+        - field: uses_price_oracle
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+      - type: enrich
+        add_fields:
+          - oracle_price_staleness
+          - sequencer_gap_duration
+
+  - id: l2-forced-inclusion-002
+    name: L2 Forced Transaction Inclusion
+    description: |
+      Detects forced transaction inclusions bypassing the sequencer,
+      which could indicate censorship resistance abuse or time-sensitive
+      exploit execution.
+    severity: high
+    confidence: 0.70
+    enabled: true
+
+    detection:
+      type: event
+      event_type: ForcedInclusion
+      conditions:
+        - field: value_usd
+          operator: gt
+          value: 100000
+
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # MEV & SANDWICH ATTACKS (ADVANCED)
+  # ==========================================================================
+
+  - id: mev-sandwich-001
+    name: Sandwich Attack Detected
+    description: |
+      Detects classic sandwich attacks where an attacker front-runs and
+      back-runs a victim's swap to extract value from slippage.
+    severity: high
+    confidence: 0.80
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: sandwich
+      conditions:
+        - field: frontrun_backrun_same_block
+          operator: eq
+          value: true
+        - field: attacker_profit_usd
+          operator: gt
+          value: 100
+        - field: victim_slippage_percent
+          operator: gt
+          value: 1
+
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  - id: mev-multi-block-001
+    name: Multi-Block MEV Extraction
+    description: |
+      Detects sophisticated MEV strategies that span multiple consecutive
+      blocks, indicating builder collusion or private orderflow abuse.
+    severity: high
+    confidence: 0.70
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: multi_block_mev
+      conditions:
+        - field: same_address_consecutive_blocks
+          operator: gt
+          value: 3
+        - field: total_extracted_usd
+          operator: gt
+          value: 10000
+
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # TOKEN LAUNCH SCAMS
+  # ==========================================================================
+
+  - id: scam-tax-token-001
+    name: Hidden Tax Token Detected
+    description: |
+      Detects tokens with hidden transfer fees exceeding 10%, commonly
+      used in scam tokens to drain buyer funds over time.
+    severity: high
+    confidence: 0.85
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: tax_token
+      conditions:
+        - field: effective_transfer_tax
+          operator: gt
+          value: 10  # >10% fee
+        - field: tax_not_disclosed
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  - id: scam-mint-dump-001
+    name: Mint-and-Dump Pattern
+    description: |
+      Detects tokens where the deployer retains mint authority and
+      subsequently mints large amounts after others buy, diluting value.
+    severity: critical
+    confidence: 0.85
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: mint_dump
+      conditions:
+        - field: deployer_minted_after_launch
+          operator: eq
+          value: true
+        - field: mint_amount_vs_supply_percent
+          operator: gt
+          value: 20
+        - field: deployer_sold_after_mint
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: scam-fake-liquidity-001
+    name: Fake Liquidity Lock
+    description: |
+      Detects tokens that appear to lock liquidity but use a custom
+      locker contract with backdoor withdrawal functions.
+    severity: high
+    confidence: 0.75
+    enabled: true
+
+    detection:
+      type: pattern
+      pattern: fake_lock
+      conditions:
+        - field: liquidity_locked
+          operator: eq
+          value: true
+        - field: locker_is_verified
+          operator: eq
+          value: false
+        - field: locker_has_emergency_withdraw
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [slack]
+        priority: P2
+
+  # ==========================================================================
+  # CROSS-CHAIN BRIDGE ATTACKS (NEW VECTORS)
+  # ==========================================================================
+
+  - id: bridge-message-forgery-001
+    name: Bridge Message Forgery Attempt
+    description: |
+      Detects cross-chain messages that fail cryptographic verification
+      but are still processed, indicating a verification bypass.
+    severity: critical
+    confidence: 0.95
+    enabled: true
+
+    detection:
+      type: invariant
+      invariant: MESSAGE_AUTHENTICITY
+      conditions:
+        - field: signature_valid
+          operator: eq
+          value: false
+        - field: message_processed
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+      - type: auto_pause
+        target: bridge
+        require_confirmation: true
+
+  - id: bridge-rate-anomaly-001
+    name: Bridge Volume Anomaly
+    description: |
+      Detects abnormally high bridge volume that deviates significantly
+      from historical baseline, which may indicate an ongoing exploit
+      or mass fund exfiltration.
+    severity: high
+    confidence: 0.75
+    enabled: true
+
+    detection:
+      type: metric
+      metric: bridge_volume_usd
+      conditions:
+        - field: volume_vs_7d_avg
+          operator: gt
+          value: 5  # 5x normal volume
+        - field: unique_senders
+          operator: lt
+          value: 5  # Concentrated in few addresses
+
+    actions:
+      - type: alert
+        channels: [telegram, slack]
+        priority: P2
+
+  # ==========================================================================
+  # SMART CONTRACT UPGRADE ATTACKS
+  # ==========================================================================
+
+  - id: upgrade-malicious-impl-001
+    name: Malicious Proxy Implementation Upgrade
+    description: |
+      Detects proxy contract upgrades where the new implementation
+      contains dangerous patterns (selfdestruct, delegatecall to
+      arbitrary address, token drain functions).
+    severity: critical
+    confidence: 0.85
+    enabled: true
+
+    detection:
+      type: event
+      event_type: Upgraded
+      conditions:
+        - field: new_impl_has_selfdestruct
+          operator: eq
+          value: true
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
+
+  - id: upgrade-timelock-bypass-001
+    name: Timelock Bypass via Emergency Function
+    description: |
+      Detects when emergency/admin functions are used to bypass
+      normal timelock governance, potentially enabling instant
+      malicious upgrades.
+    severity: critical
+    confidence: 0.80
+    enabled: true
+
+    detection:
+      type: event
+      event_type: ContractCall
+      conditions:
+        - field: function_name
+          operator: in
+          value: ["emergencyWithdraw", "emergencyExecute", "bypassTimelock"]
+        - field: caller_is_multisig
+          operator: eq
+          value: false
+
+    actions:
+      - type: alert
+        channels: [telegram, slack, pagerduty]
+        priority: P1
