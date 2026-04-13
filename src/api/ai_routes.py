@@ -532,7 +532,7 @@ async def analyze_contract(request: AnalyzeRequest) -> AnalyzeResponse:
             inference_time = (time.time() - start_time) * 1000
             
             return AnalyzeResponse(
-                category=result.category.value if hasattr(result.category, 'value') else str(result.category),
+                category=result.threat_category.value if hasattr(result.threat_category, 'value') else str(result.threat_category),
                 risk_score=result.risk_score,
                 confidence=result.confidence,
                 is_threat=result.risk_score > 0.5,
@@ -900,7 +900,7 @@ async def llm_analyze_bytecode(request: LLMBytecodeRequest) -> Dict:
     except ImportError:
         raise HTTPException(
             status_code=503,
-            detail="LLM module unavailable. Ensure ANTHROPIC_API_KEY is set and dependencies are installed."
+            detail="LLM module unavailable. Ensure LLM API key (GEMINI_API_KEY or ANTHROPIC_API_KEY) is set and dependencies are installed."
         )
 
     try:
@@ -909,7 +909,7 @@ async def llm_analyze_bytecode(request: LLMBytecodeRequest) -> Dict:
         if result is None:
             raise HTTPException(
                 status_code=503,
-                detail="LLM analysis unavailable. ANTHROPIC_API_KEY may not be configured."
+                detail="LLM analysis unavailable. Check LLM API key configuration and quota."
             )
         return result.to_dict()
     except HTTPException:
@@ -930,7 +930,7 @@ async def llm_triage_incident(request: LLMTriageRequest) -> Dict:
     except ImportError:
         raise HTTPException(
             status_code=503,
-            detail="LLM module unavailable. Ensure ANTHROPIC_API_KEY is set and dependencies are installed."
+            detail="LLM module unavailable. Ensure LLM API key (GEMINI_API_KEY or ANTHROPIC_API_KEY) is set and dependencies are installed."
         )
 
     try:
@@ -939,7 +939,7 @@ async def llm_triage_incident(request: LLMTriageRequest) -> Dict:
         if result is None:
             raise HTTPException(
                 status_code=503,
-                detail="LLM triage unavailable. ANTHROPIC_API_KEY may not be configured."
+                detail="LLM triage unavailable. Check LLM API key configuration and quota."
             )
         return result.to_dict()
     except HTTPException:
@@ -960,7 +960,7 @@ async def llm_rule_recommendations() -> List[Dict]:
     except ImportError:
         raise HTTPException(
             status_code=503,
-            detail="LLM module unavailable. Ensure ANTHROPIC_API_KEY is set and dependencies are installed."
+            detail="LLM module unavailable. Ensure LLM API key (GEMINI_API_KEY or ANTHROPIC_API_KEY) is set and dependencies are installed."
         )
 
     try:
@@ -969,7 +969,7 @@ async def llm_rule_recommendations() -> List[Dict]:
         if recommendations is None:
             raise HTTPException(
                 status_code=503,
-                detail="LLM rule analysis unavailable. ANTHROPIC_API_KEY may not be configured."
+                detail="LLM rule analysis unavailable. Check LLM API key configuration and quota."
             )
         return [rec.to_dict() for rec in recommendations]
     except HTTPException:

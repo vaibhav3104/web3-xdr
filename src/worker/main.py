@@ -497,8 +497,8 @@ class Sentinel3Worker:
         try:
             from src.ai.llm.rule_tuner import RuleTuner
             from src.ai.llm.rate_limiter import get_rate_limiter
-            tuner_interval = int(os.getenv("RULE_TUNER_INTERVAL_HOURS", "6"))
-            if os.getenv("ANTHROPIC_API_KEY"):
+            tuner_interval = int(os.getenv("RULE_TUNER_INTERVAL_HOURS", "24"))
+            if os.getenv("ANTHROPIC_API_KEY") or os.getenv("GEMINI_API_KEY"):
                 asyncio.create_task(self._run_periodic_rule_tuner(tuner_interval))
                 logger.info("llm_rule_tuner_scheduled", interval_hours=tuner_interval)
         except ImportError:
