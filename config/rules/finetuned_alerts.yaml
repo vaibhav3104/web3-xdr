@@ -13,6 +13,8 @@ rules:
     description: |
       Detects large token transfers based on raw token amount.
       Works without price feed dependency.
+      NOTE: Entity reputation suppression is handled by the engine —
+      known CEX/DEX/bridge/protocol transfers auto-suppressed below CRITICAL.
 
     severity: high
     confidence: 0.80
@@ -26,23 +28,20 @@ rules:
       conditions:
         - field: amount
           operator: gt
-          value: 1000  # > 1000 tokens (raised from 100 — too noisy)
+          value: 5000  # > 5000 tokens (raised from 1000 — sub-5K is routine DeFi)
 
     thresholds:
-      min_amount_usd: 2000000  # $2M+ (raised from $50K — sub-$2M transfers are routine DeFi activity)
+      min_amount_usd: 5000000  # $5M+ (raised from $2M — engine reputation handles known entities)
 
-    # Known whale/institutional addresses — suppress repeat alerts
+    # Known whale/institutional addresses — supplement engine reputation with explicit excludes
     exclusions:
       addresses:
         - "0xfcd3f5ca230e7c1bd5b415eb85d5186346de0fec"  # Recurring Base whale (3x repeat)
         - "0x1e90cb21b770d170821c0ebf56ce6ffd2942e5d4"  # Recurring Base whale counterparty
-        - "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb"  # Morpho protocol address
-        - "0x28c6c06298d514db089934071355e5743bf21d60"  # Binance hot wallet
         - "0x82321f3beb69f503380d6b233857d5c43562e2d0"  # Base whale generating $104K FPs
         - "0x10cf8d4eeb51e9becf9c4e8febcfd735376a05bc"  # Ethereum address generating $499K FPs
       contracts:
         - "0x940181a94a35a4569e4529a3cdfb74e38fd98631"  # Base token — routine transfers
-        - "0x4c9edd5852cd905f086c759e8383e09bff1e68b3"  # Ethena USDe — routine stablecoin activity
 
     rate_limit:
       max_alerts: 3

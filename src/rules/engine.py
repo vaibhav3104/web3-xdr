@@ -54,6 +54,22 @@ except ImportError:
     FEEDBACK_LOOP_AVAILABLE = False
     get_feedback_loop = None
 
+# Import entity registry for reputation-based suppression
+try:
+    from src.enrichment.entity_registry import get_entity_registry, ReputationTier
+    ENTITY_REGISTRY_AVAILABLE = True
+except ImportError:
+    ENTITY_REGISTRY_AVAILABLE = False
+    get_entity_registry = None
+
+# Import confidence calculator for evidence-weighted scoring
+try:
+    from src.rules.confidence import get_confidence_calculator
+    CONFIDENCE_AVAILABLE = True
+except ImportError:
+    CONFIDENCE_AVAILABLE = False
+    get_confidence_calculator = None
+
 
 @dataclass
 class AlertRule:
@@ -109,17 +125,24 @@ class AlertMatch:
     event: Dict[str, Any]
     matched_at: datetime
     match_details: Dict[str, Any]
-    
+    dynamic_confidence: Optional[float] = None  # Evidence-weighted confidence
+    evidence: Optional[Dict[str, Any]] = None    # Evidence bundle for transparency
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        confidence = self.dynamic_confidence if self.dynamic_confidence is not None else self.rule.confidence
+        result = {
             "rule_id": self.rule.id,
             "rule_name": self.rule.name,
             "severity": self.rule.severity,
-            "confidence": self.rule.confidence,
+            "confidence": confidence,
+            "base_confidence": self.rule.confidence,
             "event": self.event,
             "matched_at": self.matched_at.isoformat(),
-            "details": self.match_details
+            "details": self.match_details,
         }
+        if self.evidence:
+            result["evidence"] = self.evidence
+        return result
 
 
 import structlog as _structlog
@@ -248,6 +271,12 @@ class RuleEngine:
         # Feedback loop for TP/FP auto-suppression
         self._feedback_loop = get_feedback_loop() if FEEDBACK_LOOP_AVAILABLE and get_feedback_loop else None
 
+        # Entity registry for reputation-based suppression
+        self._entity_registry = get_entity_registry() if ENTITY_REGISTRY_AVAILABLE and get_entity_registry else None
+
+        # Evidence-weighted confidence calculator
+        self._confidence_calc = get_confidence_calculator() if CONFIDENCE_AVAILABLE and get_confidence_calculator else None
+
         # Initialize advanced engines if available
         self._invariant_engine = get_invariant_engine() if ADVANCED_ENGINES_AVAILABLE and get_invariant_engine else None
         self._pattern_matcher = get_pattern_matcher() if ADVANCED_ENGINES_AVAILABLE and get_pattern_matcher else None
@@ -354,6 +383,15 @@ class RuleEngine:
             except Exception:
                 pass
         
+        # --- Reputation pre-check: extract involved addresses once ---
+        event_addresses = [
+            event.get("from_address", ""),
+            event.get("to_address", ""),
+            event.get("source_address", ""),
+            event.get("dest_address", ""),
+        ]
+        event_addresses = [a for a in event_addresses if a]
+
         for rule in self.rules:
             if not rule.enabled:
                 continue
@@ -362,24 +400,51 @@ class RuleEngine:
             if self._feedback_loop and self._feedback_loop.is_suppressed(rule.id):
                 continue
 
+            # --- Reputation-based suppression ---
+            # If ALL involved addresses are trusted/known, suppress low-severity rules
+            if self._entity_registry and event_addresses:
+                should_suppress = all(
+                    self._entity_registry.should_suppress_severity(addr, rule.severity)
+                    for addr in event_addresses
+                )
+                if should_suppress:
+                    continue
+
             # Check rate limiting
             if self._is_rate_limited(rule):
                 continue
-            
+
             # Evaluate rule
             match_result = self._evaluate_rule(rule, event)
-            
+
             if match_result:
                 match = AlertMatch(
                     rule=rule,
                     event=event,
                     matched_at=datetime.now(timezone.utc),
-                    match_details=match_result
+                    match_details=match_result,
                 )
                 matches.append(match)
 
                 # Record for rate limiting
                 self._record_alert(rule)
+
+        # --- Post-processing: compute dynamic confidence + corroboration ---
+        if self._confidence_calc and matches:
+            corroboration_count = len(matches) - 1  # Each match corroborated by N-1 others
+            for match in matches:
+                threshold_usd = match.rule.thresholds.get("min_amount_usd", 0)
+                evidence = self._confidence_calc.build_evidence(
+                    event=match.event,
+                    rule_id=match.rule.id,
+                    rule_threshold_usd=float(threshold_usd),
+                    corroborating_count=corroboration_count,
+                )
+                match.dynamic_confidence = self._confidence_calc.calculate(
+                    base_confidence=match.rule.confidence,
+                    evidence=evidence,
+                )
+                match.evidence = evidence.to_dict()
 
         # Feed matches into spike guard for anomaly detection
         if matches:

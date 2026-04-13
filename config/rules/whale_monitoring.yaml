@@ -13,6 +13,9 @@ rules:
     description: |
       Detects large token transfers that could impact market prices
       or indicate significant holder activity.
+      NOTE: Entity reputation suppression is handled by the engine —
+      transfers between trusted entities (CEX, DEX, bridges, protocols)
+      are suppressed unless severity is CRITICAL.
     severity: medium
     confidence: 0.80
     enabled: true
@@ -24,10 +27,10 @@ rules:
       conditions:
         - field: amount_usd
           operator: gt
-          value: 5000000  # $5M+
+          value: 10000000  # $10M+ (raised from $5M — sub-$10M between known entities is routine)
 
     thresholds:
-      min_amount_usd: 5000000
+      min_amount_usd: 10000000
 
     # Known high-volume addresses — suppress known institutional/protocol movements
     exclusions:
@@ -41,7 +44,7 @@ rules:
         - "0x00eb00c6f847740000884d00e03f00c761998feb"  # MEV bot/router — multi-incident FP source
 
     rate_limit:
-      max_alerts: 10
+      max_alerts: 5
       period: 1h
 
     actions:

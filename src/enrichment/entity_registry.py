@@ -24,40 +24,75 @@ logger = structlog.get_logger(__name__)
 class EntityType(Enum):
     """Entity classification types."""
     UNKNOWN = "unknown"
-    
+
     # Exchanges
     CEX = "cex"  # Centralized exchange
     DEX = "dex"  # Decentralized exchange
-    
+
     # Privacy/Mixing
     MIXER = "mixer"
     TUMBLER = "tumbler"
     TORNADO = "tornado_cash"
-    
+
     # Risk entities
     HACKER = "known_hacker"
     SANCTIONED = "sanctioned"
     PHISHER = "phisher"
     SCAMMER = "scammer"
-    
+
     # Smart money
     SMART_MONEY = "smart_money"
     WHALE = "whale"
     VC = "vc"
-    
+
     # Project entities
     TEAM_WALLET = "team_wallet"
     TREASURY = "treasury"
     DEPLOYER = "deployer"
-    
+
     # Infrastructure
     BRIDGE = "bridge"
     PROTOCOL = "protocol"
     ORACLE = "oracle"
-    
+
     # Contracts
     CONTRACT = "contract"
     EOA = "eoa"
+
+
+class ReputationTier(Enum):
+    """Reputation tier determines alert suppression and threshold behavior."""
+    TRUSTED = "trusted"      # Major CEX, DEX routers, bridges — suppress below CRITICAL
+    KNOWN = "known"          # Known protocols, VCs, smart money — suppress below HIGH
+    NEUTRAL = "neutral"      # Unknown addresses — no suppression
+    SUSPICIOUS = "suspicious"  # Mixers, new contracts — lower thresholds
+    MALICIOUS = "malicious"  # Hackers, sanctioned — never suppress, always alert
+
+
+# Map EntityType → ReputationTier
+ENTITY_REPUTATION_MAP: Dict[EntityType, ReputationTier] = {
+    EntityType.CEX: ReputationTier.TRUSTED,
+    EntityType.DEX: ReputationTier.TRUSTED,
+    EntityType.BRIDGE: ReputationTier.TRUSTED,
+    EntityType.PROTOCOL: ReputationTier.TRUSTED,
+    EntityType.ORACLE: ReputationTier.KNOWN,
+    EntityType.SMART_MONEY: ReputationTier.KNOWN,
+    EntityType.VC: ReputationTier.KNOWN,
+    EntityType.WHALE: ReputationTier.KNOWN,
+    EntityType.TEAM_WALLET: ReputationTier.KNOWN,
+    EntityType.TREASURY: ReputationTier.KNOWN,
+    EntityType.DEPLOYER: ReputationTier.NEUTRAL,
+    EntityType.CONTRACT: ReputationTier.NEUTRAL,
+    EntityType.EOA: ReputationTier.NEUTRAL,
+    EntityType.UNKNOWN: ReputationTier.NEUTRAL,
+    EntityType.MIXER: ReputationTier.SUSPICIOUS,
+    EntityType.TUMBLER: ReputationTier.SUSPICIOUS,
+    EntityType.TORNADO: ReputationTier.SUSPICIOUS,
+    EntityType.PHISHER: ReputationTier.MALICIOUS,
+    EntityType.SCAMMER: ReputationTier.MALICIOUS,
+    EntityType.HACKER: ReputationTier.MALICIOUS,
+    EntityType.SANCTIONED: ReputationTier.MALICIOUS,
+}
 
 
 @dataclass
@@ -218,21 +253,61 @@ class EntityRegistry:
     BRIDGE_ADDRESSES: Dict[str, str] = {
         # Wormhole
         "0x98f3c9e6e3face36baad05fe09d375ef1464288b": "Wormhole Token Bridge",
-        
+
         # Multichain (Anyswap)
         "0x6b7a87899490ece95443e979ca9485cbe7e71522": "Multichain Router",
-        
+
         # Stargate
         "0x8731d54e9d02c286767d56ac03e8037c07e01e98": "Stargate Router",
-        
+
         # Hop Protocol
         "0xb8901acb165ed027e32754e0ffe830802919727f": "Hop Bridge",
-        
+
         # Across
         "0x5c7bcd6e7de5423a257d81b442095a1a6ced35c5": "Across Bridge",
-        
+
         # LayerZero
         "0x66a71dcef29a0ffbdbe3c6a460a3b5bc225cd675": "LayerZero Endpoint",
+    }
+
+    # Major DeFi protocol contracts (routers, vaults, pools)
+    PROTOCOL_ADDRESSES: Dict[str, str] = {
+        # Aave V3
+        "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2": "Aave V3 Pool",
+        "0x7d2768de32b0b80b7a3454c06bdac94a69ddc7a9": "Aave V2 Lending Pool",
+
+        # Compound V3
+        "0xc3d688b66703497daa19211eedff47f25384cdc3": "Compound V3 cUSDCv3",
+        "0xa17581a9e3356d9a858b789d68b4d866e593ae94": "Compound V3 cWETHv3",
+
+        # Lido
+        "0xae7ab96520de3a18e5e111b5eaab095312d7fe84": "Lido stETH",
+        "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": "Lido wstETH",
+
+        # MakerDAO
+        "0x9759a6ac90977b93b58547b4a71c78317f391a28": "MakerDAO DSR Manager",
+        "0x5a15566417e6c1c9546523066500bddbc53f88c7": "MakerDAO PSM USDC",
+
+        # Morpho
+        "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb": "Morpho",
+
+        # EigenLayer
+        "0x858646372cc42e1a627fce94aa7a7033e7cf075a": "EigenLayer StrategyManager",
+
+        # Rocket Pool
+        "0xae78736cd615f374d3085123a210448e74fc6393": "Rocket Pool rETH",
+
+        # Ethena
+        "0x4c9edd5852cd905f086c759e8383e09bff1e68b3": "Ethena USDe",
+
+        # Pendle
+        "0x0000000001e4ef00d069e71d6ba041b0a16f7ea0": "Pendle Router V4",
+
+        # Convex
+        "0xf403c135812408bfbe8713b5a23a04b3d48aae31": "Convex Booster",
+
+        # Yearn
+        "0x5a6a4d54456819380173272a5e8e9b9904bdf41b": "Yearn DAI Vault",
     }
     
     def __init__(self):
@@ -340,7 +415,17 @@ class EntityRegistry:
                 risk_score=5.0,
                 labels=["smart_money", "vc"],
             )
-        
+
+        # Check DeFi protocol contracts
+        if address in self.PROTOCOL_ADDRESSES:
+            return Entity(
+                address=address,
+                entity_type=EntityType.PROTOCOL,
+                name=self.PROTOCOL_ADDRESSES[address],
+                risk_score=5.0,
+                labels=["protocol", "defi"],
+            )
+
         # Unknown
         return Entity(
             address=address,
@@ -378,6 +463,36 @@ class EntityRegistry:
         entity = self.classify(address)
         return entity.entity_type in (EntityType.SMART_MONEY, EntityType.VC, EntityType.WHALE)
     
+    def get_reputation_tier(self, address: str) -> ReputationTier:
+        """Get the reputation tier for an address."""
+        entity = self.classify(address)
+        return ENTITY_REPUTATION_MAP.get(entity.entity_type, ReputationTier.NEUTRAL)
+
+    def is_trusted(self, address: str) -> bool:
+        """Check if address belongs to TRUSTED tier (CEX, DEX, bridge, protocol)."""
+        return self.get_reputation_tier(address) == ReputationTier.TRUSTED
+
+    def is_known(self, address: str) -> bool:
+        """Check if address belongs to KNOWN tier (VCs, smart money, oracles)."""
+        return self.get_reputation_tier(address) == ReputationTier.KNOWN
+
+    def should_suppress_severity(self, address: str, severity: str) -> bool:
+        """
+        Check if alerts of the given severity should be suppressed for this address.
+
+        TRUSTED addresses suppress everything below CRITICAL.
+        KNOWN addresses suppress everything below HIGH.
+        """
+        tier = self.get_reputation_tier(address)
+        severity_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        sev_val = severity_rank.get(severity, 1)
+
+        if tier == ReputationTier.TRUSTED:
+            return sev_val < severity_rank["critical"]  # suppress low/medium/high
+        if tier == ReputationTier.KNOWN:
+            return sev_val < severity_rank["high"]  # suppress low/medium
+        return False
+
     def add_entity(self, entity: Entity):
         """Add a custom entity to the registry."""
         self._custom_entities[entity.address.lower()] = entity
