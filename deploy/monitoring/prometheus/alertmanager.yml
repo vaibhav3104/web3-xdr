@@ -1,0 +1,82 @@
+# Alertmanager Configuration for Sentinel3
+# ==========================================
+# Configure receivers below with real credentials before deploying.
+# Docs: https://prometheus.io/docs/alerting/latest/configuration/
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: default
+  routes:
+    # Critical alerts: page immediately via PagerDuty + Slack
+    - match:
+        severity: critical
+      receiver: critical
+      repeat_interval: 15m
+
+    # Warning alerts: Slack only
+    - match:
+        severity: warning
+      receiver: warning
+      repeat_interval: 2h
+
+    # Info alerts: Slack with low priority
+    - match:
+        severity: info
+      receiver: info
+      repeat_interval: 12h
+
+receivers:
+  - name: default
+    slack_configs:
+      - api_url: '{{ .SLACK_WEBHOOK_URL }}'
+        channel: '#sentinel3-alerts'
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        send_resolved: true
+
+  - name: critical
+    pagerduty_configs:
+      - service_key: '{{ .PAGERDUTY_SERVICE_KEY }}'
+        description: '{{ .CommonAnnotations.summary }}'
+        severity: critical
+    slack_configs:
+      - api_url: '{{ .SLACK_WEBHOOK_URL }}'
+        channel: '#sentinel3-critical'
+        title: ':rotating_light: [CRITICAL] {{ .CommonLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        send_resolved: true
+
+  - name: warning
+    slack_configs:
+      - api_url: '{{ .SLACK_WEBHOOK_URL }}'
+        channel: '#sentinel3-alerts'
+        title: ':warning: [WARNING] {{ .CommonLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        send_resolved: true
+
+  - name: info
+    slack_configs:
+      - api_url: '{{ .SLACK_WEBHOOK_URL }}'
+        channel: '#sentinel3-alerts'
+        title: ':information_source: [INFO] {{ .CommonLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        send_resolved: false
+
+inhibit_rules:
+  # If a critical alert fires, suppress warning/info for the same alertname
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['alertname', 'chain']
+  - source_match:
+      severity: critical
+    target_match:
+      severity: info
+    equal: ['alertname', 'chain']

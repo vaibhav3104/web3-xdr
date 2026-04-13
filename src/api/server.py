@@ -139,14 +139,16 @@ def create_app(
             logger.warning("feedback_loop_bootstrap_failed", error=str(e))
 
     # ── CORS ────────────────────────────────────────────────────────
-    # All origins come from env; localhost defaults only in non-production
     env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    is_production = os.getenv("ENVIRONMENT", "").lower() == "production"
+
     if env_cors:
         default_origins = [o.strip() for o in env_cors.split(",") if o.strip()]
-    elif os.getenv("ENVIRONMENT", "").lower() == "production":
-        # Production MUST set CORS_ALLOWED_ORIGINS explicitly
-        default_origins = []
-        logger.warning("cors_origins_not_configured", hint="Set CORS_ALLOWED_ORIGINS env var")
+    elif is_production:
+        raise RuntimeError(
+            "CORS_ALLOWED_ORIGINS is required in production. "
+            "Set it to a comma-separated list of allowed origins."
+        )
     else:
         # Development defaults only
         default_origins = [

@@ -22,11 +22,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def login(request: LoginRequest, http_request: Request):
     """
     Authenticate user and return JWT token.
-    
-    Default credentials for testing:
-    - admin/admin123 (full access)
-    - operator/operator123 (limited admin)
-    - viewer/viewer123 (read-only)
+
+    Users are configured via XDR_USER_<name>=<password>:<role> environment variables.
     """
     from ..database.audit import AuditLogger
     

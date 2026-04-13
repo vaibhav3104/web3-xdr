@@ -41,11 +41,9 @@ class Settings:
         self.SLACK_WEBHOOK_URL: Optional[str] = os.getenv("SLACK_WEBHOOK_URL")
         self.PAGERDUTY_API_KEY: Optional[str] = os.getenv("PAGERDUTY_API_KEY")
         
-        # Authentication
-        self.JWT_SECRET_KEY: str = os.getenv(
-            "JWT_SECRET_KEY",
-            "dev-secret-key-change-in-production"
-        )
+        # Authentication — no hardcoded default; JWTHandler generates a
+        # random per-process secret in dev and requires an explicit key in prod.
+        self.JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
         
         # Cloud Run
         self.PORT: int = int(os.getenv("PORT", "9090"))

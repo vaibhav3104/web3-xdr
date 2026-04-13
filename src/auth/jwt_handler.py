@@ -92,34 +92,6 @@ class JWTHandler:
     JWT Token Handler for authentication.
     """
 
-    # Default demo users — only loaded when ENVIRONMENT != production
-    _DEMO_USERS: Dict[str, Dict[str, Any]] = {
-        "admin": {
-            "username": "admin",
-            "email": "admin@web3xdr.io",
-            "full_name": "Administrator",
-            "role": "admin",
-            "disabled": False,
-            "hashed_password": hashlib.sha256("admin123".encode()).hexdigest()
-        },
-        "operator": {
-            "username": "operator",
-            "email": "operator@web3xdr.io",
-            "full_name": "Security Operator",
-            "role": "operator",
-            "disabled": False,
-            "hashed_password": hashlib.sha256("operator123".encode()).hexdigest()
-        },
-        "viewer": {
-            "username": "viewer",
-            "email": "viewer@web3xdr.io",
-            "full_name": "Dashboard Viewer",
-            "role": "viewer",
-            "disabled": False,
-            "hashed_password": hashlib.sha256("viewer123".encode()).hexdigest()
-        }
-    }
-
     def __init__(
         self,
         secret_key: Optional[str] = None,
@@ -141,13 +113,8 @@ class JWTHandler:
         self.algorithm = algorithm
         self.access_token_expire_minutes = access_token_expire_minutes
 
-        # User store: only load demo users outside production
+        # User store: all users come from XDR_USER_* environment variables
         self.users: Dict[str, Dict[str, Any]] = {}
-        if env != "production":
-            self.users = self._DEMO_USERS.copy()
-            logger.warning("demo_users_loaded", hint="Set ENVIRONMENT=production to disable")
-
-        # Load users from environment variables (works in all environments)
         self._load_env_users()
 
         if not self.users:
