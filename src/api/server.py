@@ -145,10 +145,12 @@ def create_app(
     if env_cors:
         default_origins = [o.strip() for o in env_cors.split(",") if o.strip()]
     elif is_production:
-        raise RuntimeError(
-            "CORS_ALLOWED_ORIGINS is required in production. "
-            "Set it to a comma-separated list of allowed origins."
+        logger.error(
+            "cors_not_configured",
+            hint="Set CORS_ALLOWED_ORIGINS to a comma-separated list of allowed origins. "
+                 "All cross-origin requests will be blocked until configured.",
         )
+        default_origins = []  # Most restrictive — blocks all cross-origin
     else:
         # Development defaults only
         default_origins = [
