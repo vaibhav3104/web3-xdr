@@ -139,6 +139,18 @@ body > *:not(#s3-ambient) { position: relative; z-index: 1; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Global button hover enhancements */
+button, .btn, [class*="btn-"] {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+button:hover:not(:disabled), .btn:hover:not(:disabled), [class*="btn-"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+button:active:not(:disabled), .btn:active:not(:disabled), [class*="btn-"]:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
 /* Pulse animation */
 @keyframes s3-pulse {
   0%, 100% { opacity: 1; }
@@ -256,8 +268,13 @@ body > *:not(#s3-ambient) { position: relative; z-index: 1; }
   margin-left: -1px;
 }
 .s3-nav-item:hover {
-  color: var(--s3-text-2);
-  background: rgba(255,255,255,0.03);
+  color: var(--s3-text);
+  background: rgba(139,92,246,0.08);
+  border-left-color: rgba(139,92,246,0.3);
+  transform: translateX(2px);
+}
+.s3-nav-item:hover svg {
+  color: var(--s3-accent-light);
 }
 .s3-nav-item.active {
   color: var(--s3-accent-light);
