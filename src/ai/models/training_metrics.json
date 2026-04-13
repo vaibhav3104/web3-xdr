@@ -1,53 +1,74 @@
 {
-  "accuracy": 1.0,
-  "precision": 1.0,
-  "recall": 1.0,
-  "f1_score": 1.0,
-  "roc_auc": 1.0,
-  "average_precision": 1.0,
+  "accuracy": 0.75,
+  "precision": 0.5,
+  "recall": 0.5,
+  "f1_score": 0.5,
+  "roc_auc": 0.9166666666666667,
+  "average_precision": 0.8333333333333333,
   "confusion_matrix": [
     [
-      6,
-      0
+      5,
+      1
     ],
     [
-      0,
-      10
+      1,
+      1
     ]
   ],
   "classification_report": {
     "0": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
+      "precision": 0.8333333333333334,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.8333333333333334,
       "support": 6.0
     },
     "1": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 10.0
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1-score": 0.5,
+      "support": 2.0
     },
-    "accuracy": 1.0,
+    "accuracy": 0.75,
     "macro avg": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 16.0
+      "precision": 0.6666666666666667,
+      "recall": 0.6666666666666667,
+      "f1-score": 0.6666666666666667,
+      "support": 8.0
     },
     "weighted avg": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 16.0
+      "precision": 0.75,
+      "recall": 0.75,
+      "f1-score": 0.75,
+      "support": 8.0
     }
   },
-  "cv_f1_mean": 0.9904761904761905,
-  "cv_f1_std": 0.01904761904761907,
-  "training_date": "2026-04-12T20:11:43.829190",
+  "cv_f1_mean": 0.7266666666666667,
+  "cv_f1_std": 0.16653327995729064,
+  "cv_accuracy_mean": 0.8714285714285713,
+  "cv_accuracy_std": 0.0793789670389031,
+  "cv_f1_scores": [
+    0.5,
+    0.8,
+    0.6666666666666666,
+    1.0,
+    0.6666666666666666
+  ],
+  "cv_accuracy_scores": [
+    0.75,
+    0.875,
+    0.875,
+    1.0,
+    0.8571428571428571
+  ],
+  "overfitting_warning": false,
+  "training_date": "2026-04-13T14:25:50.800924",
   "model_type": "random_forest",
   "feature_count": 43,
-  "total_samples": 79,
+  "total_samples": 39,
   "safe_samples": 29,
-  "exploit_samples": 50
+  "exploit_samples": 10,
+  "real_exploits": 5,
+  "mock_exploits": 5,
+  "mock_only": false,
+  "confidence_cap": 1.0
 }

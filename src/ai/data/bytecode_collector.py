@@ -52,6 +52,24 @@ EXPLOIT_CONTRACTS = {
         {"address": "0x63341ba917de90498f3903b199df5699b4a55ac0", "label": "flash_loan_exploit", "attack": "Saddle Finance"},
         # Inverse Finance Exploiter
         {"address": "0x2d02fefb43be42f95cdc25c736e3ac3e4d8f25e8", "label": "oracle_manipulation", "attack": "Inverse Finance"},
+        # Platypus Finance Exploiter
+        {"address": "0x1279cb35fb9370e5143aff8814af1b7dce38859f", "label": "flash_loan_exploit", "attack": "Platypus Finance"},
+        # Warp Finance Exploiter
+        {"address": "0x8d4aeb80e0b4082c3eb2d414b249f0c8a781c7ae", "label": "flash_loan_exploit", "attack": "Warp Finance"},
+        # Pickle Finance Exploiter (Evil Jar)
+        {"address": "0xf1D82e6EeD782EFA1D8fa0aCfaA8e280A5430D50", "label": "flash_loan_exploit", "attack": "Pickle Finance"},
+        # Value DeFi Exploiter
+        {"address": "0x5b3055BdA7b13e8dbF9bD7Ce7F5025c453FF2127", "label": "flash_loan_exploit", "attack": "Value DeFi"},
+        # Indexed Finance Exploiter
+        {"address": "0xba5ed099633d3B313e4D5F7bdc1305d3c431C4AF", "label": "price_manipulation", "attack": "Indexed Finance"},
+        # Visor Finance Exploiter
+        {"address": "0x10C509AA9ab291C76c45414e7CdBd375e1D5AcE8", "label": "reentrancy_exploit", "attack": "Visor Finance"},
+        # Eminence Finance Exploiter
+        {"address": "0x223034edbe95823c1160c16f26e3000315171cc9", "label": "flash_loan_exploit", "attack": "Eminence Finance"},
+        # Cheese Bank Exploiter
+        {"address": "0x2eDe22e7a08F0A41A685A3CF40e2259137699879", "label": "oracle_manipulation", "attack": "Cheese Bank"},
+        # bZx Exploiter (Attack Contract 2)
+        {"address": "0xb8c6ad5a72efdd04a86e6B1d0f30fa3c74B9b325", "label": "flash_loan_exploit", "attack": "bZx Protocol"},
     ],
     "arbitrum": [
         # Penpie Arbitrum Exploiter

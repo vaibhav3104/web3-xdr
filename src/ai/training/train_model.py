@@ -12,6 +12,9 @@ Features:
 - Trains RandomForestClassifier with feature importance analysis
 - Generates confusion matrix and feature importance plots
 - Saves trained model for production use
+- Stratified 5-fold cross-validation with overfitting detection
+- Model versioning with timestamps and metadata
+- Graceful fallback: real exploits -> cached bytecodes -> mock augmentation
 
 Usage:
     python src/ai/training/train_model.py
@@ -20,7 +23,9 @@ Usage:
 """
 
 import argparse
+import asyncio
 import json
+import os
 import pickle
 import random
 import sys
@@ -29,15 +34,22 @@ from typing import List, Tuple, Dict, Optional
 from datetime import datetime
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import (
+    train_test_split,
+    cross_val_score,
+    StratifiedKFold,
+)
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
     roc_auc_score,
-    average_precision_score
+    average_precision_score,
+    f1_score,
 )
 from imblearn.over_sampling import SMOTE
 import joblib
@@ -46,6 +58,11 @@ import joblib
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
 from src.ai.data.enhanced_extractor import EnhancedBytecodeExtractor
+from src.ai.data.bytecode_collector import (
+    BytecodeCollector,
+    EXPLOIT_CONTRACTS,
+    SAFE_CONTRACTS,
+)
 import structlog
 
 structlog.configure(
@@ -60,8 +77,10 @@ logger = structlog.get_logger(__name__)
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 SAFE_SAMPLES_DIR = PROJECT_ROOT / "src" / "ai" / "data" / "safe_samples"
+EXPLOIT_SAMPLES_DIR = PROJECT_ROOT / "src" / "ai" / "data" / "exploit_samples"
 MODEL_DIR = PROJECT_ROOT / "src" / "ai" / "models"
 MODEL_PATH = MODEL_DIR / "classifier.pkl"
+COMPAT_MODEL_PATH = MODEL_DIR / "contract_classifier.pkl"
 FEATURE_IMPORTANCE_PLOT = MODEL_DIR / "feature_importance.png"
 CONFUSION_MATRIX_PLOT = MODEL_DIR / "confusion_matrix.png"
 METRICS_FILE = MODEL_DIR / "training_metrics.json"
@@ -314,63 +333,217 @@ class MockExploitGenerator:
 
 class ContractDataLoader:
     """Loads and prepares contract data for training."""
-    
+
     def __init__(self, use_mock_exploits: bool = False):
         self.extractor = EnhancedBytecodeExtractor()
         self.use_mock_exploits = use_mock_exploits
         self.safe_samples_dir = SAFE_SAMPLES_DIR
-    
+        self.exploit_samples_dir = EXPLOIT_SAMPLES_DIR
+        # Track data provenance for model metadata
+        self.real_exploit_count = 0
+        self.cached_exploit_count = 0
+        self.mock_exploit_count = 0
+        self.mock_only = False
+
     def load_safe_contracts(self) -> List[Tuple[str, str]]:
         """Load safe contract bytecode from safe_samples directory."""
         contracts = []
-        
+
         if not self.safe_samples_dir.exists():
             logger.warning("safe_samples_dir_not_found", path=str(self.safe_samples_dir))
             return contracts
-        
+
         metadata_file = self.safe_samples_dir / "metadata.json"
         if metadata_file.exists():
             with open(metadata_file) as f:
                 metadata = json.load(f)
-            
+
             for addr, contract_data in metadata.get("contracts", {}).items():
                 chain = contract_data.get("chain", "ethereum")
                 bytecode_file = self.safe_samples_dir / f"{chain}_{addr}.bin"
-                
+
                 if bytecode_file.exists():
                     with open(bytecode_file) as f:
                         bytecode = f.read().strip()
                     if bytecode and len(bytecode) > 4:
                         contracts.append((bytecode, f"{chain}_{addr}"))
-        
+
         logger.info("safe_contracts_loaded", count=len(contracts))
         return contracts
-    
+
+    def _fetch_exploit_bytecodes_via_rpc(self) -> List[Tuple[str, str]]:
+        """Try to fetch real exploit bytecodes from blockchain via RPC.
+
+        Returns list of (bytecode, label) tuples, or empty list on failure.
+        """
+        eth_rpc = os.getenv("ETH_RPC_URL")
+        if not eth_rpc:
+            logger.info("no_eth_rpc_url", hint="Set ETH_RPC_URL to fetch real exploit bytecodes")
+            return []
+
+        logger.info("fetching_exploits_via_rpc", rpc=eth_rpc[:30] + "...")
+
+        contracts: List[Tuple[str, str]] = []
+
+        async def _fetch_all():
+            async with BytecodeCollector() as collector:
+                for chain, chain_contracts in EXPLOIT_CONTRACTS.items():
+                    for contract_info in chain_contracts:
+                        try:
+                            bytecode = await collector.get_bytecode(
+                                contract_info["address"], chain
+                            )
+                            if bytecode and len(bytecode) > 10:
+                                label = f"{chain}_{contract_info['address'][:10]}_{contract_info.get('attack', 'unknown')}"
+                                contracts.append((bytecode, label))
+                                logger.info(
+                                    "rpc_exploit_fetched",
+                                    address=contract_info["address"][:10] + "...",
+                                    chain=chain,
+                                    attack=contract_info.get("attack", "unknown"),
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                "rpc_exploit_fetch_failed",
+                                address=contract_info["address"][:10] + "...",
+                                error=str(e),
+                            )
+                        await asyncio.sleep(1.0)  # rate limit — public RPCs throttle at ~2 req/s
+            return contracts
+
+        try:
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(_fetch_all())
+            loop.close()
+            return result
+        except Exception as e:
+            logger.warning("rpc_fetch_failed", error=str(e))
+            return []
+
+    def _load_cached_exploit_bytecodes(self) -> List[Tuple[str, str]]:
+        """Load exploit bytecodes from the cached exploit_samples directory.
+
+        Looks for .bin files in src/ai/data/exploit_samples/, matching the
+        same pattern used by safe_samples.
+        """
+        contracts: List[Tuple[str, str]] = []
+
+        if not self.exploit_samples_dir.exists():
+            logger.info("exploit_samples_dir_not_found", path=str(self.exploit_samples_dir))
+            return contracts
+
+        for bin_file in sorted(self.exploit_samples_dir.glob("*.bin")):
+            try:
+                with open(bin_file) as f:
+                    bytecode = f.read().strip()
+                if bytecode and len(bytecode) > 10:
+                    contracts.append((bytecode, bin_file.stem))
+            except Exception as e:
+                logger.warning("cached_exploit_load_failed", file=bin_file.name, error=str(e))
+
+        # Also check for a JSON dataset file (from BytecodeCollector output)
+        for json_file in sorted(self.exploit_samples_dir.glob("*.json")):
+            try:
+                with open(json_file) as f:
+                    data = json.load(f)
+                for entry in data if isinstance(data, list) else data.get("contracts", []):
+                    bc = entry.get("bytecode", "")
+                    label = entry.get("label", entry.get("address", "unknown"))
+                    if bc and len(bc) > 10:
+                        contracts.append((bc, f"cached_{label}"))
+            except Exception as e:
+                logger.warning("cached_json_load_failed", file=json_file.name, error=str(e))
+
+        if contracts:
+            logger.info("cached_exploit_bytecodes_loaded", count=len(contracts))
+        return contracts
+
+    def _save_exploit_bytecodes_to_cache(self, contracts: List[Tuple[str, str]]):
+        """Save fetched exploit bytecodes to exploit_samples for future use."""
+        self.exploit_samples_dir.mkdir(parents=True, exist_ok=True)
+
+        saved = 0
+        for bytecode, label in contracts:
+            safe_label = label.replace("/", "_").replace(" ", "_")[:80]
+            out_file = self.exploit_samples_dir / f"{safe_label}.bin"
+            if not out_file.exists():
+                with open(out_file, "w") as f:
+                    f.write(bytecode)
+                saved += 1
+
+        if saved:
+            logger.info("exploit_bytecodes_cached", saved=saved, dir=str(self.exploit_samples_dir))
+
     def load_exploit_contracts(self) -> List[Tuple[str, str]]:
-        """Load exploit contract bytecode."""
-        if self.use_mock_exploits:
-            logger.info("using_mock_exploits")
-            return MockExploitGenerator.generate_all_mock_exploits(50)
-        
-        # Try to load real exploit contracts
-        
-        # For now, use mock exploits as real bytecode fetching requires RPC calls
-        # In production, you would fetch bytecode from blockchain using addresses
-        # from EXPLOIT_DATABASE
-        
-        logger.warning(
-            "real_exploit_bytecode_not_available",
-            hint="Using mock exploits. For production, fetch bytecode from blockchain."
-        )
-        
-        return MockExploitGenerator.generate_all_mock_exploits(50)
-    
+        """Load exploit contract bytecodes with multi-level fallback.
+
+        Priority:
+        1. Fetch real bytecodes via RPC (if ETH_RPC_URL is set)
+        2. Load from cached exploit_samples/ directory
+        3. Only use MockExploitGenerator as augmentation (20% of real count),
+           never as sole data source unless no other option exists.
+        """
+        real_contracts: List[Tuple[str, str]] = []
+
+        # --- Level 1: Try RPC ---
+        if not self.use_mock_exploits:
+            rpc_contracts = self._fetch_exploit_bytecodes_via_rpc()
+            if rpc_contracts:
+                real_contracts.extend(rpc_contracts)
+                # Cache for next time
+                self._save_exploit_bytecodes_to_cache(rpc_contracts)
+                logger.info("rpc_exploits_collected", count=len(rpc_contracts))
+
+        # --- Level 2: Try cached exploit bytecodes ---
+        if not real_contracts or len(real_contracts) < 5:
+            cached = self._load_cached_exploit_bytecodes()
+            # Deduplicate by label
+            existing_labels = {label for _, label in real_contracts}
+            for bc, label in cached:
+                if label not in existing_labels:
+                    real_contracts.append((bc, label))
+                    existing_labels.add(label)
+
+        self.real_exploit_count = len(real_contracts)
+
+        # --- Level 3: Mock augmentation ---
+        if real_contracts:
+            # Scale augmentation by how few real samples we have:
+            # <10 real → match real count (50% mock), 10-30 → 50% of real, 30+ → 20%
+            if len(real_contracts) < 10:
+                mock_count = len(real_contracts)  # double the dataset
+            elif len(real_contracts) < 30:
+                mock_count = max(1, len(real_contracts) // 2)
+            else:
+                mock_count = max(1, len(real_contracts) // 5)
+            mock_contracts = MockExploitGenerator.generate_all_mock_exploits(mock_count)
+            self.mock_exploit_count = len(mock_contracts)
+            logger.info(
+                "augmenting_with_mock_exploits",
+                real_count=len(real_contracts),
+                mock_count=len(mock_contracts),
+                mock_ratio=f"{len(mock_contracts) / (len(real_contracts) + len(mock_contracts)):.1%}",
+            )
+            return real_contracts + mock_contracts
+        else:
+            # No real data available -- fall back to pure mock (CI mode)
+            self.mock_only = True
+            mock_count = 50
+            mock_contracts = MockExploitGenerator.generate_all_mock_exploits(mock_count)
+            self.mock_exploit_count = len(mock_contracts)
+            logger.warning(
+                "training_with_synthetic_data_only",
+                msg="Training with synthetic data only -- model quality will be limited",
+                mock_count=mock_count,
+            )
+            return mock_contracts
+
     def extract_features(self, bytecode: str) -> Optional[np.ndarray]:
         """Extract 43-dimensional feature vector from bytecode."""
         try:
             features = self.extractor.extract_features(bytecode)
             vector = features.to_vector()
-            
+
             if len(vector) != 43:
                 logger.warning(
                     "feature_vector_wrong_dimension",
@@ -378,77 +551,92 @@ class ContractDataLoader:
                     actual=len(vector)
                 )
                 return None
-            
+
             return np.array(vector)
         except Exception as e:
             logger.error("feature_extraction_failed", error=str(e))
             return None
-    
+
     def prepare_dataset(self) -> Tuple[np.ndarray, np.ndarray]:
         """Prepare training dataset with features and labels."""
         logger.info("preparing_dataset")
-        
+
         # Load safe contracts (label 0)
         safe_contracts = self.load_safe_contracts()
         logger.info("safe_contracts_loaded", count=len(safe_contracts))
-        
+
         # Load exploit contracts (label 1)
         exploit_contracts = self.load_exploit_contracts()
         logger.info("exploit_contracts_loaded", count=len(exploit_contracts))
-        
+
+        # Store raw bytecodes for deep learning training
+        self._raw_bytecodes = []
+
         # Extract features
         X = []
         y = []
-        
+
         logger.info("extracting_features_from_safe_contracts")
         for bytecode, name in safe_contracts:
             features = self.extract_features(bytecode)
             if features is not None:
                 X.append(features)
                 y.append(0)  # Safe
-        
+                self._raw_bytecodes.append(bytecode)
+
         logger.info("extracting_features_from_exploit_contracts")
         for bytecode, name in exploit_contracts:
             features = self.extract_features(bytecode)
             if features is not None and len(features) == 43:
                 X.append(features)
                 y.append(1)  # Exploit
-        
+                self._raw_bytecodes.append(bytecode)
+
         if len(X) == 0:
             raise ValueError("No valid features extracted. Check bytecode format.")
-        
+
         # Ensure all vectors have the same length
         X_array = []
         y_array = []
+        bytecodes_filtered = []
         for i, vec in enumerate(X):
             if len(vec) == 43:
                 X_array.append(vec)
                 y_array.append(y[i])
+                bytecodes_filtered.append(self._raw_bytecodes[i])
             else:
                 logger.warning("skipping_mismatched_vector", length=len(vec), index=i)
-        
+
+        self._raw_bytecodes = bytecodes_filtered
         X = np.array(X_array)
         y = np.array(y_array)
-        
+
         logger.info(
             "dataset_prepared",
             total_samples=len(X),
             safe_samples=np.sum(y == 0),
             exploit_samples=np.sum(y == 1),
-            feature_dimension=X.shape[1]
+            feature_dimension=X.shape[1],
+            real_exploits=self.real_exploit_count,
+            mock_exploits=self.mock_exploit_count,
+            mock_only=self.mock_only,
         )
-        
+
         return X, y
+
+    def get_raw_bytecodes(self) -> List[str]:
+        """Return raw bytecodes aligned with the last prepare_dataset() call."""
+        return getattr(self, "_raw_bytecodes", [])
 
 
 class ModelTrainer:
     """Trains and evaluates ML models."""
-    
+
     def __init__(self, model_type: str = "random_forest"):
         self.model_type = model_type
         self.model = None
         self.feature_names = FEATURE_NAMES
-    
+
     def create_model(self, **kwargs):
         """Create model instance."""
         if self.model_type == "random_forest":
@@ -476,15 +664,18 @@ class ModelTrainer:
                 raise
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
-    
+
     def train(self, X_train: np.ndarray, y_train: np.ndarray, use_smote: bool = True):
         """Train the model with optional SMOTE oversampling."""
         logger.info("training_model", model_type=self.model_type, use_smote=use_smote)
-        
+
         # Apply SMOTE if requested
         if use_smote:
             logger.info("applying_smote")
-            smote = SMOTE(random_state=42)
+            # Adapt k_neighbors to minority class size (must be < n_minority_samples)
+            minority_count = min(np.bincount(y_train.astype(int)))
+            k_neighbors = min(5, minority_count - 1) if minority_count > 1 else 1
+            smote = SMOTE(random_state=42, k_neighbors=k_neighbors)
             X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
             logger.info(
                 "smote_applied",
@@ -493,19 +684,19 @@ class ModelTrainer:
             )
         else:
             X_train_resampled, y_train_resampled = X_train, y_train
-        
+
         # Train model
         self.model.fit(X_train_resampled, y_train_resampled)
         logger.info("model_trained")
-    
+
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict:
         """Evaluate model and return metrics."""
         logger.info("evaluating_model")
-        
+
         # Predictions
         y_pred = self.model.predict(X_test)
         y_pred_proba = self.model.predict_proba(X_test)[:, 1]
-        
+
         # Metrics
         metrics = {
             "accuracy": float(np.mean(y_pred == y_test)),
@@ -515,21 +706,21 @@ class ModelTrainer:
             "roc_auc": float(roc_auc_score(y_test, y_pred_proba)),
             "average_precision": float(average_precision_score(y_test, y_pred_proba)),
         }
-        
+
         # Calculate F1
         if metrics["precision"] + metrics["recall"] > 0:
             metrics["f1_score"] = 2 * (metrics["precision"] * metrics["recall"]) / (
                 metrics["precision"] + metrics["recall"]
             )
-        
+
         # Confusion matrix
         cm = confusion_matrix(y_test, y_pred)
         metrics["confusion_matrix"] = cm.tolist()
-        
+
         # Classification report
         report = classification_report(y_test, y_pred, output_dict=True)
         metrics["classification_report"] = report
-        
+
         logger.info(
             "evaluation_complete",
             accuracy=f"{metrics['accuracy']:.3f}",
@@ -538,18 +729,88 @@ class ModelTrainer:
             f1=f"{metrics['f1_score']:.3f}",
             roc_auc=f"{metrics['roc_auc']:.3f}"
         )
-        
+
         return metrics
-    
+
+    def cross_validate(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        n_folds: int = 5,
+        mock_only: bool = False,
+    ) -> Dict:
+        """Run stratified k-fold cross-validation with overfitting detection.
+
+        Returns dict with cv_f1_mean, cv_f1_std, cv_accuracy_scores,
+        cv_f1_scores, and an overfitting_warning flag.
+        """
+        n_folds_actual = min(n_folds, min(np.sum(y == 0), np.sum(y == 1)))
+        if n_folds_actual < 2:
+            logger.warning("too_few_samples_for_cv", n_folds_actual=n_folds_actual)
+            return {
+                "cv_f1_mean": 0.0,
+                "cv_f1_std": 0.0,
+                "cv_accuracy_mean": 0.0,
+                "cv_accuracy_std": 0.0,
+                "cv_f1_scores": [],
+                "cv_accuracy_scores": [],
+                "overfitting_warning": True,
+            }
+
+        skf = StratifiedKFold(n_splits=n_folds_actual, shuffle=True, random_state=42)
+
+        f1_scores = cross_val_score(
+            self.model, X, y, cv=skf, scoring="f1"
+        )
+        accuracy_scores = cross_val_score(
+            self.model, X, y, cv=skf, scoring="accuracy"
+        )
+
+        cv_f1_mean = float(np.mean(f1_scores))
+        cv_f1_std = float(np.std(f1_scores))
+        cv_acc_mean = float(np.mean(accuracy_scores))
+        cv_acc_std = float(np.std(accuracy_scores))
+
+        overfitting_warning = False
+        if cv_acc_mean >= 1.0 and cv_f1_mean >= 1.0:
+            overfitting_warning = True
+            logger.warning(
+                "overfitting_detected",
+                cv_f1_mean=f"{cv_f1_mean:.3f}",
+                cv_accuracy_mean=f"{cv_acc_mean:.3f}",
+                hint="100% CV accuracy suggests the model is overfitting. "
+                     "Consider reducing synthetic data or adding more diverse samples.",
+            )
+
+        logger.info(
+            "cross_validation_complete",
+            n_folds=n_folds_actual,
+            cv_f1_mean=f"{cv_f1_mean:.3f}",
+            cv_f1_std=f"{cv_f1_std:.3f}",
+            cv_accuracy_mean=f"{cv_acc_mean:.3f}",
+            cv_accuracy_std=f"{cv_acc_std:.3f}",
+            overfitting_warning=overfitting_warning,
+        )
+
+        return {
+            "cv_f1_mean": cv_f1_mean,
+            "cv_f1_std": cv_f1_std,
+            "cv_accuracy_mean": cv_acc_mean,
+            "cv_accuracy_std": cv_acc_std,
+            "cv_f1_scores": [float(s) for s in f1_scores],
+            "cv_accuracy_scores": [float(s) for s in accuracy_scores],
+            "overfitting_warning": overfitting_warning,
+        }
+
     def plot_feature_importance(self, save_path: Path):
         """Plot feature importance."""
         if not hasattr(self.model, "feature_importances_"):
             logger.warning("model_has_no_feature_importances")
             return
-        
+
         importances = self.model.feature_importances_
         indices = np.argsort(importances)[::-1]
-        
+
         # Plot top 20 features
         top_n = min(20, len(importances))
         plt.figure(figsize=(12, 8))
@@ -561,9 +822,9 @@ class ModelTrainer:
         plt.tight_layout()
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         plt.close()
-        
+
         logger.info("feature_importance_plot_saved", path=str(save_path))
-        
+
         # Print top features
         print("\n" + "=" * 70)
         print("  TOP 10 MOST IMPORTANT FEATURES")
@@ -572,11 +833,11 @@ class ModelTrainer:
             idx = indices[i]
             print(f"  {i+1:2d}. {self.feature_names[idx]:35s} {importances[idx]:.4f}")
         print()
-    
+
     def plot_confusion_matrix(self, y_test: np.ndarray, y_pred: np.ndarray, save_path: Path):
         """Plot confusion matrix."""
         cm = confusion_matrix(y_test, y_pred)
-        
+
         plt.figure(figsize=(8, 6))
         sns.heatmap(
             cm,
@@ -592,30 +853,65 @@ class ModelTrainer:
         plt.tight_layout()
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         plt.close()
-        
+
         logger.info("confusion_matrix_plot_saved", path=str(save_path))
-    
-    def save_model(self, path: Path):
-        """Save trained model in format compatible with ContractThreatClassifier."""
+
+    def get_feature_importance_dict(self) -> Dict[str, float]:
+        """Return feature importance as a dict for model metadata."""
+        if not hasattr(self.model, "feature_importances_"):
+            return {}
+        return {
+            name: float(imp)
+            for name, imp in zip(self.feature_names, self.model.feature_importances_)
+        }
+
+    def save_model(
+        self,
+        path: Path,
+        metadata: Optional[Dict] = None,
+    ):
+        """Save trained model with versioning and metadata.
+
+        Saves:
+        1. classifier_YYYYMMDD_HHMMSS.pkl  (versioned)
+        2. classifier.pkl                   (latest, backward compat)
+        3. contract_classifier.pkl          (compat with ContractThreatClassifier)
+        """
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        metadata = metadata or {}
 
-        # Save as joblib for the training pipeline
-        joblib.dump(self.model, path)
-        logger.info("joblib_model_saved", path=str(path))
+        now = datetime.now()
+        timestamp_str = now.strftime("%Y%m%d_%H%M%S")
 
-        # Also save in pickle dict format for ContractThreatClassifier.load_model()
-        compat_path = path.parent / "contract_classifier.pkl"
-        with open(compat_path, "wb") as f:
-            pickle.dump({
-                "model": self.model,
-                "known_exploits": {},
-                "rule_weights": None,
-                "feature_count": len(self.feature_names),
-                "feature_names": self.feature_names,
-                "model_type": self.model_type,
-                "training_date": datetime.now().isoformat(),
-            }, f)
-        logger.info("compat_model_saved", path=str(compat_path))
+        # Build the full metadata dict to embed in the model pickle
+        model_data = {
+            "model": self.model,
+            "known_exploits": {},
+            "rule_weights": None,
+            "feature_count": len(self.feature_names),
+            "feature_names": self.feature_names,
+            "model_type": self.model_type,
+            "training_date": now.isoformat(),
+            "training_timestamp": timestamp_str,
+            "feature_importance": self.get_feature_importance_dict(),
+        }
+        model_data.update(metadata)
+
+        # 1. Versioned model
+        versioned_path = MODEL_DIR / f"classifier_{timestamp_str}.pkl"
+        with open(versioned_path, "wb") as f:
+            pickle.dump(model_data, f)
+        logger.info("versioned_model_saved", path=str(versioned_path))
+
+        # 2. classifier.pkl (latest)
+        with open(path, "wb") as f:
+            pickle.dump(model_data, f)
+        logger.info("latest_model_saved", path=str(path))
+
+        # 3. contract_classifier.pkl (ContractThreatClassifier compat)
+        with open(COMPAT_MODEL_PATH, "wb") as f:
+            pickle.dump(model_data, f)
+        logger.info("compat_model_saved", path=str(COMPAT_MODEL_PATH))
 
 
 def main():
@@ -644,79 +940,237 @@ def main():
         default=0.2,
         help="Test set size (default: 0.2)"
     )
-    
+
     args = parser.parse_args()
-    
+
     print()
     print("=" * 70)
-    print("  🛡️  Sentinel3 ML Model Training Pipeline")
+    print("  Sentinel3 ML Model Training Pipeline")
     print("=" * 70)
     print(f"   Model:        {args.model}")
     print(f"   Mock Exploits: {args.use_mock_exploits}")
     print(f"   SMOTE:        {not args.no_smote}")
     print(f"   Test Size:    {args.test_size}")
     print()
-    
+
     # Ensure model directory exists
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     # Load data
     loader = ContractDataLoader(use_mock_exploits=args.use_mock_exploits)
     X, y = loader.prepare_dataset()
-    
+
     if len(X) == 0:
         logger.error("no_data_loaded")
         return
-    
-    # Split data
+
+    # -----------------------------------------------------------------
+    # Split: 20% held-out test set (NEVER augmented with SMOTE)
+    # -----------------------------------------------------------------
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=args.test_size, random_state=42, stratify=y
     )
-    
+
     logger.info(
         "data_split",
         train_samples=len(X_train),
         test_samples=len(X_test),
-        train_safe=np.sum(y_train == 0),
-        train_exploit=np.sum(y_train == 1)
+        train_safe=int(np.sum(y_train == 0)),
+        train_exploit=int(np.sum(y_train == 1)),
+        test_safe=int(np.sum(y_test == 0)),
+        test_exploit=int(np.sum(y_test == 1)),
     )
-    
-    # Train model
+
+    # -----------------------------------------------------------------
+    # Train model (SMOTE applied only to training split)
+    # -----------------------------------------------------------------
     trainer = ModelTrainer(model_type=args.model)
     trainer.create_model()
     trainer.train(X_train, y_train, use_smote=not args.no_smote)
-    
-    # Evaluate on held-out test set
+
+    # -----------------------------------------------------------------
+    # Evaluate on held-out test set (no SMOTE)
+    # -----------------------------------------------------------------
     metrics = trainer.evaluate(X_test, y_test)
 
-    # Cross-validation on full dataset to check for overfitting
-    cv_scores = cross_val_score(trainer.model, X, y, cv=min(5, len(X) // 4), scoring="f1")
-    metrics["cv_f1_mean"] = float(np.mean(cv_scores))
-    metrics["cv_f1_std"] = float(np.std(cv_scores))
-    logger.info("cross_validation", cv_f1_mean=f"{np.mean(cv_scores):.3f}", cv_f1_std=f"{np.std(cv_scores):.3f}")
+    # -----------------------------------------------------------------
+    # Stratified 5-fold cross-validation on full dataset
+    # -----------------------------------------------------------------
+    cv_results = trainer.cross_validate(X, y, n_folds=5, mock_only=loader.mock_only)
+    metrics.update(cv_results)
 
+    # -----------------------------------------------------------------
+    # Overfitting / quality gates
+    # -----------------------------------------------------------------
+    if cv_results["overfitting_warning"] and not loader.mock_only:
+        # 100% accuracy with non-mock data is suspicious but possible with
+        # very separable features; log it but do not block.
+        logger.warning(
+            "potential_overfitting",
+            hint="CV accuracy is 100%. If using real exploit data this may be legitimate "
+                 "due to feature separability. Review feature importance for leakage.",
+        )
+
+    if cv_results["cv_f1_mean"] < 0.70:
+        logger.error(
+            "model_quality_below_threshold",
+            cv_f1_mean=f"{cv_results['cv_f1_mean']:.3f}",
+            threshold=0.70,
+            hint="Model CV F1 is below 0.70 -- too unreliable for production.",
+        )
+        print()
+        print("!" * 70)
+        print("  MODEL REJECTED: CV F1 < 0.70 -- too unreliable")
+        print(f"  CV F1 = {cv_results['cv_f1_mean']:.3f}")
+        print("  Fix: add more/better training data or tune hyperparameters")
+        print("!" * 70)
+        print()
+        return
+
+    # -----------------------------------------------------------------
     # Generate plots
+    # -----------------------------------------------------------------
     trainer.plot_feature_importance(FEATURE_IMPORTANCE_PLOT)
     trainer.plot_confusion_matrix(y_test, trainer.model.predict(X_test), CONFUSION_MATRIX_PLOT)
 
-    # Save model
-    trainer.save_model(MODEL_PATH)
+    # -----------------------------------------------------------------
+    # Save model with metadata
+    # -----------------------------------------------------------------
+    model_metadata = {
+        "sample_counts": {
+            "total": int(len(X)),
+            "safe": int(np.sum(y == 0)),
+            "exploit": int(np.sum(y == 1)),
+            "real_exploits": loader.real_exploit_count,
+            "cached_exploits": loader.cached_exploit_count,
+            "mock_exploits": loader.mock_exploit_count,
+        },
+        "cv_scores": {
+            "f1_mean": cv_results["cv_f1_mean"],
+            "f1_std": cv_results["cv_f1_std"],
+            "accuracy_mean": cv_results["cv_accuracy_mean"],
+            "accuracy_std": cv_results["cv_accuracy_std"],
+            "f1_per_fold": cv_results["cv_f1_scores"],
+        },
+        "test_metrics": {
+            "accuracy": metrics["accuracy"],
+            "precision": metrics["precision"],
+            "recall": metrics["recall"],
+            "f1": metrics["f1_score"],
+            "roc_auc": metrics["roc_auc"],
+        },
+        "mock_only": loader.mock_only,
+        "confidence_cap": 0.6 if loader.mock_only else 1.0,
+        "overfitting_warning": cv_results["overfitting_warning"],
+    }
 
-    # Save metrics
+    trainer.save_model(MODEL_PATH, metadata=model_metadata)
+
+    # -----------------------------------------------------------------
+    # Save metrics JSON
+    # -----------------------------------------------------------------
     metrics["training_date"] = datetime.now().isoformat()
     metrics["model_type"] = args.model
     metrics["feature_count"] = len(FEATURE_NAMES)
     metrics["total_samples"] = len(X)
     metrics["safe_samples"] = int(np.sum(y == 0))
     metrics["exploit_samples"] = int(np.sum(y == 1))
-    
+    metrics["real_exploits"] = loader.real_exploit_count
+    metrics["mock_exploits"] = loader.mock_exploit_count
+    metrics["mock_only"] = loader.mock_only
+    metrics["confidence_cap"] = 0.6 if loader.mock_only else 1.0
+
     with open(METRICS_FILE, "w") as f:
         json.dump(metrics, f, indent=2)
-    
+
+    # -----------------------------------------------------------------
+    # Train Deep Learning model (PyTorch) if available
+    # -----------------------------------------------------------------
+    try:
+        from src.ai.models.deep_classifier import DeepContractClassifier, PYTORCH_AVAILABLE
+        if PYTORCH_AVAILABLE:
+            print()
+            print("=" * 70)
+            print("  Training Deep Learning Model (PyTorch)")
+            print("=" * 70)
+
+            raw_bytecodes = loader.get_raw_bytecodes()
+            if raw_bytecodes and len(raw_bytecodes) == len(X):
+                from src.ai.data.bytecode_collector import RealBytecodeFeatureExtractor
+                feat_extractor = RealBytecodeFeatureExtractor()
+
+                # Build training data in the format DeepContractClassifier.train() expects
+                THREAT_CATS = DeepContractClassifier.THREAT_CATEGORIES
+                deep_train_data = []
+                deep_val_data = []
+
+                for i, (bytecode, label) in enumerate(zip(raw_bytecodes, y)):
+                    features = feat_extractor.extract_features(bytecode)
+                    feature_vector = feat_extractor.features_to_vector(features)
+                    cat_label = "safe" if label == 0 else "unknown_threat"
+                    entry = {
+                        "bytecode": bytecode,
+                        "features": feature_vector,
+                        "label": cat_label,
+                    }
+                    # Use same train/test indices as RF (80/20 split)
+                    if i < int(len(raw_bytecodes) * (1 - args.test_size)):
+                        deep_train_data.append(entry)
+                    else:
+                        deep_val_data.append(entry)
+
+                if len(deep_train_data) >= 5:
+                    deep_model_path = str(MODEL_DIR / "deep_ensemble.pt")
+
+                    # Train ensemble model (MLP + CNN on opcode sequences)
+                    deep_clf = DeepContractClassifier(
+                        model_type="ensemble",
+                        model_path=deep_model_path,
+                    )
+
+                    history = deep_clf.train(
+                        train_data=deep_train_data,
+                        val_data=deep_val_data if len(deep_val_data) >= 2 else None,
+                        epochs=50,
+                        batch_size=min(8, len(deep_train_data)),
+                        learning_rate=0.001,
+                        early_stopping_patience=10,
+                    )
+
+                    final_train_acc = history["train_acc"][-1] if history["train_acc"] else 0
+                    final_val_acc = history["val_acc"][-1] if history.get("val_acc") else None
+
+                    print(f"\n   Deep model saved:  {deep_model_path}")
+                    print(f"   Final train acc:   {final_train_acc:.1f}%")
+                    if final_val_acc is not None:
+                        print(f"   Final val acc:     {final_val_acc:.1f}%")
+                    print(f"   Device:            {deep_clf.device}")
+                    print(f"   Model type:        ensemble (MLP + CNN)")
+                else:
+                    print("   Skipped: not enough samples for deep learning training")
+            else:
+                print("   Skipped: raw bytecodes not available")
+        else:
+            print("\n   Deep learning skipped: PyTorch not installed")
+    except Exception as e:
+        logger.warning("deep_learning_training_failed", error=str(e))
+        print(f"\n   Deep learning training failed: {e}")
+
+    # -----------------------------------------------------------------
+    # Verify auto-discovery will work
+    # -----------------------------------------------------------------
+    for check_path in [MODEL_PATH, COMPAT_MODEL_PATH]:
+        if check_path.exists():
+            logger.info("model_file_verified", path=str(check_path), size_bytes=check_path.stat().st_size)
+        else:
+            logger.error("model_file_missing", path=str(check_path))
+
+    # -----------------------------------------------------------------
     # Print summary
+    # -----------------------------------------------------------------
     print()
     print("=" * 70)
-    print("  📊 TRAINING SUMMARY")
+    print("  TRAINING SUMMARY")
     print("=" * 70)
     print(f"   Accuracy:        {metrics['accuracy']:.3f}")
     print(f"   Precision:       {metrics['precision']:.3f}")
@@ -724,28 +1178,36 @@ def main():
     print(f"   F1 Score:        {metrics['f1_score']:.3f}")
     print(f"   ROC AUC:         {metrics['roc_auc']:.3f}")
     print(f"   Avg Precision:   {metrics['average_precision']:.3f}")
-    print(f"   CV F1 (5-fold):  {metrics['cv_f1_mean']:.3f} +/- {metrics['cv_f1_std']:.3f}")
+    print(f"   CV F1 (5-fold):  {cv_results['cv_f1_mean']:.3f} +/- {cv_results['cv_f1_std']:.3f}")
     print(f"   Total Samples:   {len(X)} (safe={np.sum(y==0)}, exploit={np.sum(y==1)})")
+    print(f"   Real Exploits:   {loader.real_exploit_count}")
+    print(f"   Mock Exploits:   {loader.mock_exploit_count}")
+    print(f"   Mock-Only Mode:  {loader.mock_only}")
+    if loader.mock_only:
+        print(f"   Confidence Cap:  0.6 (mock-trained model)")
+    if cv_results["overfitting_warning"]:
+        print(f"   WARNING:         Possible overfitting detected (100% CV accuracy)")
     print()
     print(f"   Model saved:     {MODEL_PATH}")
+    print(f"   Compat model:    {COMPAT_MODEL_PATH}")
     print(f"   Plots saved:     {FEATURE_IMPORTANCE_PLOT}")
     print(f"                    {CONFUSION_MATRIX_PLOT}")
     print(f"   Metrics saved:   {METRICS_FILE}")
     print()
-    
+
     # Feature importance interpretation
     print("=" * 70)
-    print("  📈 FEATURE IMPORTANCE INTERPRETATION")
+    print("  FEATURE IMPORTANCE INTERPRETATION")
     print("=" * 70)
     print("""
   Higher importance values indicate features that are more predictive
   of exploit contracts. Key insights:
 
-  • CFG Complexity: High complexity may indicate exploit logic
-  • External Call Depth: Deep call chains suggest flash loan patterns
-  • Entropy: Low entropy may indicate packed/obfuscated exploit code
-  • Risk Patterns: Flags like has_reentrancy_pattern are direct indicators
-  • Gas Analysis: Unusual gas patterns may indicate exploit optimization
+  - CFG Complexity: High complexity may indicate exploit logic
+  - External Call Depth: Deep call chains suggest flash loan patterns
+  - Entropy: Low entropy may indicate packed/obfuscated exploit code
+  - Risk Patterns: Flags like has_reentrancy_pattern are direct indicators
+  - Gas Analysis: Unusual gas patterns may indicate exploit optimization
 
   Use these insights to:
   1. Focus monitoring on high-importance features
@@ -757,4 +1219,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

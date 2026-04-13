@@ -64,6 +64,8 @@ class ContractThreatClassifier:
         self.known_exploits: Dict[str, Dict] = {}
         self._model_path = model_path
         self._model_loaded_at: Optional[float] = None
+        self._confidence_cap: float = 1.0  # Capped to 0.6 for mock-trained models
+        self._mock_only: bool = False
 
         # Try to load model: explicit path, or auto-discover
         if model_path and Path(model_path).exists():
@@ -257,6 +259,9 @@ class ContractThreatClassifier:
             if len(classes) == 2:
                 # Binary: map exploit probability to threat categories
                 exploit_prob = float(probabilities[list(classes).index(1)] if 1 in classes else probabilities[1])
+                # Apply confidence cap for mock-trained models
+                if self._confidence_cap < 1.0:
+                    exploit_prob = min(exploit_prob, self._confidence_cap)
                 safe_prob = 1.0 - exploit_prob
                 return {
                     ThreatCategory.SAFE: safe_prob,
@@ -369,6 +374,8 @@ class ContractThreatClassifier:
                 if data.get('rule_weights') is not None:
                     self.rule_weights = data['rule_weights']
                 self._model_feature_count = data.get('feature_count', 20)
+                self._confidence_cap = data.get('confidence_cap', 1.0)
+                self._mock_only = data.get('mock_only', False)
             else:
                 # Raw sklearn model saved by joblib
                 self.model = data
