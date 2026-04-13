@@ -14,7 +14,6 @@ Usage:
 import json
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timezone
 import structlog
 
 from .client import get_client, MODEL, MAX_TOKENS

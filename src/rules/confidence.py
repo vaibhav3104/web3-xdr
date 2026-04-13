@@ -10,8 +10,8 @@ from multiple evidence signals:
   - Corroboration (multiple rules firing on same event)
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
 import math
 import structlog
 
@@ -21,8 +21,6 @@ logger = structlog.get_logger(__name__)
 try:
     from src.enrichment.entity_registry import (
         get_entity_registry,
-        ReputationTier,
-        EntityType,
     )
     ENTITY_AVAILABLE = True
 except ImportError:

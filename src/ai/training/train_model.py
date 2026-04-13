@@ -49,10 +49,8 @@ from sklearn.metrics import (
     confusion_matrix,
     roc_auc_score,
     average_precision_score,
-    f1_score,
 )
 from imblearn.over_sampling import SMOTE
-import joblib
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
@@ -61,7 +59,6 @@ from src.ai.data.enhanced_extractor import EnhancedBytecodeExtractor
 from src.ai.data.bytecode_collector import (
     BytecodeCollector,
     EXPLOIT_CONTRACTS,
-    SAFE_CONTRACTS,
 )
 import structlog
 
@@ -1100,7 +1097,6 @@ def main():
                 feat_extractor = RealBytecodeFeatureExtractor()
 
                 # Build training data in the format DeepContractClassifier.train() expects
-                THREAT_CATS = DeepContractClassifier.THREAT_CATEGORIES
                 deep_train_data = []
                 deep_val_data = []
 
@@ -1145,7 +1141,7 @@ def main():
                     if final_val_acc is not None:
                         print(f"   Final val acc:     {final_val_acc:.1f}%")
                     print(f"   Device:            {deep_clf.device}")
-                    print(f"   Model type:        ensemble (MLP + CNN)")
+                    print("   Model type:        ensemble (MLP + CNN)")
                 else:
                     print("   Skipped: not enough samples for deep learning training")
             else:
@@ -1184,9 +1180,9 @@ def main():
     print(f"   Mock Exploits:   {loader.mock_exploit_count}")
     print(f"   Mock-Only Mode:  {loader.mock_only}")
     if loader.mock_only:
-        print(f"   Confidence Cap:  0.6 (mock-trained model)")
+        print("   Confidence Cap:  0.6 (mock-trained model)")
     if cv_results["overfitting_warning"]:
-        print(f"   WARNING:         Possible overfitting detected (100% CV accuracy)")
+        print("   WARNING:         Possible overfitting detected (100% CV accuracy)")
     print()
     print(f"   Model saved:     {MODEL_PATH}")
     print(f"   Compat model:    {COMPAT_MODEL_PATH}")

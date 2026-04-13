@@ -6,7 +6,6 @@ singleton to avoid creating multiple HTTP connections.
 """
 
 import os
-from typing import Optional
 import structlog
 
 logger = structlog.get_logger(__name__)

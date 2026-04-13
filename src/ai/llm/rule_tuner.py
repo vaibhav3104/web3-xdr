@@ -15,12 +15,12 @@ Usage:
 
 import json
 import yaml
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from typing import Dict, Any, List
 from pathlib import Path
 import structlog
 
-from .client import get_client, MODEL, MAX_TOKENS
+from .client import get_client, MODEL
 
 logger = structlog.get_logger(__name__)
 

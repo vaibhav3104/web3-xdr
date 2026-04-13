@@ -56,7 +56,7 @@ except ImportError:
 
 # Import entity registry for reputation-based suppression
 try:
-    from src.enrichment.entity_registry import get_entity_registry, ReputationTier
+    from src.enrichment.entity_registry import get_entity_registry
     ENTITY_REGISTRY_AVAILABLE = True
 except ImportError:
     ENTITY_REGISTRY_AVAILABLE = False
