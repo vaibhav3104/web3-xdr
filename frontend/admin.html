@@ -4,619 +4,1178 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Admin Console</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="/frontend/config.js"></script>
     <script src="/frontend/nav.js" defer></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         [x-cloak] { display: none !important; }
-        :root {
-            --bg-dark: #0f0f14;
-            --bg-card: #1a1a24;
-            --bg-input: #252532;
-            --border: #2d2d3d;
-            --accent: #6366f1;
-            --accent-hover: #818cf8;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --text: #f1f5f9;
-            --text-muted: #94a3b8;
-        }
-        
+
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--bg-dark);
-            color: var(--text);
+            display: flex;
+            min-height: 100vh;
         }
-        
+
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
+
+        /* ── Main Content Area ────────────────────────────── */
+        .admin-main {
+            flex: 1;
+            min-width: 0;
+            padding: 36px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
         }
-        
-        .input-field {
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            color: var(--text);
-            border-radius: 8px;
-            padding: 10px 14px;
-            width: 100%;
-            transition: border-color 0.2s;
-        }
-        
-        .input-field:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        
-        .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-        
-        .btn-primary {
-            background: var(--accent);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: var(--accent-hover);
-        }
-        
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-        
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-        
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text);
-        }
-        
-        .btn-outline:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-        
-        .sidebar-link {
+
+        /* ── Page Header ──────────────────────────────────── */
+        .page-header {
             display: flex;
             align-items: center;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: var(--text-muted);
-            transition: all 0.2s;
+            justify-content: space-between;
+            margin-bottom: 28px;
         }
-        
-        .sidebar-link:hover, .sidebar-link.active {
-            background: var(--bg-input);
-            color: var(--text);
+        .page-header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--s3-text);
         }
-        
-        .sidebar-link.active {
-            border-left: 3px solid var(--accent);
+        .page-header .header-subtitle {
+            font-size: 0.8rem;
+            color: var(--s3-text-3);
+            margin-top: 2px;
         }
-        
+
+        /* ── Glass Card ───────────────────────────────────── */
+        .glass-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+        .glass-card:hover {
+            border-color: var(--s3-border-hover, rgba(255,255,255,0.1));
+        }
+        .glass-card-inner {
+            padding: 24px;
+        }
+
+        /* ── Admin Sub-Nav (Internal Tabs) ────────────────── */
+        .admin-subnav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px;
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius);
+            border: 1px solid var(--s3-border);
+            margin-bottom: 28px;
+            overflow-x: auto;
+        }
+        .subnav-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--s3-text-3);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            background: transparent;
+        }
+        .subnav-item:hover {
+            color: var(--s3-text-2);
+            background: var(--s3-bg-3);
+        }
+        .subnav-item.active {
+            color: var(--s3-text);
+            background: var(--s3-bg-3);
+            border-color: var(--s3-border);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+        }
+        .subnav-item svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            opacity: 0.6;
+        }
+        .subnav-item.active svg {
+            opacity: 1;
+            color: var(--s3-accent-light);
+        }
+
+        /* ── Stat Cards Grid ──────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            padding: 22px 24px;
+        }
+        .stat-card .stat-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+        .stat-card .stat-value {
+            font-size: 1.85rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+        .stat-value.accent-purple { color: var(--s3-accent-light); }
+        .stat-value.accent-green  { color: var(--s3-low); }
+        .stat-value.accent-cyan   { color: var(--s3-cyan); }
+        .stat-value.accent-violet { color: var(--s3-accent); }
+
+        /* ── Buttons ──────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 550;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            white-space: nowrap;
+        }
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .btn-primary {
+            background: var(--s3-accent);
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(139,92,246,0.25);
+        }
+        .btn-primary:hover {
+            background: var(--s3-accent-light);
+            box-shadow: 0 4px 16px rgba(139,92,246,0.35);
+        }
+        .btn-danger {
+            background: var(--s3-critical);
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background: #fb7185;
+        }
+        .btn-ghost {
+            background: var(--s3-bg-3);
+            color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
+        }
+        .btn-ghost:hover {
+            border-color: var(--s3-accent);
+            color: var(--s3-accent-light);
+            background: var(--s3-accent-dim);
+        }
+
+        /* ── Quick Actions Bar ────────────────────────────── */
+        .actions-bar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* ── Toggle Switch ────────────────────────────────── */
         .toggle {
             position: relative;
-            width: 48px;
-            height: 26px;
-            background: var(--bg-input);
-            border-radius: 13px;
+            width: 44px;
+            height: 24px;
+            background: var(--s3-bg-4);
+            border-radius: 12px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: background 0.3s ease;
+            border: 1px solid var(--s3-border);
+            flex-shrink: 0;
         }
-        
         .toggle.active {
-            background: var(--success);
+            background: var(--s3-low);
+            border-color: var(--s3-low);
         }
-        
         .toggle::after {
             content: '';
             position: absolute;
-            width: 20px;
-            height: 20px;
-            background: white;
+            width: 18px;
+            height: 18px;
+            background: #fff;
             border-radius: 50%;
-            top: 3px;
-            left: 3px;
-            transition: transform 0.3s;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
-        
         .toggle.active::after {
-            transform: translateX(22px);
+            transform: translateX(20px);
         }
-        
-        .severity-critical { color: #ef4444; }
-        .severity-high { color: #f97316; }
-        .severity-medium { color: #eab308; }
-        .severity-low { color: #22c55e; }
-        
+
+        /* ── Badges ───────────────────────────────────────── */
         .badge {
-            padding: 4px 10px;
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
             border-radius: 6px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
-        
-        .badge-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-        .badge-high { background: rgba(249, 115, 22, 0.2); color: #f97316; }
-        .badge-medium { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-        .badge-low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
-        
+        .badge-critical { background: rgba(244,63,94,0.15); color: var(--s3-critical); }
+        .badge-high     { background: rgba(249,115,22,0.15); color: var(--s3-high); }
+        .badge-medium   { background: rgba(234,179,8,0.15);  color: var(--s3-medium); }
+        .badge-low      { background: rgba(16,185,129,0.15); color: var(--s3-low); }
+
+        /* ── Status Dot ───────────────────────────────────── */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .status-dot.connected { background: var(--s3-low); box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+        .status-dot.disconnected { background: var(--s3-critical); box-shadow: 0 0 6px rgba(244,63,94,0.5); }
+
+        /* ── Severity Filter Tabs ─────────────────────────── */
+        .filter-tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 20px;
+        }
+        .filter-tab {
+            padding: 8px 16px;
+            font-size: 12.5px;
+            font-weight: 500;
+            color: var(--s3-text-3);
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .filter-tab:hover {
+            color: var(--s3-text-2);
+        }
+        .filter-tab.active {
+            color: var(--s3-text);
+            border-bottom-color: var(--s3-accent);
+        }
+
+        /* ── Form Inputs ──────────────────────────────────── */
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--s3-text-3);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .form-input {
+            width: 100%;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            color: var(--s3-text);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 14px;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            outline: none;
+        }
+        .form-input:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
+        }
+        .form-input::placeholder {
+            color: var(--s3-text-3);
+        }
+        select.form-input {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+        select.form-input option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
+        }
+        textarea.form-input {
+            resize: vertical;
+            line-height: 1.6;
+        }
+
+        /* ── YAML Editor ──────────────────────────────────── */
         .yaml-editor {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            background: #1e1e2e;
-            color: #cdd6f4;
-            border: none;
+            font-size: 12.5px;
+            line-height: 1.7;
+            background: var(--s3-bg-1);
+            color: var(--s3-cyan);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 16px;
+        }
+        textarea.yaml-editor {
             resize: vertical;
         }
-        
-        .tab { 
-            padding: 10px 20px;
-            border-bottom: 2px solid transparent;
-            color: var(--text-muted);
+        textarea.yaml-editor:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
+            outline: none;
+        }
+
+        /* ── Rule Card ────────────────────────────────────── */
+        .rule-card {
+            padding: 20px 24px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .rule-card .rule-meta {
+            flex: 1;
+            min-width: 0;
+        }
+        .rule-card .rule-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .rule-card .rule-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .rule-card .rule-desc {
+            font-size: 12.5px;
+            color: var(--s3-text-3);
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        .rule-card .rule-footer {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 11.5px;
+            color: var(--s3-text-3);
+        }
+        .rule-card .rule-footer .separator {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: var(--s3-text-3);
+        }
+        .rule-card .rule-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: transparent;
+            border: none;
+            color: var(--s3-text-3);
             cursor: pointer;
+            transition: all 0.2s ease;
         }
-        
-        .tab.active {
-            border-bottom-color: var(--accent);
-            color: var(--text);
+        .icon-btn:hover {
+            background: var(--s3-bg-3);
+            color: var(--s3-text);
         }
-        
+        .icon-btn:hover.danger {
+            color: var(--s3-critical);
+            background: rgba(244,63,94,0.1);
+        }
+        .icon-btn:hover.info {
+            color: var(--s3-cyan);
+            background: rgba(34,211,238,0.1);
+        }
+        .icon-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* ── Rules List ───────────────────────────────────── */
+        .rules-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* ── Chain Card ───────────────────────────────────── */
+        .chain-card {
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .chain-card .chain-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 1;
+            min-width: 0;
+        }
+        .chain-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--s3-radius-sm);
+            background: var(--s3-accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--s3-accent-light);
+            flex-shrink: 0;
+            border: 1px solid rgba(139,92,246,0.2);
+        }
+        .chain-details .chain-name-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+        .chain-details .chain-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .chain-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .chain-status-badge.connected {
+            background: rgba(16,185,129,0.1);
+            color: var(--s3-low);
+        }
+        .chain-status-badge.disconnected {
+            background: rgba(244,63,94,0.1);
+            color: var(--s3-critical);
+        }
+        .chain-details .chain-rpc {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--s3-text-3);
+            max-width: 420px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chain-details .chain-contracts {
+            font-size: 12px;
+            color: var(--s3-text-3);
+            margin-top: 2px;
+        }
+        .chain-card .chain-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        /* ── Alerting Integration Card ────────────────────── */
+        .integration-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 16px;
+        }
+        .integration-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--s3-radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .integration-icon.telegram { background: rgba(34,211,238,0.1); }
+        .integration-icon.slack    { background: rgba(139,92,246,0.1); }
+        .integration-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .integration-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .integration-desc {
+            font-size: 12px;
+            color: var(--s3-text-3);
+        }
+        .integration-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding-top: 16px;
+            border-top: 1px solid var(--s3-border);
+        }
+
+        /* ── Rate Limit Grid ──────────────────────────────── */
+        .form-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        /* ── System Log Console ───────────────────────────── */
+        .log-console {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.8;
+            padding: 20px;
+            max-height: 560px;
+            overflow-y: auto;
+            background: var(--s3-bg-1);
+            border-radius: var(--s3-radius);
+            border: 1px solid var(--s3-border);
+        }
+        .log-line {
+            padding: 2px 0;
+        }
+        .log-line .log-ts {
+            color: var(--s3-text-3);
+            margin-right: 8px;
+        }
+        .log-line .log-level {
+            margin-right: 8px;
+            font-weight: 600;
+        }
+        .log-line.error  { color: var(--s3-critical); }
+        .log-line.error .log-level { color: var(--s3-critical); }
+        .log-line.warning { color: var(--s3-medium); }
+        .log-line.warning .log-level { color: var(--s3-medium); }
+        .log-line.info   { color: var(--s3-low); }
+        .log-line.info .log-level { color: var(--s3-low); }
+        .log-line.debug  { color: var(--s3-text-3); }
+        .log-line.debug .log-level { color: var(--s3-text-3); }
+
+        /* ── Trigger List ─────────────────────────────────── */
+        .trigger-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid var(--s3-border);
+        }
+        .trigger-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .trigger-time {
+            font-size: 12px;
+            color: var(--s3-text-3);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Empty State ──────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--s3-text-3);
+        }
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 12px;
+            opacity: 0.3;
+            color: var(--s3-text-3);
+        }
+        .empty-state p {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* ── Modal ────────────────────────────────────────── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(3,3,5,0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .modal-card {
+            width: 100%;
+            max-width: 660px;
+            max-height: 82vh;
+            overflow-y: auto;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+        }
+        .modal-card.wide {
+            max-width: 780px;
+        }
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--s3-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-header h2 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--s3-text);
+        }
+        .modal-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--s3-border);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* ── YAML Info Grid ───────────────────────────────── */
+        .info-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        .info-cell {
+            padding: 14px;
+            background: var(--s3-bg-3);
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid var(--s3-border);
+        }
+        .info-cell .info-label {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+        .info-cell .info-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+
+        /* ── Notification Toast ───────────────────────────── */
         .notification {
             position: fixed;
             top: 20px;
             right: 20px;
-            padding: 16px 24px;
-            border-radius: 8px;
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
+            padding: 14px 22px;
+            border-radius: var(--s3-radius-sm);
+            z-index: 200;
+            animation: notif-slide 0.3s ease;
+            font-size: 13px;
+            font-weight: 500;
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--s3-border);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
-        
-        @keyframes slideIn {
+        .notification.success {
+            background: rgba(16,185,129,0.15);
+            color: var(--s3-low);
+            border-color: rgba(16,185,129,0.25);
+        }
+        .notification.error {
+            background: rgba(244,63,94,0.15);
+            color: var(--s3-critical);
+            border-color: rgba(244,63,94,0.25);
+        }
+        .notification.warning {
+            background: rgba(234,179,8,0.15);
+            color: var(--s3-medium);
+            border-color: rgba(234,179,8,0.25);
+        }
+
+        @keyframes notif-slide {
             from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+            to   { transform: translateX(0);    opacity: 1; }
+        }
+
+        /* ── Section spacing ──────────────────────────────── */
+        .section-block {
+            margin-bottom: 24px;
+        }
+        .section-block:last-child {
+            margin-bottom: 0;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 16px;
+        }
+
+        /* ── Responsive ───────────────────────────────────── */
+        @media (max-width: 1100px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        @media (max-width: 768px) {
+            .admin-main {
+                padding: 20px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .form-grid-2 {
+                grid-template-columns: 1fr;
+            }
+            .info-grid-3 {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 <div id="app" x-data="adminConsole()" x-init="checkAuth()">
-    <!-- Notification -->
-    <div x-show="notification.show" 
+
+    <!-- Notification Toast -->
+    <div x-show="notification.show"
          x-transition
          class="notification"
          :class="{
-             'bg-green-500/90': notification.type === 'success',
-             'bg-red-500/90': notification.type === 'error',
-             'bg-yellow-500/90': notification.type === 'warning'
-         }">
+             'success': notification.type === 'success',
+             'error': notification.type === 'error',
+             'warning': notification.type === 'warning'
+         }"
+         x-cloak>
         <span x-text="notification.message"></span>
     </div>
 
-    <div class="flex">
-        <!-- Sidebar -->
-        <aside class="w-64 min-h-screen border-r border-gray-800 p-4 relative flex flex-col">
-            <div class="mb-6 px-2">
-                <div class="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Admin Console</div>
+    <!-- Main Content -->
+    <main class="admin-main">
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <h1>Admin Console</h1>
+                <div class="header-subtitle">System configuration, alert rules, and chain management</div>
             </div>
-            
-            <nav class="space-y-1">
-                <a href="#" @click.prevent="currentPage = 'dashboard'" 
-                   class="sidebar-link" :class="{ active: currentPage === 'dashboard' }">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                    </svg>
-                    Dashboard
-                </a>
-                
-                <a href="#" @click.prevent="currentPage = 'rules'" 
-                   class="sidebar-link" :class="{ active: currentPage === 'rules' }">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                    </svg>
-                    Alert Rules
-                </a>
-                
-                <a href="#" @click.prevent="currentPage = 'chains'" 
-                   class="sidebar-link" :class="{ active: currentPage === 'chains' }">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                    </svg>
-                    Chains & RPCs
-                </a>
-                
-                <a href="#" @click.prevent="currentPage = 'alerting'" 
-                   class="sidebar-link" :class="{ active: currentPage === 'alerting' }">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-                    </svg>
-                    Alerting
-                </a>
-                
-                <a href="#" @click.prevent="currentPage = 'logs'" 
-                   class="sidebar-link" :class="{ active: currentPage === 'logs' }">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    System Logs
-                </a>
-                
-                <div class="border-t border-gray-800 my-3 pt-3">
-                    <div class="text-xs text-gray-500 px-3 mb-2 uppercase tracking-wider">Tools</div>
+        </div>
+
+        <!-- Sub-Navigation Pill Tabs -->
+        <nav class="admin-subnav">
+            <button @click="currentPage = 'dashboard'" class="subnav-item" :class="{ active: currentPage === 'dashboard' }">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                </svg>
+                Overview
+            </button>
+            <button @click="currentPage = 'rules'" class="subnav-item" :class="{ active: currentPage === 'rules' }">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+                Alert Rules
+            </button>
+            <button @click="currentPage = 'chains'" class="subnav-item" :class="{ active: currentPage === 'chains' }">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+                Chains &amp; RPCs
+            </button>
+            <button @click="currentPage = 'alerting'" class="subnav-item" :class="{ active: currentPage === 'alerting' }">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+                Alerting
+            </button>
+            <button @click="currentPage = 'logs'" class="subnav-item" :class="{ active: currentPage === 'logs' }">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                System Logs
+            </button>
+        </nav>
+
+        <!-- ============================================================
+             DASHBOARD PAGE
+             ============================================================ -->
+        <div x-show="currentPage === 'dashboard'">
+
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="glass-card stat-card">
+                    <div class="stat-label">Total Rules</div>
+                    <div class="stat-value accent-purple" x-text="stats.totalRules">0</div>
                 </div>
-                
-                <a href="/frontend/logs.html" class="sidebar-link">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-                    </svg>
-                    📋 Log Explorer
-                </a>
-                
-                <a href="/frontend/parsers.html" class="sidebar-link">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    🔄 Parsers
-                </a>
-                
-                <a href="/frontend/guardian.html" class="sidebar-link">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                    </svg>
-                    🛡️ Guardian
-                </a>
-            </nav>
-            
-            <!-- Spacer to push footer to bottom -->
-            <div class="flex-grow"></div>
-            
-            <!-- Fixed Footer -->
-            <div class="mt-auto pt-4 space-y-2 border-t border-gray-800">
-                <!-- User Info -->
-                <div class="px-2 py-3" x-show="currentUser">
-                    <div class="flex items-center space-x-3 mb-2">
-                        <div class="w-8 h-8 rounded-full bg-indigo-500/30 flex items-center justify-center text-sm font-semibold">
-                            <span x-text="currentUser?.username?.charAt(0).toUpperCase()"></span>
-                        </div>
-                        <div>
-                            <div class="text-sm font-medium" x-text="currentUser?.username"></div>
-                            <div class="text-xs text-gray-500" x-text="currentUser?.role"></div>
-                        </div>
-                    </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-label">Enabled Rules</div>
+                    <div class="stat-value accent-green" x-text="stats.enabledRules">0</div>
                 </div>
-                
-                <a href="/frontend/index.html" class="sidebar-link text-sm">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                    </svg>
-                    Back to Dashboard
-                </a>
-                
-                <button @click="logout()" class="sidebar-link text-sm w-full text-red-400 hover:text-red-300 hover:bg-red-500/10">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                    </svg>
-                    Sign Out
-                </button>
+                <div class="glass-card stat-card">
+                    <div class="stat-label">Active Chains</div>
+                    <div class="stat-value accent-cyan" x-text="stats.activeChains">0</div>
+                </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-label">Events Today</div>
+                    <div class="stat-value accent-violet" x-text="stats.eventsToday">0</div>
+                </div>
             </div>
-        </aside>
-        
-        <!-- Main Content -->
-        <main class="flex-1 p-8">
-            <!-- Dashboard Page -->
-            <div x-show="currentPage === 'dashboard'">
-                <h1 class="text-2xl font-bold mb-6">System Overview</h1>
-                
-                <!-- Stats Cards -->
-                <div class="grid grid-cols-4 gap-4 mb-8">
-                    <div class="card p-5">
-                        <div class="text-gray-400 text-sm mb-1">Total Rules</div>
-                        <div class="text-3xl font-bold text-indigo-400" x-text="stats.totalRules">0</div>
-                    </div>
-                    <div class="card p-5">
-                        <div class="text-gray-400 text-sm mb-1">Enabled Rules</div>
-                        <div class="text-3xl font-bold text-green-400" x-text="stats.enabledRules">0</div>
-                    </div>
-                    <div class="card p-5">
-                        <div class="text-gray-400 text-sm mb-1">Active Chains</div>
-                        <div class="text-3xl font-bold text-blue-400" x-text="stats.activeChains">0</div>
-                    </div>
-                    <div class="card p-5">
-                        <div class="text-gray-400 text-sm mb-1">Events Today</div>
-                        <div class="text-3xl font-bold text-purple-400" x-text="stats.eventsToday">0</div>
-                    </div>
-                </div>
-                
-                <!-- Quick Actions -->
-                <div class="card p-6 mb-8">
-                    <h2 class="text-lg font-semibold mb-4">Quick Actions</h2>
-                    <div class="flex space-x-4">
+
+            <!-- Quick Actions -->
+            <div class="glass-card section-block">
+                <div class="glass-card-inner">
+                    <div class="section-title">Quick Actions</div>
+                    <div class="actions-bar">
                         <button @click="reloadRules()" class="btn btn-primary">
-                            🔄 Reload Rules
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Reload Rules
                         </button>
-                        <button @click="testAlert()" class="btn btn-outline">
-                            🧪 Send Test Alert
+                        <button @click="testAlert()" class="btn btn-ghost">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                            Send Test Alert
                         </button>
-                        <button @click="exportConfig()" class="btn btn-outline">
-                            📥 Export Config
+                        <button @click="exportConfig()" class="btn btn-ghost">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            Export Config
                         </button>
                     </div>
                 </div>
-                
-                <!-- Recent Activity -->
-                <div class="card p-6">
-                    <h2 class="text-lg font-semibold mb-4">Recent Rule Triggers</h2>
-                    <div class="space-y-3">
-                        <!-- Empty state -->
-                        <div x-show="recentTriggers.length === 0" class="text-center py-8 text-gray-500">
-                            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            <p>No rule triggers yet</p>
-                            <p class="text-sm mt-1">Rules will appear here when they match events</p>
-                        </div>
-                        
-                        <!-- Triggers list -->
+            </div>
+
+            <!-- Recent Triggers -->
+            <div class="glass-card section-block">
+                <div class="glass-card-inner">
+                    <div class="section-title">Recent Rule Triggers</div>
+
+                    <!-- Empty state -->
+                    <div x-show="recentTriggers.length === 0" class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p>No rule triggers yet</p>
+                        <p style="margin-top:4px;opacity:0.6;">Rules will appear here when they match events</p>
+                    </div>
+
+                    <!-- Triggers list -->
+                    <div style="display:flex;flex-direction:column;gap:8px;">
                         <template x-for="trigger in recentTriggers" :key="trigger.id">
-                            <div class="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
-                                <div class="flex items-center space-x-3">
+                            <div class="trigger-row">
+                                <div class="trigger-left">
                                     <span class="badge" :class="'badge-' + trigger.severity" x-text="trigger.severity"></span>
-                                    <span x-text="trigger.ruleName || trigger.rule_name"></span>
+                                    <span style="font-size:13px;color:var(--s3-text);" x-text="trigger.ruleName || trigger.rule_name"></span>
                                 </div>
-                                <span class="text-gray-500 text-sm" x-text="trigger.time || trigger.triggered_at"></span>
+                                <span class="trigger-time" x-text="trigger.time || trigger.triggered_at"></span>
                             </div>
                         </template>
                     </div>
                 </div>
             </div>
-            
-            <!-- Rules Page -->
-            <div x-show="currentPage === 'rules'">
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold">Alert Rules</h1>
-                    <button @click="showNewRuleModal = true" class="btn btn-primary">
-                        + New Rule
-                    </button>
+        </div>
+
+        <!-- ============================================================
+             RULES PAGE
+             ============================================================ -->
+        <div x-show="currentPage === 'rules'">
+
+            <div class="page-header" style="margin-bottom:20px;">
+                <div>
+                    <h1>Alert Rules</h1>
                 </div>
-                
-                <!-- Rules Filter -->
-                <div class="flex space-x-4 mb-6">
-                    <button @click="ruleFilter = 'all'" class="tab" :class="{ active: ruleFilter === 'all' }">All Rules</button>
-                    <button @click="ruleFilter = 'critical'" class="tab" :class="{ active: ruleFilter === 'critical' }">🔴 Critical</button>
-                    <button @click="ruleFilter = 'high'" class="tab" :class="{ active: ruleFilter === 'high' }">🟠 High</button>
-                    <button @click="ruleFilter = 'medium'" class="tab" :class="{ active: ruleFilter === 'medium' }">🟡 Medium</button>
-                    <button @click="ruleFilter = 'low'" class="tab" :class="{ active: ruleFilter === 'low' }">🟢 Low</button>
-                </div>
-                
-                <!-- Rules List -->
-                <div class="space-y-4">
-                    <template x-for="rule in filteredRules" :key="rule.id">
-                        <div class="card p-5">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <span class="badge" :class="'badge-' + rule.severity" x-text="rule.severity"></span>
-                                        <h3 class="font-semibold" x-text="rule.name"></h3>
-                                    </div>
-                                    <p class="text-gray-400 text-sm mb-3" x-text="rule.description"></p>
-                                    <div class="flex items-center space-x-4 text-sm text-gray-500">
-                                        <span class="font-mono" x-text="rule.id"></span>
-                                        <span>•</span>
-                                        <span x-text="'Confidence: ' + (rule.confidence * 100) + '%'"></span>
-                                    </div>
-                                </div>
-                                <div class="flex items-center space-x-4">
-                                    <div class="toggle" :class="{ active: rule.enabled }" @click="toggleRule(rule)"></div>
-                                    <button @click="viewRuleYaml(rule)" class="text-gray-400 hover:text-blue-400" title="View YAML">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-                                        </svg>
-                                    </button>
-                                    <button @click="editRule(rule)" class="text-gray-400 hover:text-white" title="Edit Rule">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                        </svg>
-                                    </button>
-                                    <button @click="deleteRule(rule)" class="text-gray-400 hover:text-red-400" title="Delete Rule">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </div>
-            
-            <!-- Chains Page -->
-            <div x-show="currentPage === 'chains'">
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold">Chains & RPC Configuration</h1>
-                    <button @click="showNewChainModal = true" class="btn btn-primary">
-                        + Add Chain
-                    </button>
-                </div>
-                
-                <div class="space-y-4">
-                    <template x-for="chain in chains" :key="chain.chain_id">
-                        <div class="card p-5">
-                            <div class="flex items-start justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                                            <span x-text="chain.chain_name.charAt(0)"></span>
-                                        </div>
-                                        <h3 class="font-semibold" x-text="chain.chain_name"></h3>
-                                        <span class="text-xs px-2 py-1 rounded-full" 
-                                              :class="chain.status === 'connected' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
-                                              x-text="chain.status"></span>
-                                    </div>
-                                    <div class="text-sm text-gray-400 space-y-1">
-                                        <div class="font-mono text-xs truncate max-w-lg" x-text="chain.rpc_url"></div>
-                                        <div x-text="'Contracts: ' + (chain.bridge_contracts?.length || 0) + ' monitored'"></div>
-                                    </div>
-                                </div>
-                                <div class="flex items-center space-x-3">
-                                    <button @click="testChainConnection(chain)" class="btn btn-outline text-sm">
-                                        Test Connection
-                                    </button>
-                                    <button @click="editChain(chain)" class="text-gray-400 hover:text-white">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </div>
-            
-            <!-- Alerting Page -->
-            <div x-show="currentPage === 'alerting'">
-                <h1 class="text-2xl font-bold mb-6">Alerting Configuration</h1>
-                
-                <!-- Telegram -->
-                <div class="card p-6 mb-6">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                <span class="text-xl">📱</span>
-                            </div>
-                            <div>
-                                <h3 class="font-semibold">Telegram</h3>
-                                <p class="text-sm text-gray-400">Send alerts to Telegram channels</p>
-                            </div>
-                        </div>
-                        <div class="toggle" :class="{ active: alerting.telegram.enabled }" 
-                             @click="alerting.telegram.enabled = !alerting.telegram.enabled"></div>
-                    </div>
-                    
-                    <div x-show="alerting.telegram.enabled" class="space-y-4 pt-4 border-t border-gray-700">
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">Bot Token</label>
-                            <input type="password" x-model="alerting.telegram.bot_token" 
-                                   class="input-field" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">Critical Alert Channel ID</label>
-                            <input type="text" x-model="alerting.telegram.critical_channel" 
-                                   class="input-field" placeholder="-100123456789">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">General Alert Channel ID</label>
-                            <input type="text" x-model="alerting.telegram.general_channel" 
-                                   class="input-field" placeholder="-100987654321">
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Slack -->
-                <div class="card p-6 mb-6">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                <span class="text-xl">💬</span>
-                            </div>
-                            <div>
-                                <h3 class="font-semibold">Slack</h3>
-                                <p class="text-sm text-gray-400">Send alerts to Slack channels</p>
-                            </div>
-                        </div>
-                        <div class="toggle" :class="{ active: alerting.slack.enabled }" 
-                             @click="alerting.slack.enabled = !alerting.slack.enabled"></div>
-                    </div>
-                    
-                    <div x-show="alerting.slack.enabled" class="space-y-4 pt-4 border-t border-gray-700">
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">Webhook URL</label>
-                            <input type="password" x-model="alerting.slack.webhook_url" 
-                                   class="input-field" placeholder="https://hooks.slack.com/services/...">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">Critical Channel</label>
-                            <input type="text" x-model="alerting.slack.critical_channel" 
-                                   class="input-field" placeholder="#security-critical">
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Rate Limiting -->
-                <div class="card p-6 mb-6">
-                    <h3 class="font-semibold mb-4">Rate Limiting</h3>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">Min Alert Interval (seconds)</label>
-                            <input type="number" x-model="alerting.rate_limit.interval" 
-                                   class="input-field" placeholder="60">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2">Max Alerts Per Hour</label>
-                            <input type="number" x-model="alerting.rate_limit.max_per_hour" 
-                                   class="input-field" placeholder="50">
-                        </div>
-                    </div>
-                </div>
-                
-                <button @click="saveAlertingConfig()" class="btn btn-primary">
-                    💾 Save Alerting Configuration
+                <button @click="showNewRuleModal = true" class="btn btn-primary">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    New Rule
                 </button>
             </div>
-            
-            <!-- Logs Page -->
-            <div x-show="currentPage === 'logs'">
-                <h1 class="text-2xl font-bold mb-6">System Logs</h1>
-                
-                <div class="card p-4 font-mono text-sm bg-black/50 max-h-[600px] overflow-y-auto">
-                    <template x-for="log in logs" :key="log.id">
-                        <div class="py-1" :class="{
-                            'text-red-400': log.level === 'error',
-                            'text-yellow-400': log.level === 'warning',
-                            'text-green-400': log.level === 'info',
-                            'text-gray-400': log.level === 'debug'
-                        }">
-                            <span class="text-gray-600" x-text="log.timestamp"></span>
-                            <span class="mx-2" x-text="'[' + log.level.toUpperCase() + ']'"></span>
-                            <span x-text="log.message"></span>
+
+            <!-- Severity Filter -->
+            <div class="filter-tabs">
+                <button @click="ruleFilter = 'all'" class="filter-tab" :class="{ active: ruleFilter === 'all' }">All Rules</button>
+                <button @click="ruleFilter = 'critical'" class="filter-tab" :class="{ active: ruleFilter === 'critical' }">Critical</button>
+                <button @click="ruleFilter = 'high'" class="filter-tab" :class="{ active: ruleFilter === 'high' }">High</button>
+                <button @click="ruleFilter = 'medium'" class="filter-tab" :class="{ active: ruleFilter === 'medium' }">Medium</button>
+                <button @click="ruleFilter = 'low'" class="filter-tab" :class="{ active: ruleFilter === 'low' }">Low</button>
+            </div>
+
+            <!-- Rules List -->
+            <div class="rules-list">
+                <template x-for="rule in filteredRules" :key="rule.id">
+                    <div class="glass-card rule-card">
+                        <div class="rule-meta">
+                            <div class="rule-title-row">
+                                <span class="badge" :class="'badge-' + rule.severity" x-text="rule.severity"></span>
+                                <span class="rule-name" x-text="rule.name"></span>
+                            </div>
+                            <div class="rule-desc" x-text="rule.description"></div>
+                            <div class="rule-footer">
+                                <span class="font-mono" x-text="rule.id"></span>
+                                <span class="separator"></span>
+                                <span x-text="'Confidence: ' + (rule.confidence * 100) + '%'"></span>
+                            </div>
                         </div>
-                    </template>
+                        <div class="rule-actions">
+                            <div class="toggle" :class="{ active: rule.enabled }" @click="toggleRule(rule)"></div>
+                            <button @click="viewRuleYaml(rule)" class="icon-btn info" title="View YAML">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                                </svg>
+                            </button>
+                            <button @click="editRule(rule)" class="icon-btn" title="Edit Rule">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button @click="deleteRule(rule)" class="icon-btn danger" title="Delete Rule">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             CHAINS PAGE
+             ============================================================ -->
+        <div x-show="currentPage === 'chains'">
+
+            <div class="page-header" style="margin-bottom:20px;">
+                <div>
+                    <h1>Chains &amp; RPC Configuration</h1>
+                </div>
+                <button @click="showNewChainModal = true" class="btn btn-primary">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    Add Chain
+                </button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <template x-for="chain in chains" :key="chain.chain_id">
+                    <div class="glass-card chain-card">
+                        <div class="chain-info">
+                            <div class="chain-avatar" x-text="chain.chain_name.charAt(0)"></div>
+                            <div class="chain-details">
+                                <div class="chain-name-row">
+                                    <span class="chain-name" x-text="chain.chain_name"></span>
+                                    <span class="chain-status-badge"
+                                          :class="chain.status === 'connected' ? 'connected' : 'disconnected'">
+                                        <span class="status-dot" :class="chain.status"></span>
+                                        <span x-text="chain.status"></span>
+                                    </span>
+                                </div>
+                                <div class="chain-rpc" x-text="chain.rpc_url"></div>
+                                <div class="chain-contracts" x-text="'Contracts: ' + (chain.bridge_contracts?.length || 0) + ' monitored'"></div>
+                            </div>
+                        </div>
+                        <div class="chain-actions">
+                            <button @click="testChainConnection(chain)" class="btn btn-ghost" style="padding:8px 14px;">
+                                Test Connection
+                            </button>
+                            <button @click="editChain(chain)" class="icon-btn" title="Edit Chain">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             ALERTING PAGE
+             ============================================================ -->
+        <div x-show="currentPage === 'alerting'">
+
+            <div class="page-header" style="margin-bottom:20px;">
+                <div>
+                    <h1>Alerting Configuration</h1>
                 </div>
             </div>
-        </main>
-    </div>
-    
-    <!-- New Rule Modal -->
-    <div x-show="showNewRuleModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" x-cloak>
-        <div class="card w-full max-w-2xl max-h-[80vh] overflow-y-auto" @click.away="showNewRuleModal = false">
-            <div class="p-6 border-b border-gray-700">
-                <h2 class="text-xl font-bold">Create New Rule</h2>
+
+            <!-- Telegram -->
+            <div class="glass-card section-block">
+                <div class="glass-card-inner">
+                    <div class="integration-header">
+                        <div class="integration-info">
+                            <div class="integration-icon telegram">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:22px;height:22px;color:var(--s3-cyan);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="integration-name">Telegram</div>
+                                <div class="integration-desc">Send alerts to Telegram channels</div>
+                            </div>
+                        </div>
+                        <div class="toggle" :class="{ active: alerting.telegram.enabled }"
+                             @click="alerting.telegram.enabled = !alerting.telegram.enabled"></div>
+                    </div>
+
+                    <div x-show="alerting.telegram.enabled" class="integration-fields">
+                        <div>
+                            <label class="form-label">Bot Token</label>
+                            <input type="password" x-model="alerting.telegram.bot_token"
+                                   class="form-input" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                        </div>
+                        <div>
+                            <label class="form-label">Critical Alert Channel ID</label>
+                            <input type="text" x-model="alerting.telegram.critical_channel"
+                                   class="form-input" placeholder="-100123456789">
+                        </div>
+                        <div>
+                            <label class="form-label">General Alert Channel ID</label>
+                            <input type="text" x-model="alerting.telegram.general_channel"
+                                   class="form-input" placeholder="-100987654321">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="p-6 space-y-4">
-                <div class="grid grid-cols-2 gap-4">
+
+            <!-- Slack -->
+            <div class="glass-card section-block">
+                <div class="glass-card-inner">
+                    <div class="integration-header">
+                        <div class="integration-info">
+                            <div class="integration-icon slack">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:22px;height:22px;color:var(--s3-accent-light);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="integration-name">Slack</div>
+                                <div class="integration-desc">Send alerts to Slack channels</div>
+                            </div>
+                        </div>
+                        <div class="toggle" :class="{ active: alerting.slack.enabled }"
+                             @click="alerting.slack.enabled = !alerting.slack.enabled"></div>
+                    </div>
+
+                    <div x-show="alerting.slack.enabled" class="integration-fields">
+                        <div>
+                            <label class="form-label">Webhook URL</label>
+                            <input type="password" x-model="alerting.slack.webhook_url"
+                                   class="form-input" placeholder="https://hooks.slack.com/services/...">
+                        </div>
+                        <div>
+                            <label class="form-label">Critical Channel</label>
+                            <input type="text" x-model="alerting.slack.critical_channel"
+                                   class="form-input" placeholder="#security-critical">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rate Limiting -->
+            <div class="glass-card section-block">
+                <div class="glass-card-inner">
+                    <div class="section-title">Rate Limiting</div>
+                    <div class="form-grid-2">
+                        <div>
+                            <label class="form-label">Min Alert Interval (seconds)</label>
+                            <input type="number" x-model="alerting.rate_limit.interval"
+                                   class="form-input" placeholder="60">
+                        </div>
+                        <div>
+                            <label class="form-label">Max Alerts Per Hour</label>
+                            <input type="number" x-model="alerting.rate_limit.max_per_hour"
+                                   class="form-input" placeholder="50">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:8px;">
+                <button @click="saveAlertingConfig()" class="btn btn-primary">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                    Save Alerting Configuration
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             SYSTEM LOGS PAGE
+             ============================================================ -->
+        <div x-show="currentPage === 'logs'">
+
+            <div class="page-header" style="margin-bottom:20px;">
+                <div>
+                    <h1>System Logs</h1>
+                </div>
+            </div>
+
+            <div class="log-console">
+                <template x-for="log in logs" :key="log.id">
+                    <div class="log-line" :class="{
+                        'error': log.level === 'error',
+                        'warning': log.level === 'warning',
+                        'info': log.level === 'info',
+                        'debug': log.level === 'debug'
+                    }">
+                        <span class="log-ts" x-text="log.timestamp"></span>
+                        <span class="log-level" x-text="'[' + log.level.toUpperCase() + ']'"></span>
+                        <span x-text="log.message"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ================================================================
+         NEW RULE MODAL
+         ================================================================ -->
+    <div x-show="showNewRuleModal" class="modal-backdrop" x-cloak>
+        <div class="modal-card" @click.away="showNewRuleModal = false">
+            <div class="modal-header">
+                <h2>Create New Rule</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid-2">
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Rule ID</label>
-                        <input type="text" x-model="newRule.id" class="input-field" placeholder="my-rule-001">
+                        <label class="form-label">Rule ID</label>
+                        <input type="text" x-model="newRule.id" class="form-input" placeholder="my-rule-001">
                     </div>
                     <div>
-                        <label class="block text-sm text-gray-400 mb-2">Severity</label>
-                        <select x-model="newRule.severity" class="input-field">
+                        <label class="form-label">Severity</label>
+                        <select x-model="newRule.severity" class="form-input">
                             <option value="critical">Critical</option>
                             <option value="high">High</option>
                             <option value="medium">Medium</option>
@@ -625,20 +1184,20 @@
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">Name</label>
-                    <input type="text" x-model="newRule.name" class="input-field" placeholder="My Custom Detection Rule">
+                    <label class="form-label">Name</label>
+                    <input type="text" x-model="newRule.name" class="form-input" placeholder="My Custom Detection Rule">
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">Description</label>
-                    <textarea x-model="newRule.description" class="input-field h-20" placeholder="Describe what this rule detects..."></textarea>
+                    <label class="form-label">Description</label>
+                    <textarea x-model="newRule.description" class="form-input" style="height:80px;" placeholder="Describe what this rule detects..."></textarea>
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">Confidence (0-1)</label>
-                    <input type="number" step="0.1" min="0" max="1" x-model="newRule.confidence" class="input-field" placeholder="0.8">
+                    <label class="form-label">Confidence (0-1)</label>
+                    <input type="number" step="0.1" min="0" max="1" x-model="newRule.confidence" class="form-input" placeholder="0.8">
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">YAML Detection Logic</label>
-                    <textarea x-model="newRule.yaml" class="input-field yaml-editor h-48" placeholder="detection:
+                    <label class="form-label">YAML Detection Logic</label>
+                    <textarea x-model="newRule.yaml" class="yaml-editor" style="width:100%;height:200px;" placeholder="detection:
   type: event
   event_type: Transfer
   conditions:
@@ -647,49 +1206,52 @@
       value: 1000000"></textarea>
                 </div>
             </div>
-            <div class="p-6 border-t border-gray-700 flex justify-end space-x-3">
-                <button @click="showNewRuleModal = false" class="btn btn-outline">Cancel</button>
+            <div class="modal-footer">
+                <button @click="showNewRuleModal = false" class="btn btn-ghost">Cancel</button>
                 <button @click="createRule()" class="btn btn-primary">Create Rule</button>
             </div>
         </div>
     </div>
-    
-    <!-- YAML View Modal -->
-    <div x-show="showYamlModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" x-cloak>
-        <div class="card w-full max-w-3xl max-h-[80vh] overflow-y-auto" @click.away="showYamlModal = false">
-            <div class="p-6 border-b border-gray-700 flex items-center justify-between">
+
+    <!-- ================================================================
+         YAML VIEW MODAL
+         ================================================================ -->
+    <div x-show="showYamlModal" class="modal-backdrop" x-cloak>
+        <div class="modal-card wide" @click.away="showYamlModal = false">
+            <div class="modal-header">
                 <div>
-                    <h2 class="text-xl font-bold" x-text="viewingRule?.name"></h2>
-                    <span class="text-sm text-gray-400 font-mono" x-text="viewingRule?.id"></span>
+                    <h2 x-text="viewingRule?.name"></h2>
+                    <div style="font-size:12px;color:var(--s3-text-3);font-family:'JetBrains Mono',monospace;margin-top:2px;" x-text="viewingRule?.id"></div>
                 </div>
                 <span class="badge" :class="'badge-' + viewingRule?.severity" x-text="viewingRule?.severity"></span>
             </div>
-            <div class="p-6">
-                <div class="mb-4">
-                    <label class="block text-sm text-gray-400 mb-2">📋 Detection Logic (YAML)</label>
-                    <pre class="yaml-editor p-4 rounded-lg overflow-x-auto text-sm" x-text="viewingRule?.yaml"></pre>
+            <div class="modal-body">
+                <div>
+                    <label class="form-label">Detection Logic (YAML)</label>
+                    <pre class="yaml-editor" style="overflow-x:auto;" x-text="viewingRule?.yaml"></pre>
                 </div>
-                <div class="grid grid-cols-3 gap-4 text-sm">
-                    <div class="p-3 bg-gray-800/50 rounded-lg">
-                        <div class="text-gray-400">Confidence</div>
-                        <div class="font-semibold" x-text="(viewingRule?.confidence * 100) + '%'"></div>
+                <div class="info-grid-3">
+                    <div class="info-cell">
+                        <div class="info-label">Confidence</div>
+                        <div class="info-value" x-text="(viewingRule?.confidence * 100) + '%'"></div>
                     </div>
-                    <div class="p-3 bg-gray-800/50 rounded-lg">
-                        <div class="text-gray-400">Source File</div>
-                        <div class="font-mono text-xs" x-text="viewingRule?._file || 'custom'"></div>
+                    <div class="info-cell">
+                        <div class="info-label">Source File</div>
+                        <div class="info-value font-mono" style="font-size:11px;" x-text="viewingRule?._file || 'custom'"></div>
                     </div>
-                    <div class="p-3 bg-gray-800/50 rounded-lg">
-                        <div class="text-gray-400">Status</div>
-                        <div class="font-semibold" :class="viewingRule?.enabled ? 'text-green-400' : 'text-red-400'" x-text="viewingRule?.enabled ? 'Enabled' : 'Disabled'"></div>
+                    <div class="info-cell">
+                        <div class="info-label">Status</div>
+                        <div class="info-value" :style="viewingRule?.enabled ? 'color:var(--s3-low)' : 'color:var(--s3-critical)'" x-text="viewingRule?.enabled ? 'Enabled' : 'Disabled'"></div>
                     </div>
                 </div>
             </div>
-            <div class="p-6 border-t border-gray-700 flex justify-end space-x-3">
-                <button @click="showYamlModal = false" class="btn btn-outline">Close</button>
+            <div class="modal-footer">
+                <button @click="showYamlModal = false" class="btn btn-ghost">Close</button>
                 <button @click="showYamlModal = false; editRule(viewingRule)" class="btn btn-primary">Edit Rule</button>
             </div>
         </div>
     </div>
+
 </div><!-- /app -->
 
     <script>
@@ -702,30 +1264,30 @@
                 viewingRule: null,
                 ruleFilter: 'all',
                 notification: { show: false, message: '', type: 'success' },
-                
+
                 // Auth state
                 currentUser: null,
                 authToken: null,
                 isAuthenticated: false,
-                
+
                 stats: {
                     totalRules: 17,
                     enabledRules: 17,
                     activeChains: 3,
                     eventsToday: 0
                 },
-                
+
                 rules: [],
                 chains: [],
                 logs: [],
                 recentTriggers: [],
-                
+
                 alerting: {
                     telegram: { enabled: false, bot_token: '', critical_channel: '', general_channel: '' },
                     slack: { enabled: false, webhook_url: '', critical_channel: '#security-critical' },
                     rate_limit: { interval: 60, max_per_hour: 50 }
                 },
-                
+
                 newRule: {
                     id: '',
                     name: '',
@@ -734,72 +1296,72 @@
                     confidence: 0.7,
                     yaml: ''
                 },
-                
+
                 get filteredRules() {
                     if (this.ruleFilter === 'all') return this.rules;
                     return this.rules.filter(r => r.severity === this.ruleFilter);
                 },
-                
+
                 async checkAuth() {
                     const token = localStorage.getItem('xdr_token');
                     const user = localStorage.getItem('xdr_user');
-                    
+
                     if (!token) {
                         window.location.href = '/frontend/login.html';
                         return;
                     }
-                    
+
                     // Verify token is valid
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/auth/verify', {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
-                        
+
                         if (!res.ok) {
                             localStorage.removeItem('xdr_token');
                             localStorage.removeItem('xdr_user');
                             window.location.href = '/frontend/login.html';
                             return;
                         }
-                        
+
                         this.authToken = token;
                         this.currentUser = user ? JSON.parse(user) : null;
                         this.isAuthenticated = true;
-                        
+
                         // Initialize the rest
                         await this.init();
                     } catch (e) {
                         window.location.href = '/frontend/login.html';
                     }
                 },
-                
+
                 logout() {
                     localStorage.removeItem('xdr_token');
                     localStorage.removeItem('xdr_user');
                     window.location.href = '/frontend/login.html';
                 },
-                
+
                 getAuthHeaders() {
                     return {
                         'Authorization': `Bearer ${this.authToken}`,
                         'Content-Type': 'application/json'
                     };
                 },
-                
+
                 async init() {
                     await this.loadRules();
                     await this.loadChains();
                     await this.loadStats();
                     await this.loadAlertingConfig();
                     await this.loadLogs();
-                    
+
                     // Refresh stats and triggers periodically
                     setInterval(() => {
                         this.loadStats();
                         this.loadLogs();
                     }, 10000);
                 },
-                
+
                 async loadRules() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rules');
@@ -854,7 +1416,7 @@
                     this.stats.totalRules = this.rules.length;
                     this.stats.enabledRules = this.rules.filter(r => r.enabled).length;
                 },
-                
+
                 async loadChains() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/chains');
@@ -869,7 +1431,7 @@
                         ];
                     }
                 },
-                
+
                 async loadStats() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/stats');
@@ -880,7 +1442,7 @@
                         }
                     } catch (e) {}
                 },
-                
+
                 async loadAlertingConfig() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/alerting');
@@ -889,7 +1451,7 @@
                         }
                     } catch (e) {}
                 },
-                
+
                 async loadLogs() {
                     this.logs = [
                         { id: 1, timestamp: new Date().toLocaleTimeString(), level: 'info', message: `Rule engine loaded ${this.rules.length} rules from 4 files` },
@@ -898,7 +1460,7 @@
                         { id: 4, timestamp: new Date().toLocaleTimeString(), level: 'info', message: 'Connected to Arbitrum' },
                         { id: 5, timestamp: new Date().toLocaleTimeString(), level: 'info', message: 'Loaded DeFi protocol rules: Aave, Uniswap, Compound, MakerDAO, Curve, Lido' },
                     ];
-                    
+
                     // Load recent rule triggers from API
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rule-triggers?limit=10');
@@ -914,7 +1476,7 @@
                         this.recentTriggers = [];
                     }
                 },
-                
+
                 viewRuleYaml(rule) {
                     this.viewingRule = {
                         ...rule,
@@ -922,7 +1484,7 @@
                     };
                     this.showYamlModal = true;
                 },
-                
+
                 async toggleRule(rule) {
                     rule.enabled = !rule.enabled;
                     try {
@@ -932,22 +1494,22 @@
                         this.showNotification('Failed to update rule', 'error');
                     }
                 },
-                
+
                 editRule(rule) {
                     // Convert rule to editable format with YAML
-                    this.newRule = { 
+                    this.newRule = {
                         ...rule,
                         yaml: this.getDetectionYaml(rule)
                     };
                     this.showNewRuleModal = true;
                 },
-                
+
                 getDetectionYaml(rule) {
                     // Generate YAML from rule's detection logic
                     if (rule.detection) {
                         return this.objectToYaml(rule.detection, 0);
                     }
-                    
+
                     // Generate based on rule type
                     const yamlTemplates = {
                         'unbacked-mint-001': `detection:
@@ -991,7 +1553,7 @@ schedule:
   interval: 300`,
                         'large-bridge-transfer-101': `detection:
   type: event
-  event_type: 
+  event_type:
     - Lock
     - Mint
     - Transfer
@@ -1110,7 +1672,7 @@ time_window: 1h`,
     critical: 500
 time_window: 1m`,
                     };
-                    
+
                     return yamlTemplates[rule.id] || `detection:
   type: event
   event_type: Transfer
@@ -1119,7 +1681,7 @@ time_window: 1m`,
       operator: gt
       value: 100000`;
                 },
-                
+
                 objectToYaml(obj, indent) {
                     let yaml = '';
                     const spaces = '  '.repeat(indent);
@@ -1141,7 +1703,7 @@ time_window: 1m`,
                     }
                     return yaml;
                 },
-                
+
                 async deleteRule(rule) {
                     if (!confirm(`Delete rule "${rule.name}"?`)) return;
                     try {
@@ -1152,7 +1714,7 @@ time_window: 1m`,
                         this.showNotification('Failed to delete rule', 'error');
                     }
                 },
-                
+
                 async createRule() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rules', {
@@ -1169,7 +1731,7 @@ time_window: 1m`,
                         this.showNotification('Failed to create rule', 'error');
                     }
                 },
-                
+
                 async testChainConnection(chain) {
                     this.showNotification(`Testing ${chain.chain_name}...`, 'warning');
                     // Simulate test
@@ -1178,11 +1740,11 @@ time_window: 1m`,
                         this.showNotification(`${chain.chain_name} connected successfully`, 'success');
                     }, 1000);
                 },
-                
+
                 editChain(chain) {
                     // TODO: Open chain edit modal
                 },
-                
+
                 async saveAlertingConfig() {
                     try {
                         await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/alerting', {
@@ -1195,7 +1757,7 @@ time_window: 1m`,
                         this.showNotification('Failed to save configuration', 'error');
                     }
                 },
-                
+
                 async reloadRules() {
                     try {
                         await fetch((window.SENTINEL3_API_BASE || '') + '/api/admin/rules/reload', { method: 'POST' });
@@ -1205,11 +1767,11 @@ time_window: 1m`,
                         this.showNotification('Failed to reload rules', 'error');
                     }
                 },
-                
+
                 async testAlert() {
                     this.showNotification('Test alert sent!', 'success');
                 },
-                
+
                 exportConfig() {
                     const config = { rules: this.rules, chains: this.chains, alerting: this.alerting };
                     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -1219,7 +1781,7 @@ time_window: 1m`,
                     a.download = 'xdr-config.json';
                     a.click();
                 },
-                
+
                 showNotification(message, type = 'success') {
                     this.notification = { show: true, message, type };
                     setTimeout(() => { this.notification.show = false; }, 3000);
@@ -1229,4 +1791,3 @@ time_window: 1m`,
     </script>
 </body>
 </html>
-

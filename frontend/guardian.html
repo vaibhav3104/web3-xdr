@@ -4,634 +4,780 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guardian System - Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
-    <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a1f2e;
-            --bg-hover: #252b3d;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --accent-cyan: #06b6d4;
-            --border-color: #1e293b;
-            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --gradient-shield: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
             min-height: 100vh;
         }
 
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* ── Scrollbar ─────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+        /* ── Glass Card ────────────────────────────────── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover {
+            border-color: rgba(255,255,255,0.1);
         }
 
-        /* Header */
-        .header {
+        /* ── Header Bar ────────────────────────────────── */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
         }
-
-        .header h1 {
-            font-size: 1.75rem;
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .s3-header-title {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 12px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .s3-header-title svg {
+            width: 20px; height: 20px;
+            color: var(--s3-accent);
         }
 
-        .header h1 .icon {
-            font-size: 2rem;
-        }
-
+        /* ── Status Badge ──────────────────────────────── */
         .status-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            border-radius: 2rem;
-            font-size: 0.85rem;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
             font-weight: 600;
+            letter-spacing: 0.03em;
         }
-
         .status-badge.active {
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--accent-green);
-            border: 1px solid var(--accent-green);
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--s3-low);
+            border: 1px solid rgba(16, 185, 129, 0.25);
         }
-
         .status-badge.inactive {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--accent-red);
-            border: 1px solid var(--accent-red);
+            background: rgba(244, 63, 94, 0.12);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244, 63, 94, 0.25);
         }
-
         .status-dot {
-            width: 8px;
-            height: 8px;
+            width: 7px; height: 7px;
             border-radius: 50%;
-            animation: pulse 2s infinite;
+            animation: pulse-dot 2s ease-in-out infinite;
         }
+        .status-badge.active .status-dot { background: var(--s3-low); }
+        .status-badge.inactive .status-dot { background: var(--s3-critical); }
 
-        .status-badge.active .status-dot {
-            background: var(--accent-green);
-        }
-
-        .status-badge.inactive .status-dot {
-            background: var(--accent-red);
-        }
-
-        @keyframes pulse {
+        @keyframes pulse-dot {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            50% { opacity: 0.4; }
         }
 
-        /* Stats Grid */
+        /* ── Page Container ────────────────────────────── */
+        .page-container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 28px;
+        }
+
+        /* ── Emergency Banner ──────────────────────────── */
+        .emergency-banner {
+            background: rgba(244, 63, 94, 0.06);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(244, 63, 94, 0.18);
+            border-radius: var(--s3-radius);
+            padding: 18px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .emergency-banner::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            border-radius: var(--s3-radius) var(--s3-radius) 0 0;
+        }
+        .emergency-banner-info {
+            display: flex; align-items: center; gap: 14px;
+        }
+        .emergency-icon {
+            width: 40px; height: 40px;
+            border-radius: var(--s3-radius-sm);
+            background: rgba(244, 63, 94, 0.15);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .emergency-icon svg {
+            width: 20px; height: 20px; color: var(--s3-critical);
+        }
+        .emergency-banner h3 {
+            font-size: 14px; font-weight: 600;
+            color: var(--s3-critical);
+            margin-bottom: 2px;
+        }
+        .emergency-banner p {
+            font-size: 12px;
+            color: var(--s3-text-2);
+        }
+
+        /* ── Stats Grid ────────────────────────────────── */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
         }
+        @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px)  { .stats-grid { grid-template-columns: 1fr; } }
 
         .stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
+            position: relative;
+            overflow: hidden;
+            padding: 20px;
         }
-
-        .stat-card .icon {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: var(--s3-radius) var(--s3-radius) 0 0;
         }
+        .stat-card.accent-violet::before { background: linear-gradient(90deg, var(--s3-accent), transparent); }
+        .stat-card.accent-amber::before  { background: linear-gradient(90deg, var(--s3-medium), transparent); }
+        .stat-card.accent-green::before  { background: linear-gradient(90deg, var(--s3-low), transparent); }
+        .stat-card.accent-cyan::before   { background: linear-gradient(90deg, var(--s3-cyan), transparent); }
 
-        .stat-card .value {
-            font-size: 2rem;
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--s3-text-3);
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        .stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px;
             font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -0.03em;
+            line-height: 1;
         }
+        .stat-card.accent-violet .stat-value { color: var(--s3-accent-light); }
+        .stat-card.accent-amber  .stat-value { color: var(--s3-medium); }
+        .stat-card.accent-green  .stat-value { color: var(--s3-low); }
+        .stat-card.accent-cyan   .stat-value { color: var(--s3-cyan); }
 
-        .stat-card .label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 0.25rem;
+        .stat-icon {
+            position: absolute;
+            top: 16px; right: 16px;
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0.5;
         }
+        .stat-icon svg { width: 16px; height: 16px; }
+        .stat-card.accent-violet .stat-icon { background: rgba(139,92,246,0.12); color: var(--s3-accent); }
+        .stat-card.accent-amber  .stat-icon { background: rgba(234,179,8,0.12);  color: var(--s3-medium); }
+        .stat-card.accent-green  .stat-icon { background: rgba(16,185,129,0.12); color: var(--s3-low); }
+        .stat-card.accent-cyan   .stat-icon { background: rgba(34,211,238,0.12); color: var(--s3-cyan); }
 
-        /* Grid Layout */
+        /* ── Main Grid ─────────────────────────────────── */
         .main-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
+            gap: 20px;
         }
+        @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
 
-        @media (max-width: 1200px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-            }
-        }
+        .full-width { grid-column: 1 / -1; }
 
-        /* Cards */
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        .card-header {
-            background: var(--bg-secondary);
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border-color);
+        /* ── Panel (Card) ──────────────────────────────── */
+        .panel-head {
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .panel-title {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: #e2e8f0;
+        }
+        .panel-icon {
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .panel-icon svg { width: 15px; height: 15px; }
+        .panel-icon.violet { background: rgba(139,92,246,0.12); color: var(--s3-accent); }
+        .panel-icon.amber  { background: rgba(234,179,8,0.12); color: var(--s3-medium); }
+        .panel-icon.green  { background: rgba(16,185,129,0.12); color: var(--s3-low); }
+        .panel-icon.cyan   { background: rgba(34,211,238,0.12); color: var(--s3-cyan); }
+        .panel-icon.red    { background: rgba(244,63,94,0.12); color: var(--s3-critical); }
+
+        .panel-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background: rgba(234,179,8,0.1);
+            color: var(--s3-medium);
+            border: 1px solid rgba(234,179,8,0.2);
         }
 
-        .card-header h3 {
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .card-body {
-            padding: 1.5rem;
-            max-height: 400px;
+        .panel-body {
+            padding: 16px 20px;
+            max-height: 420px;
             overflow-y: auto;
         }
 
-        /* Pending Actions */
-        .pending-action {
-            background: var(--bg-secondary);
-            border: 1px solid var(--accent-yellow);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+        /* ── Pending Action Item ───────────────────────── */
+        .pending-item {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(234,179,8,0.15);
+            border-radius: var(--s3-radius-sm);
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
         }
+        .pending-item:last-child { margin-bottom: 0; }
+        .pending-item:hover { border-color: rgba(234,179,8,0.3); }
 
-        .pending-action:last-child {
-            margin-bottom: 0;
-        }
-
-        .pending-action .header {
+        .pending-head {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 0.75rem;
+            margin-bottom: 12px;
         }
-
-        .pending-action .title {
+        .pending-action-label {
+            font-size: 13px;
             font-weight: 600;
-            color: var(--accent-yellow);
+            color: var(--s3-medium);
+        }
+        .pending-id {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            font-family: 'JetBrains Mono', monospace;
+            margin-top: 2px;
         }
 
-        .pending-action .severity {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-weight: 600;
+        .severity-tag {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+        .severity-tag.critical {
+            background: rgba(244, 63, 94, 0.15);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244, 63, 94, 0.25);
+        }
+        .severity-tag.high {
+            background: rgba(249, 115, 22, 0.15);
+            color: var(--s3-high);
+            border: 1px solid rgba(249, 115, 22, 0.25);
         }
 
-        .pending-action .severity.critical {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--accent-red);
+        .pending-details {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            margin-bottom: 14px;
+            line-height: 1.7;
+        }
+        .pending-details strong {
+            color: var(--s3-text);
+            font-weight: 500;
         }
 
-        .pending-action .details {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-bottom: 1rem;
-        }
-
-        .pending-action .details p {
-            margin-bottom: 0.25rem;
-        }
-
-        .pending-action .actions {
+        .pending-actions {
             display: flex;
-            gap: 0.75rem;
+            gap: 10px;
         }
 
-        /* Protocol List */
+        /* ── Protocol Item ─────────────────────────────── */
         .protocol-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            margin-bottom: 0.75rem;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: var(--s3-radius-sm);
+            margin-bottom: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-
-        .protocol-item:last-child {
-            margin-bottom: 0;
+        .protocol-item:last-child { margin-bottom: 0; }
+        .protocol-item:hover {
+            border-color: rgba(139,92,246,0.2);
+            box-shadow: 0 0 16px rgba(139,92,246,0.05);
         }
 
         .protocol-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+            display: flex; align-items: center; gap: 12px;
         }
-
-        .protocol-icon {
-            width: 40px;
-            height: 40px;
-            background: var(--gradient-shield);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.25rem;
+        .protocol-icon-wrap {
+            width: 38px; height: 38px;
+            border-radius: var(--s3-radius-sm);
+            background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(34,211,238,0.1));
+            border: 1px solid rgba(139,92,246,0.15);
+            display: flex; align-items: center; justify-content: center;
         }
-
+        .protocol-icon-wrap svg { width: 18px; height: 18px; color: var(--s3-accent-light); }
         .protocol-name {
+            font-size: 13px;
             font-weight: 600;
+            color: var(--s3-text);
         }
-
         .protocol-chain {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
+            font-size: 11px;
+            color: var(--s3-text-3);
+            font-family: 'JetBrains Mono', monospace;
+            margin-top: 2px;
         }
-
         .protocol-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .auto-pause-tag {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: rgba(16,185,129,0.1);
+            color: var(--s3-low);
+            border: 1px solid rgba(16,185,129,0.2);
         }
 
-        .auto-pause-badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--accent-green);
-        }
-
-        /* Response History */
+        /* ── History Item ──────────────────────────────── */
         .history-item {
             display: flex;
-            gap: 1rem;
-            padding: 1rem;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            margin-bottom: 0.75rem;
-            border-left: 3px solid var(--border-color);
+            gap: 14px;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: var(--s3-radius-sm);
+            margin-bottom: 10px;
+            border-left: 3px solid var(--s3-text-3);
+            transition: border-color 0.2s;
         }
+        .history-item:last-child { margin-bottom: 0; }
+        .history-item.success { border-left-color: var(--s3-low); }
+        .history-item.failed  { border-left-color: var(--s3-critical); }
+        .history-item.pending { border-left-color: var(--s3-medium); }
 
-        .history-item.success {
-            border-left-color: var(--accent-green);
-        }
-
-        .history-item.failed {
-            border-left-color: var(--accent-red);
-        }
-
-        .history-item.pending {
-            border-left-color: var(--accent-yellow);
-        }
-
-        .history-icon {
-            width: 36px;
-            height: 36px;
+        .history-status-icon {
+            width: 34px; height: 34px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
+            display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
+            font-size: 14px;
+        }
+        .history-item.success .history-status-icon {
+            background: rgba(16,185,129,0.12);
+        }
+        .history-item.failed .history-status-icon {
+            background: rgba(244,63,94,0.12);
+        }
+        .history-item.pending .history-status-icon {
+            background: rgba(234,179,8,0.12);
         }
 
-        .history-item.success .history-icon {
-            background: rgba(16, 185, 129, 0.2);
-        }
-
-        .history-item.failed .history-icon {
-            background: rgba(239, 68, 68, 0.2);
-        }
-
-        .history-details {
-            flex: 1;
-        }
-
+        .history-details { flex: 1; min-width: 0; }
         .history-title {
+            font-size: 13px;
             font-weight: 600;
-            margin-bottom: 0.25rem;
+            color: var(--s3-text);
+            margin-bottom: 4px;
         }
-
         .history-meta {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
+            font-size: 11px;
+            color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
         }
-
         .history-time {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: 0.25rem;
+            font-size: 11px;
+            color: var(--s3-text-3);
+            margin-top: 4px;
         }
 
-        /* Buttons */
+        /* ── Buttons ───────────────────────────────────── */
         .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             border: none;
             transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-family: 'Inter', sans-serif;
         }
+        .btn:active { transform: scale(0.97); }
 
         .btn-approve {
-            background: var(--accent-green);
-            color: white;
+            background: rgba(16,185,129,0.15);
+            color: var(--s3-low);
+            border: 1px solid rgba(16,185,129,0.25);
         }
-
         .btn-approve:hover {
-            background: #059669;
+            background: rgba(16,185,129,0.25);
+            box-shadow: 0 0 16px rgba(16,185,129,0.1);
         }
 
         .btn-reject {
             background: transparent;
-            border: 1px solid var(--accent-red);
-            color: var(--accent-red);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244,63,94,0.25);
         }
-
         .btn-reject:hover {
-            background: rgba(239, 68, 68, 0.1);
+            background: rgba(244,63,94,0.1);
         }
 
         .btn-primary {
-            background: var(--gradient-shield);
-            color: white;
+            background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(139,92,246,0.1));
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139,92,246,0.25);
         }
-
         .btn-primary:hover {
-            opacity: 0.9;
+            background: linear-gradient(135deg, rgba(139,92,246,0.3), rgba(139,92,246,0.15));
+            box-shadow: 0 0 20px rgba(139,92,246,0.1);
         }
 
         .btn-secondary {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
+            background: rgba(255,255,255,0.04);
+            color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
+        }
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.07);
+            color: var(--s3-text);
         }
 
         .btn-danger {
-            background: var(--accent-red);
-            color: white;
+            background: rgba(244,63,94,0.15);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244,63,94,0.3);
+        }
+        .btn-danger:hover {
+            background: rgba(244,63,94,0.25);
+            box-shadow: 0 0 20px rgba(244,63,94,0.1);
         }
 
-        /* Register Protocol Modal */
+        /* ── Modal ─────────────────────────────────────── */
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(3, 3, 5, 0.8);
+            backdrop-filter: blur(8px);
             display: none;
             align-items: center;
             justify-content: center;
             z-index: 1000;
         }
-
-        .modal-overlay.active {
-            display: flex;
-        }
+        .modal-overlay.active { display: flex; }
 
         .modal {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
             width: 100%;
             max-width: 500px;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06);
         }
 
         .modal-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid var(--border-color);
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-
         .modal-header h3 {
-            font-size: 1.25rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-
         .modal-close {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            width: 32px; height: 32px;
+            color: var(--s3-text-2);
+            font-size: 18px;
             cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .modal-close:hover {
+            background: rgba(255,255,255,0.08);
+            color: var(--s3-text);
         }
 
-        .modal-body {
-            padding: 1.5rem;
-        }
+        .modal-body { padding: 24px; }
 
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
+        .form-group { margin-bottom: 16px; }
         .form-group label {
             display: block;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--s3-text-3);
+            font-weight: 500;
+            margin-bottom: 8px;
         }
-
-        .form-group input, .form-group select {
+        .form-group input,
+        .form-group select {
             width: 100%;
-            padding: 0.75rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.9rem;
+            padding: 10px 14px;
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text);
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-
-        .form-group input:focus, .form-group select:focus {
+        .form-group input::placeholder {
+            color: var(--s3-text-3);
+        }
+        .form-group input:focus,
+        .form-group select:focus {
             outline: none;
-            border-color: var(--accent-green);
+            border-color: rgba(139,92,246,0.4);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
+        }
+        .form-group select option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
         }
 
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1rem;
+            gap: 16px;
         }
 
         .checkbox-group {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 8px;
         }
-
         .checkbox-group input[type="checkbox"] {
-            width: auto;
+            width: 16px; height: 16px;
+            accent-color: var(--s3-accent);
+            cursor: pointer;
+        }
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-size: 12px;
+            color: var(--s3-text-2);
+            text-transform: none;
+            letter-spacing: 0;
+            cursor: pointer;
         }
 
         .modal-footer {
-            padding: 1rem 1.5rem;
-            border-top: 1px solid var(--border-color);
+            padding: 16px 24px;
+            border-top: 1px solid rgba(255,255,255,0.04);
             display: flex;
             justify-content: flex-end;
-            gap: 0.75rem;
+            gap: 10px;
         }
 
-        /* Empty State */
+        /* ── Warning box inside modal ──────────────────── */
+        .warning-box {
+            background: rgba(244,63,94,0.06);
+            border: 1px solid rgba(244,63,94,0.15);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px;
+            margin-top: 16px;
+        }
+        .warning-box p {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            line-height: 1.6;
+        }
+        .warning-box strong {
+            color: var(--s3-critical);
+        }
+
+        /* ── Empty State ───────────────────────────────── */
         .empty-state {
             text-align: center;
-            padding: 3rem;
-            color: var(--text-secondary);
+            padding: 40px 20px;
         }
-
-        .empty-state .icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        /* Full Width Section */
-        .full-width {
-            grid-column: 1 / -1;
-        }
-
-        /* Emergency Button */
-        .emergency-section {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+        .empty-state-icon {
+            width: 48px; height: 48px;
+            margin: 0 auto 14px;
             border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.04);
         }
-
-        .emergency-info h3 {
-            color: var(--accent-red);
-            margin-bottom: 0.25rem;
+        .empty-state-icon svg {
+            width: 22px; height: 22px;
+            color: var(--s3-text-3);
         }
-
-        .emergency-info p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
+        .empty-state p {
+            font-size: 13px;
+            color: var(--s3-text-3);
         }
     </style>
 </head>
 <body>
     <div id="app" style="flex:1;min-width:0;">
-    <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-        <h1 class="text-lg font-semibold">Guardian</h1>
+
+    <!-- Sticky Header -->
+    <header class="s3-header">
+        <div class="s3-header-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            Guardian
+        </div>
+        <div id="guardianStatus" class="status-badge inactive">
+            <span class="status-dot"></span>
+            <span>Checking...</span>
+        </div>
     </header>
 
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>
-                <span class="icon">🛡️</span>
-                Guardian System
-            </h1>
-            <div id="guardianStatus" class="status-badge inactive">
-                <span class="status-dot"></span>
-                <span>Checking...</span>
-            </div>
-        </div>
+    <div class="page-container">
 
-        <!-- Emergency Section -->
-        <div class="emergency-section">
-            <div class="emergency-info">
-                <h3>⚠️ Emergency Controls</h3>
-                <p>Manually pause a registered protocol in case of emergency</p>
+        <!-- Emergency Banner -->
+        <div class="emergency-banner">
+            <div class="emergency-banner-info">
+                <div class="emergency-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3>Emergency Controls</h3>
+                    <p>Manually pause a registered protocol in case of emergency</p>
+                </div>
             </div>
             <button class="btn btn-danger" onclick="showEmergencyPause()">
-                🚨 Emergency Pause
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                </svg>
+                Emergency Pause
             </button>
         </div>
 
-        <!-- Stats -->
+        <!-- Stats Grid -->
         <div class="stats-grid">
-            <div class="stat-card">
-                <div class="icon">🏛️</div>
-                <div class="value" id="protocolCount">0</div>
-                <div class="label">Protected Protocols</div>
+            <div class="glass stat-card accent-violet">
+                <div class="stat-label">Protected Protocols</div>
+                <div class="stat-value" id="protocolCount">0</div>
+                <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="icon">⏳</div>
-                <div class="value" id="pendingCount">0</div>
-                <div class="label">Pending Approvals</div>
+            <div class="glass stat-card accent-amber">
+                <div class="stat-label">Pending Approvals</div>
+                <div class="stat-value" id="pendingCount">0</div>
+                <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="icon">✅</div>
-                <div class="value" id="successCount">0</div>
-                <div class="label">Successful Pauses</div>
+            <div class="glass stat-card accent-green">
+                <div class="stat-label">Successful Pauses</div>
+                <div class="stat-value" id="successCount">0</div>
+                <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="icon">📊</div>
-                <div class="value" id="totalResponses">0</div>
-                <div class="label">Total Responses</div>
+            <div class="glass stat-card accent-cyan">
+                <div class="stat-label">Total Responses</div>
+                <div class="stat-value" id="totalResponses">0</div>
+                <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </div>
             </div>
         </div>
 
         <!-- Main Grid -->
         <div class="main-grid">
+
             <!-- Pending Approvals -->
-            <div class="card">
-                <div class="card-header">
-                    <h3>⏳ Pending Approvals</h3>
-                    <span id="pendingBadge" class="auto-pause-badge" style="display: none;">0 pending</span>
+            <div class="glass">
+                <div class="panel-head">
+                    <div class="panel-title">
+                        <div class="panel-icon amber">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        Pending Approvals
+                    </div>
+                    <span id="pendingBadge" class="panel-badge" style="display: none;">0 pending</span>
                 </div>
-                <div class="card-body" id="pendingList">
+                <div class="panel-body" id="pendingList">
                     <div class="empty-state">
-                        <div class="icon">✅</div>
+                        <div class="empty-state-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
                         <p>No pending approvals</p>
                     </div>
                 </div>
             </div>
 
             <!-- Registered Protocols -->
-            <div class="card">
-                <div class="card-header">
-                    <h3>🏛️ Protected Protocols</h3>
+            <div class="glass">
+                <div class="panel-head">
+                    <div class="panel-title">
+                        <div class="panel-icon violet">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        </div>
+                        Protected Protocols
+                    </div>
                     <button class="btn btn-primary" onclick="showRegisterModal()">
-                        + Add Protocol
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        Add Protocol
                     </button>
                 </div>
-                <div class="card-body" id="protocolList">
+                <div class="panel-body" id="protocolList">
                     <div class="empty-state">
-                        <div class="icon">🏛️</div>
+                        <div class="empty-state-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        </div>
                         <p>No protocols registered</p>
-                        <button class="btn btn-primary" style="margin-top: 1rem;" onclick="showRegisterModal()">
+                        <button class="btn btn-primary" style="margin-top: 14px;" onclick="showRegisterModal()">
                             Register First Protocol
                         </button>
                     </div>
@@ -639,28 +785,40 @@
             </div>
 
             <!-- Response History -->
-            <div class="card full-width">
-                <div class="card-header">
-                    <h3>📜 Response History</h3>
+            <div class="glass full-width">
+                <div class="panel-head">
+                    <div class="panel-title">
+                        <div class="panel-icon cyan">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </div>
+                        Response History
+                    </div>
                     <button class="btn btn-secondary" onclick="loadHistory()">
-                        🔄 Refresh
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Refresh
                     </button>
                 </div>
-                <div class="card-body" id="historyList">
+                <div class="panel-body" id="historyList">
                     <div class="empty-state">
-                        <div class="icon">📜</div>
+                        <div class="empty-state-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </div>
                         <p>No response actions yet</p>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+
+        </div><!-- /main-grid -->
+    </div><!-- /page-container -->
 
     <!-- Register Protocol Modal -->
     <div class="modal-overlay" id="registerModal">
         <div class="modal">
             <div class="modal-header">
-                <h3>🏛️ Register Protocol</h3>
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent-light)" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    Register Protocol
+                </h3>
                 <button class="modal-close" onclick="closeModal('registerModal')">&times;</button>
             </div>
             <div class="modal-body">
@@ -727,7 +885,10 @@
     <div class="modal-overlay" id="emergencyModal">
         <div class="modal">
             <div class="modal-header">
-                <h3>🚨 Emergency Pause</h3>
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    Emergency Pause
+                </h3>
                 <button class="modal-close" onclick="closeModal('emergencyModal')">&times;</button>
             </div>
             <div class="modal-body">
@@ -742,22 +903,26 @@
                     <input type="text" id="emergencyReason" placeholder="Describe the emergency...">
                 </div>
                 <div class="form-group">
-                    <label>Your Name/ID</label>
+                    <label>Your Name / ID</label>
                     <input type="text" id="emergencyInitiator" placeholder="e.g., security_admin">
                 </div>
-                <div style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                    <p style="color: var(--accent-red); font-size: 0.9rem;">
-                        ⚠️ <strong>Warning:</strong> This will immediately pause the selected protocol's contracts. 
+                <div class="warning-box">
+                    <p>
+                        <strong>Warning:</strong> This will immediately pause the selected protocol's contracts.
                         Only use in genuine emergencies.
                     </p>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('emergencyModal')">Cancel</button>
-                <button class="btn btn-danger" onclick="executeEmergencyPause()">🚨 Execute Pause</button>
+                <button class="btn btn-danger" onclick="executeEmergencyPause()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    Execute Pause
+                </button>
             </div>
         </div>
     </div>
+
     </div><!-- /app -->
 
     <script>
@@ -826,7 +991,9 @@
                 if (data.count === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <div class="icon">✅</div>
+                            <div class="empty-state-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
                             <p>No pending approvals</p>
                         </div>
                     `;
@@ -836,26 +1003,28 @@
                     badge.textContent = `${data.count} pending`;
 
                     container.innerHTML = data.pending_actions.map(action => `
-                        <div class="pending-action">
-                            <div class="header">
+                        <div class="pending-item">
+                            <div class="pending-head">
                                 <div>
-                                    <div class="title">⏳ ${action.action.replace('_', ' ').toUpperCase()}</div>
-                                    <div style="font-size: 0.8rem; color: var(--text-muted);">ID: ${action.id}</div>
+                                    <div class="pending-action-label">${action.action.replace('_', ' ').toUpperCase()}</div>
+                                    <div class="pending-id">ID: ${action.id}</div>
                                 </div>
-                                <span class="severity critical">CRITICAL</span>
+                                <span class="severity-tag critical">CRITICAL</span>
                             </div>
-                            <div class="details">
-                                <p><strong>Protocol:</strong> ${action.protocol}</p>
-                                <p><strong>Chain:</strong> ${action.chain}</p>
-                                <p><strong>Contract:</strong> ${action.contract.substring(0, 20)}...</p>
-                                <p><strong>Est. Loss:</strong> $${(action.metadata.estimated_loss_usd || 0).toLocaleString()}</p>
+                            <div class="pending-details">
+                                <strong>Protocol:</strong> ${action.protocol}<br>
+                                <strong>Chain:</strong> ${action.chain}<br>
+                                <strong>Contract:</strong> <span class="font-mono">${action.contract.substring(0, 20)}...</span><br>
+                                <strong>Est. Loss:</strong> $${(action.metadata.estimated_loss_usd || 0).toLocaleString()}
                             </div>
-                            <div class="actions">
+                            <div class="pending-actions">
                                 <button class="btn btn-approve" onclick="approveAction('${action.id}')">
-                                    ✅ Approve Pause
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    Approve Pause
                                 </button>
                                 <button class="btn btn-reject" onclick="rejectAction('${action.id}')">
-                                    ❌ Reject
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    Reject
                                 </button>
                             </div>
                         </div>
@@ -873,9 +1042,11 @@
             if (protocols.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="icon">🏛️</div>
+                        <div class="empty-state-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        </div>
                         <p>No protocols registered</p>
-                        <button class="btn btn-primary" style="margin-top: 1rem;" onclick="showRegisterModal()">
+                        <button class="btn btn-primary" style="margin-top: 14px;" onclick="showRegisterModal()">
                             Register First Protocol
                         </button>
                     </div>
@@ -887,14 +1058,16 @@
             container.innerHTML = protocols.map(p => `
                 <div class="protocol-item">
                     <div class="protocol-info">
-                        <div class="protocol-icon">🛡️</div>
+                        <div class="protocol-icon-wrap">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        </div>
                         <div>
                             <div class="protocol-name">${sanitize(p.name)}</div>
-                            <div class="protocol-chain">${sanitize(p.chain)} • ${sanitize(p.contract?.substring(0, 15))}...</div>
+                            <div class="protocol-chain">${sanitize(p.chain)} &middot; ${sanitize(p.contract?.substring(0, 15))}...</div>
                         </div>
                     </div>
                     <div class="protocol-status">
-                        ${p.auto_pause_critical ? '<span class="auto-pause-badge">Auto-Pause</span>' : ''}
+                        ${p.auto_pause_critical ? '<span class="auto-pause-tag">Auto-Pause</span>' : ''}
                         <button class="btn btn-secondary" onclick="removeProtocol('${sanitize(p.id)}')">Remove</button>
                     </div>
                 </div>
@@ -922,7 +1095,9 @@
                 if (data.count === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <div class="icon">📜</div>
+                            <div class="empty-state-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            </div>
                             <p>No response actions yet</p>
                         </div>
                     `;
@@ -931,18 +1106,23 @@
 
                 container.innerHTML = data.responses.map(r => `
                     <div class="history-item ${r.status}">
-                        <div class="history-icon">
-                            ${r.status === 'success' ? '✅' : r.status === 'failed' ? '❌' : '⏳'}
+                        <div class="history-status-icon">
+                            ${r.status === 'success'
+                                ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-low)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+                                : r.status === 'failed'
+                                    ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+                                    : '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-medium)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+                            }
                         </div>
                         <div class="history-details">
                             <div class="history-title">${r.action.replace('_', ' ').toUpperCase()} - ${r.protocol}</div>
                             <div class="history-meta">
-                                Chain: ${r.chain} • Contract: ${r.contract.substring(0, 15)}...
-                                ${r.tx_hash ? `• TX: ${r.tx_hash.substring(0, 15)}...` : ''}
+                                Chain: ${r.chain} &middot; Contract: ${r.contract.substring(0, 15)}...
+                                ${r.tx_hash ? `&middot; TX: ${r.tx_hash.substring(0, 15)}...` : ''}
                             </div>
                             <div class="history-time">
                                 ${new Date(r.initiated_at).toLocaleString()}
-                                ${r.error ? `• Error: ${r.error}` : ''}
+                                ${r.error ? `&middot; Error: ${r.error}` : ''}
                             </div>
                         </div>
                     </div>
@@ -970,15 +1150,15 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    alert(`✅ Approved! Status: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}`);
+                    alert(`Approved! Status: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}`);
                     loadPendingApprovals();
                     loadHistory();
                     loadGuardianStatus();
                 } else {
-                    alert('❌ Failed: ' + (data.detail || 'Unknown error'));
+                    alert('Failed: ' + (data.detail || 'Unknown error'));
                 }
             } catch (error) {
-                alert('❌ Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
 
@@ -1002,15 +1182,15 @@
                 });
 
                 if (response.ok) {
-                    alert('✅ Action rejected');
+                    alert('Action rejected');
                     loadPendingApprovals();
                     loadHistory();
                 } else {
                     const data = await response.json();
-                    alert('❌ Failed: ' + (data.detail || 'Unknown error'));
+                    alert('Failed: ' + (data.detail || 'Unknown error'));
                 }
             } catch (error) {
-                alert('❌ Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
 
@@ -1060,15 +1240,15 @@
                 });
 
                 if (response.ok) {
-                    alert('✅ Protocol registered successfully!');
+                    alert('Protocol registered successfully!');
                     closeModal('registerModal');
                     loadGuardianStatus();
                 } else {
                     const err = await response.json();
-                    alert('❌ Failed: ' + (err.detail || 'Unknown error'));
+                    alert('Failed: ' + (err.detail || 'Unknown error'));
                 }
             } catch (error) {
-                alert('❌ Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
 
@@ -1082,14 +1262,14 @@
                 });
 
                 if (response.ok) {
-                    alert('✅ Protocol removed');
+                    alert('Protocol removed');
                     loadGuardianStatus();
                 } else {
                     const err = await response.json();
-                    alert('❌ Failed: ' + (err.detail || 'Unknown error'));
+                    alert('Failed: ' + (err.detail || 'Unknown error'));
                 }
             } catch (error) {
-                alert('❌ Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
 
@@ -1104,7 +1284,7 @@
                 return;
             }
 
-            if (!confirm('⚠️ Are you sure you want to PAUSE this protocol? This is an emergency action.')) {
+            if (!confirm('Are you sure you want to PAUSE this protocol? This is an emergency action.')) {
                 return;
             }
 
@@ -1122,18 +1302,19 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    alert(`✅ Emergency pause initiated!\nStatus: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}\n${data.error ? 'Note: ' + data.error : ''}`);
+                    alert(`Emergency pause initiated!\nStatus: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}\n${data.error ? 'Note: ' + data.error : ''}`);
                     closeModal('emergencyModal');
                     loadHistory();
                     loadGuardianStatus();
                 } else {
-                    alert('❌ Failed: ' + (data.detail || 'Unknown error'));
+                    alert('Failed: ' + (data.detail || 'Unknown error'));
                 }
             } catch (error) {
-                alert('❌ Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
     </script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
 </body>
 </html>
-

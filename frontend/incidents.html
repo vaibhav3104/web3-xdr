@@ -4,157 +4,796 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Incidents - Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="/frontend/config.js"></script>
     <script src="/frontend/nav.js" defer></script>
-    <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
         [x-cloak] { display: none !important; }
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-red: #ff3b3b;
-            --accent-orange: #ff8a3b;
-            --accent-yellow: #ffd93b;
-            --accent-green: #3bff7e;
-            --accent-blue: #3b8aff;
-            --accent-purple: #8a3bff;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --border-color: #2a2a3a;
-        }
-        
+        *, *::before, *::after { box-sizing: border-box; }
+
         body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
+            margin: 0;
+            min-height: 100vh;
         }
-        
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; }
-        
-        .severity-critical { background: linear-gradient(135deg, rgba(255, 59, 59, 0.2), rgba(255, 59, 59, 0.1)); border-left: 4px solid var(--accent-red); }
-        .severity-high { background: linear-gradient(135deg, rgba(255, 138, 59, 0.2), rgba(255, 138, 59, 0.1)); border-left: 4px solid var(--accent-orange); }
-        .severity-medium { background: linear-gradient(135deg, rgba(255, 217, 59, 0.2), rgba(255, 217, 59, 0.1)); border-left: 4px solid var(--accent-yellow); }
-        .severity-low { background: linear-gradient(135deg, rgba(59, 255, 126, 0.2), rgba(59, 255, 126, 0.1)); border-left: 4px solid var(--accent-green); }
-        
-        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
-        .scrollbar-thin::-webkit-scrollbar-track { background: var(--bg-tertiary); }
-        .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-        
-        .modal-backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
-        
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* ── Glass Card ───────────────────────────────────── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover { border-color: rgba(255,255,255,0.1); }
+
+        /* ── Header ───────────────────────────────────────── */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3,3,5,0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+        }
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .header-inner {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .header-left {
+            display: flex; align-items: center; gap: 16px;
+        }
+        .header-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px; font-weight: 600;
+            background: linear-gradient(135deg, var(--s3-accent-light), var(--s3-cyan));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .ws-badge {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .ws-badge.online  { background: rgba(16,185,129,0.1); color: #34d399; }
+        .ws-badge.offline { background: rgba(244,63,94,0.1); color: #fb7185; }
+        .ws-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+        }
+        .ws-dot.online  { background: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.6); animation: pulse 2s infinite; }
+        .ws-dot.offline { background: #f43f5e; }
+
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* ── Page Layout ──────────────────────────────────── */
+        .page-content {
+            flex: 1; min-width: 0;
+            padding: 24px 28px;
+            overflow-y: auto;
+        }
+
+        /* ── Filter Panel ─────────────────────────────────── */
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+        .filter-grid .col-2 { grid-column: span 2; }
+        .filter-footer {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .filter-actions {
+            display: flex; align-items: center; gap: 12px;
+        }
+
+        /* ── Inputs & Selects ─────────────────────────────── */
+        .s3-label {
+            display: block;
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        .s3-select, .s3-input {
+            width: 100%;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text);
+            font-size: 13px;
+            padding: 8px 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .s3-select:focus, .s3-input:focus {
+            border-color: var(--s3-accent);
+        }
+        .s3-select option { background: var(--s3-bg-2); }
+        .search-wrap {
+            position: relative;
+        }
+        .search-wrap .s3-input { padding-left: 36px; }
+        .search-wrap svg {
+            position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+            width: 15px; height: 15px; color: var(--s3-text-3);
+        }
+
+        /* ── Buttons ──────────────────────────────────────── */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px 16px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px; font-weight: 500;
+            border: none; cursor: pointer;
+            transition: all 0.2s;
+            color: var(--s3-text);
+            white-space: nowrap;
+        }
+        .btn-accent {
+            background: var(--s3-accent);
+        }
+        .btn-accent:hover { background: #7c4fe0; }
+        .btn-ghost {
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+        }
+        .btn-ghost:hover { background: var(--s3-bg-4); border-color: rgba(255,255,255,0.1); }
+        .btn-sm { padding: 5px 12px; font-size: 12px; }
+        .btn-xs { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
+        .btn-critical { background: rgba(244,63,94,0.15); color: #fb7185; }
+        .btn-critical:hover { background: rgba(244,63,94,0.25); }
+        .btn-high { background: rgba(249,115,22,0.15); color: #fb923c; }
+        .btn-high:hover { background: rgba(249,115,22,0.25); }
+        .btn-medium { background: rgba(234,179,8,0.15); color: #facc15; }
+        .btn-medium:hover { background: rgba(234,179,8,0.25); }
+        .btn-low { background: rgba(16,185,129,0.15); color: #34d399; }
+        .btn-low:hover { background: rgba(16,185,129,0.25); }
+        .btn-purple { background: rgba(139,92,246,0.15); color: #a78bfa; }
+        .btn-purple:hover { background: rgba(139,92,246,0.25); }
+        .btn-blue { background: rgba(59,130,246,0.15); color: #93c5fd; }
+        .btn-blue:hover { background: rgba(59,130,246,0.25); }
+        .btn-green-solid { background: #059669; }
+        .btn-green-solid:hover { background: #047857; }
+        .btn-red-solid { background: #dc2626; }
+        .btn-red-solid:hover { background: #b91c1c; }
+
+        /* ── Stat Cards ───────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            position: relative; overflow: hidden;
+            padding: 18px 20px;
+            text-align: center;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: var(--s3-radius) var(--s3-radius) 0 0;
+        }
+        .stat-card.sev-critical::before { background: linear-gradient(90deg, var(--s3-critical), transparent); }
+        .stat-card.sev-high::before     { background: linear-gradient(90deg, var(--s3-high), transparent); }
+        .stat-card.sev-medium::before   { background: linear-gradient(90deg, var(--s3-medium), transparent); }
+        .stat-card.sev-low::before      { background: linear-gradient(90deg, var(--s3-low), transparent); }
+        .stat-card.sev-total::before    { background: linear-gradient(90deg, var(--s3-accent), transparent); }
+        .stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px; font-weight: 700;
+            letter-spacing: -0.03em; line-height: 1;
+            margin-bottom: 6px;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+        }
+
+        /* ── Bulk Actions Bar ─────────────────────────────── */
+        .bulk-bar {
+            padding: 14px 20px;
+            margin-bottom: 16px;
+            border-left: 3px solid var(--s3-accent);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .bulk-actions {
+            display: flex; align-items: center; gap: 12px;
+        }
+        .bulk-count {
+            font-size: 13px; color: var(--s3-accent-light); font-weight: 500;
+        }
+
+        /* ── Table ────────────────────────────────────────── */
+        .table-wrap {
+            overflow-x: auto;
+        }
+        .s3-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .s3-table thead { background: rgba(255,255,255,0.02); }
+        .s3-table th {
+            padding: 12px 14px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .s3-table th.center { text-align: center; }
+        .s3-table td {
+            padding: 12px 14px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            vertical-align: middle;
+        }
+        .s3-table tbody tr {
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+        .s3-table tbody tr:hover {
+            background: rgba(139,92,246,0.04);
+        }
+        .s3-table tbody tr.selected {
+            background: rgba(139,92,246,0.08);
+        }
+
+        /* ── Severity Badges ──────────────────────────────── */
+        .sev-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 10px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase;
+        }
+        .sev-badge.critical { background: rgba(244,63,94,0.12); color: #fb7185; border: 1px solid rgba(244,63,94,0.2); }
+        .sev-badge.high     { background: rgba(249,115,22,0.12); color: #fb923c; border: 1px solid rgba(249,115,22,0.2); }
+        .sev-badge.medium   { background: rgba(234,179,8,0.12);  color: #facc15; border: 1px solid rgba(234,179,8,0.2); }
+        .sev-badge.low      { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+
+        .sev-dot {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+        }
+        .sev-dot.critical { background: var(--s3-critical); box-shadow: 0 0 8px rgba(244,63,94,0.5); }
+        .sev-dot.high     { background: var(--s3-high); box-shadow: 0 0 8px rgba(249,115,22,0.4); }
+        .sev-dot.medium   { background: var(--s3-medium); }
+        .sev-dot.low      { background: var(--s3-low); }
+
+        /* ── Status Badges ────────────────────────────────── */
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 10px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase;
+        }
+        .status-badge.open        { background: rgba(244,63,94,0.12); color: #fb7185; }
+        .status-badge.acknowledged { background: rgba(234,179,8,0.12); color: #facc15; }
+        .status-badge.investigating { background: rgba(59,130,246,0.12); color: #93c5fd; }
+        .status-badge.resolved    { background: rgba(16,185,129,0.12); color: #34d399; }
+        .status-badge.fp          { background: rgba(100,116,139,0.12); color: #94a3b8; }
+
+        /* ── Progress Bars ────────────────────────────────── */
+        .progress-track {
+            width: 48px; height: 6px;
+            background: var(--s3-bg-3);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+        .progress-fill.critical { background: var(--s3-critical); }
+        .progress-fill.high     { background: var(--s3-high); }
+        .progress-fill.medium   { background: var(--s3-medium); }
+        .progress-fill.low      { background: var(--s3-low); }
+        .progress-fill.gradient { background: linear-gradient(90deg, var(--s3-accent), var(--s3-cyan)); }
+
+        /* ── Checkbox ─────────────────────────────────────── */
+        .s3-checkbox {
+            width: 15px; height: 15px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: var(--s3-bg-3);
+            cursor: pointer;
+            accent-color: var(--s3-accent);
+        }
+
+        /* ── Pagination ───────────────────────────────────── */
+        .pagination {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px;
+            border-top: 1px solid var(--s3-border);
+        }
+        .page-btns {
+            display: flex; align-items: center; gap: 6px;
+        }
+        .page-btn {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            border: 1px solid var(--s3-border);
+            background: var(--s3-bg-3);
+            color: var(--s3-text-2);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .page-btn:hover { background: var(--s3-bg-4); }
+        .page-btn.active {
+            background: var(--s3-accent);
+            color: white;
+            border-color: var(--s3-accent);
+        }
+        .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .page-info {
+            font-size: 12px; color: var(--s3-text-3);
+        }
+
+        /* ── Modal ────────────────────────────────────────── */
+        .modal-backdrop {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+        }
+        .modal-panel {
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.6);
+        }
+        .modal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--s3-border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--s3-border);
+            background: rgba(0,0,0,0.2);
+        }
+        .close-btn {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--s3-border);
+            background: var(--s3-bg-3);
+            color: var(--s3-text-2);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.15s;
+        }
+        .close-btn:hover { background: var(--s3-bg-4); color: var(--s3-text); }
+
+        /* ── Scrollbar ────────────────────────────────────── */
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: var(--s3-bg-4); border-radius: 3px; }
+
+        /* ── Lifecycle Timeline ────────────────────────────── */
+        .lifecycle {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .lifecycle-step {
+            display: flex; align-items: center;
+        }
+        .lifecycle-node {
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .lifecycle-circle {
+            width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px;
+            border: 2px solid var(--s3-bg-4);
+            background: var(--s3-bg-3);
+            transition: all 0.3s;
+        }
+        .lifecycle-circle.active {
+            border-color: var(--s3-accent);
+            background: rgba(139,92,246,0.15);
+            color: var(--s3-accent-light);
+        }
+        .lifecycle-circle.done {
+            border-color: var(--s3-low);
+            background: rgba(16,185,129,0.15);
+            color: #34d399;
+        }
+        .lifecycle-label {
+            font-size: 11px; margin-top: 6px; color: var(--s3-text-3);
+        }
+        .lifecycle-label.active { color: var(--s3-accent-light); font-weight: 600; }
+        .lifecycle-connector {
+            width: 60px; height: 2px;
+            margin: 0 8px 20px;
+            background: var(--s3-bg-4);
+            border-radius: 1px;
+        }
+        .lifecycle-connector.done { background: var(--s3-low); }
+
+        /* ── Detail Grid ──────────────────────────────────── */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .detail-section {
+            display: flex; flex-direction: column; gap: 16px;
+        }
+        .detail-block label {
+            display: block;
+            font-size: 10px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        .detail-block .value {
+            color: var(--s3-text);
+            font-size: 14px;
+        }
+        .detail-block .value-lg {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px; font-weight: 700;
+            color: var(--s3-critical);
+        }
+        .tag {
+            display: inline-flex;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .tag-blue { background: rgba(59,130,246,0.12); color: #93c5fd; }
+        .tag-accent { background: var(--s3-accent-dim); color: var(--s3-accent-light); }
+
+        .confidence-breakdown {
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 14px;
+            font-size: 12px;
+            color: var(--s3-text-3);
+            line-height: 1.7;
+        }
+        .mono-block {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--s3-text-2);
+            background: var(--s3-bg-2);
+            padding: 5px 10px;
+            border-radius: 6px;
+            word-break: break-all;
+        }
+        .summary-block {
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px 18px;
+            color: var(--s3-text-2);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .action-list {
+            list-style: none; padding: 0; margin: 0;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .action-list li {
+            display: flex; align-items: flex-start; gap: 8px;
+            font-size: 13px; color: var(--s3-text-2);
+        }
+        .action-list li .bullet {
+            color: var(--s3-accent-light);
+            flex-shrink: 0;
+        }
+
+        /* ── LLM Triage ───────────────────────────────────── */
+        .triage-section {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--s3-border);
+        }
+        .triage-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .triage-title {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+        }
+        .triage-verdict {
+            padding: 14px 18px;
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid;
+        }
+        .triage-verdict.tp  { background: rgba(244,63,94,0.06); border-color: rgba(244,63,94,0.2); }
+        .triage-verdict.fp  { background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.2); }
+        .triage-verdict.rev { background: rgba(234,179,8,0.06); border-color: rgba(234,179,8,0.2); }
+        .triage-meta {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+            margin-top: 12px;
+        }
+        .triage-meta-card {
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 14px;
+        }
+        .triage-factors {
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 14px;
+            margin-top: 12px;
+        }
+        .triage-factors.risk { background: rgba(244,63,94,0.05); }
+        .triage-factors.mitigating { background: rgba(16,185,129,0.05); }
+        .triage-factors ul {
+            list-style: none; padding: 0; margin: 4px 0 0;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .triage-factors li {
+            font-size: 12px; color: var(--s3-text-2);
+            display: flex; align-items: flex-start; gap: 6px;
+        }
+
+        /* ── Feedback Section ─────────────────────────────── */
+        .feedback-panel {
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px 18px;
+            margin-bottom: 16px;
+        }
+        .feedback-row {
+            display: flex; align-items: center; gap: 12px;
+            margin-top: 10px;
+        }
+        .feedback-input {
+            flex: 1;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text);
+            padding: 8px 12px;
+            font-size: 13px;
+            outline: none;
+        }
+        .feedback-input:focus { border-color: var(--s3-accent); }
+        .feedback-success {
+            background: rgba(16,185,129,0.08);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; color: #34d399;
+        }
+        .modal-actions {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .modal-actions-left {
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* ── Events Modal ─────────────────────────────────── */
+        .event-card {
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 16px 18px;
+            border-left: 3px solid;
+        }
+        .event-card.ml { border-left-color: var(--s3-accent); }
+        .event-card.deployer { border-left-color: #3b82f6; }
+        .event-row {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        .event-label {
+            width: 90px; flex-shrink: 0;
+            color: var(--s3-text-3);
+            font-size: 12px;
+        }
+        .event-note {
+            background: rgba(234,179,8,0.08);
+            border: 1px solid rgba(234,179,8,0.15);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: var(--s3-medium);
+            margin-top: 8px;
+        }
+        .event-summary-block {
+            background: var(--s3-bg-3);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: var(--s3-text-2);
+            margin-top: 8px;
+        }
+
+        /* ── Toast Notifications ──────────────────────────── */
+        .toast-area {
+            position: fixed; top: 80px; right: 20px; z-index: 60;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .toast {
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 16px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+            max-width: 340px;
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast.border-critical { border-left: 3px solid var(--s3-critical); }
+        .toast.border-high     { border-left: 3px solid var(--s3-high); }
+        .toast.border-medium   { border-left: 3px solid var(--s3-medium); }
+        .toast-inner {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+        }
+        .toast-title { font-size: 13px; font-weight: 500; }
+        .toast-msg { font-size: 12px; color: var(--s3-text-3); margin-top: 4px; }
+        .toast-close {
+            background: none; border: none;
+            color: var(--s3-text-3); cursor: pointer;
+            font-size: 16px; padding: 0;
+        }
+        .toast-close:hover { color: var(--s3-text); }
+
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .notification-enter { animation: slideIn 0.3s ease-out; }
-        
-        .live-indicator { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* ── Spinner ──────────────────────────────────────── */
+        .spinner {
+            width: 28px; height: 28px;
+            border: 2px solid rgba(139,92,246,0.2);
+            border-top-color: var(--s3-accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Empty State ──────────────────────────────────── */
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--s3-text-3);
+        }
+        .empty-state svg {
+            width: 40px; height: 40px;
+            margin: 0 auto 12px;
+            color: var(--s3-text-3);
+            opacity: 0.5;
+        }
+
+        /* ── Table header bar ─────────────────────────────── */
+        .table-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--s3-border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .table-header-left {
+            display: flex; align-items: center; gap: 14px;
+        }
+        .table-title {
+            font-size: 15px; font-weight: 600;
+        }
+        .table-header-right {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .updated-text {
+            font-size: 11px; color: var(--s3-text-3);
+        }
+
+        /* ── Misc helpers ─────────────────────────────────── */
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .gap-4 { gap: 16px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .mt-6 { margin-top: 24px; }
+        .mb-4 { margin-bottom: 16px; }
+        .text-center { text-align: center; }
+        .w-full { width: 100%; }
+        .flex-1 { flex: 1; }
+        .flex-wrap { flex-wrap: wrap; }
+
+        /* ── Responsive ───────────────────────────────────── */
+        @media (max-width: 1200px) {
+            .filter-grid { grid-template-columns: repeat(3, 1fr); }
+            .filter-grid .col-2 { grid-column: span 1; }
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .filter-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .page-content { padding: 16px; }
+        }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 <div id="app" x-data="incidentsApp()">
-    <!-- Diagnostic banner - remove after debugging -->
-    <div id="diag" style="position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 16px;font-size:12px;font-family:monospace;background:#1a1a2e;color:#8b8b8b;border-bottom:1px solid #333;">
-        Alpine: <span id="d-alpine">?</span> | xData: <span id="d-xdata">?</span> | Init: <span id="d-init">?</span> | Incidents: <span id="d-inc">?</span> | Modal: <span id="d-modal">?</span>
-    </div>
-    <script>
-    (function(){
-        setTimeout(function(){
-            var appEl = document.getElementById('app');
-            var dAlpine = document.getElementById('d-alpine');
-            var dXdata = document.getElementById('d-xdata');
-            var dInit = document.getElementById('d-init');
-            var dInc = document.getElementById('d-inc');
-            var dModal = document.getElementById('d-modal');
 
-            // Alpine loaded?
-            dAlpine.textContent = window.Alpine ? '✓' : '✗';
-            dAlpine.style.color = window.Alpine ? '#3bff7e' : '#ff3b3b';
-
-            // #app element found?
-            if (!appEl) { dXdata.textContent = '✗ #app not found'; dXdata.style.color='#ff3b3b'; return; }
-
-            // Does #app have x-data attr?
-            var xdAttr = appEl.getAttribute('x-data');
-            dXdata.textContent = 'attr=' + (xdAttr || 'NONE') + ' | _x_dataStack=' + !!(appEl._x_dataStack);
-            dXdata.style.color = appEl._x_dataStack ? '#3bff7e' : '#ff3b3b';
-
-            // Try Alpine.$data on #app
-            try {
-                var data = Alpine.$data(appEl);
-                var keys = Object.keys(data);
-                dInit.textContent = 'keys=' + keys.length + ' has_incidents=' + (data.incidents !== undefined);
-                dInit.style.color = keys.length > 5 ? '#3bff7e' : '#ff3b3b';
-                dInc.textContent = (data.incidents||[]).length + ' loaded';
-                dModal.textContent = 'showEventsModal=' + data.showEventsModal;
-            } catch(e) {
-                dInit.textContent = '✗ $data error: ' + e.message;
-                dInit.style.color = '#ff3b3b';
-            }
-
-            // Also dump DOM state
-            var sidebar = document.getElementById('s3-sidebar');
-            dModal.textContent += ' | sidebar=' + (sidebar ? 'yes' : 'no') + ' | bodyFlex=' + document.body.style.display;
-        }, 3000);
-    })();
-    </script>
-    <!-- Live Notifications Toast -->
-    <div class="fixed top-20 right-4 z-50 space-y-2" x-show="notifications.length > 0">
+    <!-- Toast Notifications -->
+    <div class="toast-area" x-show="notifications.length > 0">
         <template x-for="(notif, idx) in notifications.slice(0, 3)" :key="notif.id">
-            <div class="notification-enter bg-gray-900 border border-gray-700 rounded-lg p-4 shadow-xl max-w-sm"
+            <div class="toast"
                  :class="{
-                     'border-red-500': notif.severity === 'critical',
-                     'border-orange-500': notif.severity === 'high',
-                     'border-yellow-500': notif.severity === 'medium'
+                     'border-critical': notif.severity === 'critical',
+                     'border-high': notif.severity === 'high',
+                     'border-medium': notif.severity === 'medium'
                  }">
-                <div class="flex items-start justify-between">
+                <div class="toast-inner">
                     <div>
-                        <div class="text-sm font-medium" x-text="notif.title"></div>
-                        <div class="text-xs text-gray-400 mt-1" x-text="notif.message"></div>
+                        <div class="toast-title" x-text="notif.title"></div>
+                        <div class="toast-msg" x-text="notif.message"></div>
                     </div>
-                    <button @click="dismissNotification(notif.id)" class="text-gray-500 hover:text-white">×</button>
+                    <button @click="dismissNotification(notif.id)" class="toast-close">&times;</button>
                 </div>
             </div>
         </template>
     </div>
 
     <!-- Header -->
-    <header class="border-b border-gray-800 bg-[#12121a]/90 backdrop-blur sticky top-0 z-40">
-        <div class="flex items-center justify-between px-6 py-3">
-            <div class="flex items-center space-x-4">
-                <h1 class="text-lg font-semibold text-orange-400">🚨 Incidents</h1>
-                <!-- WebSocket Status -->
-                <div class="flex items-center space-x-2 ml-4">
-                    <div class="w-2 h-2 rounded-full" :class="wsConnected ? 'bg-green-500 live-indicator' : 'bg-red-500'"></div>
-                    <span class="text-xs text-gray-400" x-text="wsConnected ? 'Live' : 'Offline'"></span>
+    <header class="s3-header">
+        <div class="header-inner">
+            <div class="header-left">
+                <h1 class="header-title">Incidents</h1>
+                <div class="ws-badge" :class="wsConnected ? 'online' : 'offline'">
+                    <span class="ws-dot" :class="wsConnected ? 'online' : 'offline'"></span>
+                    <span x-text="wsConnected ? 'Live' : 'Offline'"></span>
                 </div>
-            </div>
-            <div class="flex items-center space-x-3">
-                <a href="index.html" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">← Dashboard</a>
-                <a href="analytics.html" class="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg text-sm transition">📊 Analytics</a>
-                <a href="security-graph.html" class="px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded-lg text-sm transition">🔷 Graph</a>
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="p-6">
-        <!-- Query Filters -->
-        <div class="card p-6 mb-6">
-            <h2 class="text-xl font-bold mb-4 flex items-center">
-                <span class="mr-2">🔍</span> Query Incidents
-            </h2>
-            
-            <div class="grid grid-cols-6 gap-4 mb-4">
+    <!-- Page Content -->
+    <div class="page-content">
+
+        <!-- Filter Panel -->
+        <div class="glass" style="padding: 20px 24px; margin-bottom: 20px;">
+            <div style="font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--s3-accent-light);">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                Query Incidents
+            </div>
+
+            <div class="filter-grid">
                 <!-- Time Range -->
-                <div class="col-span-2">
-                    <label class="block text-sm text-gray-400 mb-1">Time Range</label>
-                    <select x-model="filters.timeRange" @change="applyFilters()" 
-                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
+                <div class="col-2">
+                    <label class="s3-label">Time Range</label>
+                    <select x-model="filters.timeRange" @change="applyFilters()" class="s3-select">
                         <option value="1h">Last 1 Hour</option>
                         <option value="6h">Last 6 Hours</option>
                         <option value="24h" selected>Last 24 Hours</option>
@@ -163,44 +802,44 @@
                         <option value="custom">Custom Range</option>
                     </select>
                 </div>
-                
+
                 <template x-if="filters.timeRange === 'custom'">
-                    <div class="col-span-2 flex space-x-2">
-                        <div class="flex-1">
-                            <label class="block text-sm text-gray-400 mb-1">From</label>
-                            <input type="datetime-local" x-model="filters.startDate" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    <div class="col-2" style="display: flex; gap: 8px;">
+                        <div style="flex: 1;">
+                            <label class="s3-label">From</label>
+                            <input type="datetime-local" x-model="filters.startDate" class="s3-input">
                         </div>
-                        <div class="flex-1">
-                            <label class="block text-sm text-gray-400 mb-1">To</label>
-                            <input type="datetime-local" x-model="filters.endDate" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <div style="flex: 1;">
+                            <label class="s3-label">To</label>
+                            <input type="datetime-local" x-model="filters.endDate" class="s3-input">
                         </div>
                     </div>
                 </template>
-                
+
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Severity</label>
-                    <select x-model="filters.severity" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    <label class="s3-label">Severity</label>
+                    <select x-model="filters.severity" @change="applyFilters()" class="s3-select">
                         <option value="">All</option>
-                        <option value="critical">🔴 Critical</option>
-                        <option value="high">🟠 High</option>
-                        <option value="medium">🟡 Medium</option>
-                        <option value="low">🟢 Low</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
                     </select>
                 </div>
-                
+
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Status</label>
-                    <select x-model="filters.status" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    <label class="s3-label">Status</label>
+                    <select x-model="filters.status" @change="applyFilters()" class="s3-select">
                         <option value="">All</option>
                         <option value="open_pending">Open</option>
                         <option value="open_acknowledged">Acknowledged</option>
                         <option value="resolved">Resolved</option>
                     </select>
                 </div>
-                
+
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Attack Type</label>
-                    <select x-model="filters.attackType" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    <label class="s3-label">Attack Type</label>
+                    <select x-model="filters.attackType" @change="applyFilters()" class="s3-select">
                         <option value="">All</option>
                         <option value="rug_pull">Rug Pull</option>
                         <option value="flash_loan_exploit">Flash Loan</option>
@@ -209,10 +848,10 @@
                         <option value="honeypot">Honeypot</option>
                     </select>
                 </div>
-                
+
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Chain</label>
-                    <select x-model="filters.chain" @change="applyFilters()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    <label class="s3-label">Chain</label>
+                    <select x-model="filters.chain" @change="applyFilters()" class="s3-select">
                         <option value="">All</option>
                         <option value="ethereum">Ethereum</option>
                         <option value="polygon">Polygon</option>
@@ -223,228 +862,220 @@
                     </select>
                 </div>
             </div>
-            
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div class="relative">
-                        <input type="text" x-model="filters.search" @input="debounceSearch()"
-                               placeholder="Search by ID, contract, or address..."
-                               class="w-80 bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm">
-                        <svg class="w-4 h-4 absolute left-3 top-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+            <div class="filter-footer">
+                <div class="filter-actions">
+                    <div class="search-wrap">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                         </svg>
+                        <input type="text" x-model="filters.search" @input="debounceSearch()"
+                               placeholder="Search by ID, contract, or address..."
+                               class="s3-input" style="width: 320px;">
                     </div>
-                    <button @click="onFilterChange()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition">Apply</button>
-                    <button @click="resetFilters(); onFilterChange()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">Reset</button>
+                    <button @click="onFilterChange()" class="btn btn-accent">Apply</button>
+                    <button @click="resetFilters(); onFilterChange()" class="btn btn-ghost">Reset</button>
                 </div>
-                
-                <div class="flex items-center space-x-4 text-sm text-gray-400">
-                    <span x-text="`${filteredIncidents.length} incidents`"></span>
-                    <button @click="exportCSV()" class="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg transition">📥 Export</button>
+
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <span style="font-size: 12px; color: var(--s3-text-3);" x-text="`${filteredIncidents.length} incidents`"></span>
+                    <button @click="exportCSV()" class="btn btn-sm btn-low">Export CSV</button>
                 </div>
             </div>
         </div>
-        
+
         <!-- Stats Summary -->
-        <div class="grid grid-cols-5 gap-4 mb-6">
-            <div class="card p-4 text-center">
-                <div class="text-3xl font-bold text-red-400" x-text="stats.critical">0</div>
-                <div class="text-sm text-gray-400">🔴 Critical</div>
+        <div class="stats-grid">
+            <div class="glass stat-card sev-critical">
+                <div class="stat-value" style="color: var(--s3-critical);" x-text="stats.critical">0</div>
+                <div class="stat-label">Critical</div>
             </div>
-            <div class="card p-4 text-center">
-                <div class="text-3xl font-bold text-orange-400" x-text="stats.high">0</div>
-                <div class="text-sm text-gray-400">🟠 High</div>
+            <div class="glass stat-card sev-high">
+                <div class="stat-value" style="color: var(--s3-high);" x-text="stats.high">0</div>
+                <div class="stat-label">High</div>
             </div>
-            <div class="card p-4 text-center">
-                <div class="text-3xl font-bold text-yellow-400" x-text="stats.medium">0</div>
-                <div class="text-sm text-gray-400">🟡 Medium</div>
+            <div class="glass stat-card sev-medium">
+                <div class="stat-value" style="color: var(--s3-medium);" x-text="stats.medium">0</div>
+                <div class="stat-label">Medium</div>
             </div>
-            <div class="card p-4 text-center">
-                <div class="text-3xl font-bold text-green-400" x-text="stats.low">0</div>
-                <div class="text-sm text-gray-400">🟢 Low</div>
+            <div class="glass stat-card sev-low">
+                <div class="stat-value" style="color: var(--s3-low);" x-text="stats.low">0</div>
+                <div class="stat-label">Low</div>
             </div>
-            <div class="card p-4 text-center">
-                <div class="text-3xl font-bold text-blue-400" x-text="stats.total">0</div>
-                <div class="text-sm text-gray-400">📊 Total</div>
+            <div class="glass stat-card sev-total">
+                <div class="stat-value" style="color: var(--s3-accent-light);" x-text="stats.total">0</div>
+                <div class="stat-label">Total</div>
             </div>
         </div>
-        
+
         <!-- Bulk Actions Bar -->
-        <div x-show="selectedIncidents.length > 0" class="card p-4 mb-4 bg-blue-900/20 border-blue-500/30">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <span class="text-sm text-blue-400" x-text="`${selectedIncidents.length} selected`"></span>
-                    <button @click="bulkAcknowledge()" class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm transition">
-                        ✓ Acknowledge All
-                    </button>
-                    <button @click="bulkResolve()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-sm transition">
-                        ✓ Resolve All
-                    </button>
-                </div>
-                <button @click="clearSelection()" class="text-sm text-gray-400 hover:text-white">Clear Selection</button>
+        <div x-show="selectedIncidents.length > 0" class="glass bulk-bar">
+            <div class="bulk-actions">
+                <span class="bulk-count" x-text="`${selectedIncidents.length} selected`"></span>
+                <button @click="bulkAcknowledge()" class="btn btn-sm btn-medium">Acknowledge All</button>
+                <button @click="bulkResolve()" class="btn btn-sm btn-low">Resolve All</button>
             </div>
+            <button @click="clearSelection()" style="font-size: 12px; background: none; border: none; color: var(--s3-text-3); cursor: pointer;">Clear Selection</button>
         </div>
-        
+
         <!-- Incidents Table -->
-        <div class="card overflow-hidden">
-            <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <h2 class="text-lg font-bold">📋 Incident List</h2>
-                    <label class="flex items-center space-x-2 text-sm text-gray-400">
-                        <input type="checkbox" @change="toggleSelectAll($event)" class="rounded bg-gray-700 border-gray-600">
-                        <span>Select All</span>
+        <div class="glass" style="overflow: hidden;">
+            <div class="table-header">
+                <div class="table-header-left">
+                    <span class="table-title">Incident List</span>
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--s3-text-3); cursor: pointer;">
+                        <input type="checkbox" @change="toggleSelectAll($event)" class="s3-checkbox">
+                        Select All
                     </label>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <button @click="refreshIncidents()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">🔄 Refresh</button>
-                    <span class="text-xs text-gray-500" x-text="`Updated: ${lastUpdated}`"></span>
+                <div class="table-header-right">
+                    <button @click="refreshIncidents()" class="btn btn-sm btn-ghost">Refresh</button>
+                    <span class="updated-text" x-text="`Updated: ${lastUpdated}`"></span>
                 </div>
             </div>
-            
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead class="bg-gray-800/50">
+
+            <div class="table-wrap">
+                <table class="s3-table">
+                    <thead>
                         <tr>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-10">
-                                <input type="checkbox" @change="toggleSelectAll($event)" class="rounded bg-gray-700 border-gray-600">
+                            <th style="width: 40px;">
+                                <input type="checkbox" @change="toggleSelectAll($event)" class="s3-checkbox">
                             </th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">ID</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Severity</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Risk Score</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Attack Type</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Chain</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Confidence</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Loss</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Time</th>
-                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                            <th class="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase">Actions</th>
+                            <th>ID</th>
+                            <th>Severity</th>
+                            <th>Risk Score</th>
+                            <th>Attack Type</th>
+                            <th>Chain</th>
+                            <th>Confidence</th>
+                            <th>Loss</th>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th class="center">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-800">
+                    <tbody>
                         <template x-for="incident in paginatedIncidents" :key="incident.id">
-                            <tr class="hover:bg-gray-800/30 transition cursor-pointer" 
-                                :class="{'bg-blue-900/10': selectedIncidents.includes(incident.id)}"
+                            <tr :class="{'selected': selectedIncidents.includes(incident.id)}"
                                 @click="selectIncident(incident)">
-                                <td class="px-3 py-3" @click.stop>
-                                    <input type="checkbox" 
+                                <td @click.stop>
+                                    <input type="checkbox"
                                            :checked="selectedIncidents.includes(incident.id)"
                                            @change="toggleIncidentSelection(incident.id)"
-                                           class="rounded bg-gray-700 border-gray-600">
+                                           class="s3-checkbox">
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="font-mono text-xs text-blue-400" x-text="incident.id?.substring(0, 25) + '...'"></span>
+                                <td>
+                                    <span class="font-mono" style="font-size: 11px; color: var(--s3-cyan);" x-text="incident.id?.substring(0, 25) + '...'"></span>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="px-2 py-1 rounded text-xs font-medium"
+                                <td>
+                                    <span class="sev-badge"
                                           :class="{
-                                              'bg-red-500/20 text-red-400': incident.severity === 'critical',
-                                              'bg-orange-500/20 text-orange-400': incident.severity === 'high',
-                                              'bg-yellow-500/20 text-yellow-400': incident.severity === 'medium',
-                                              'bg-green-500/20 text-green-400': incident.severity === 'low'
-                                          }"
-                                          x-text="incident.severity?.toUpperCase()">
+                                              'critical': incident.severity === 'critical',
+                                              'high': incident.severity === 'high',
+                                              'medium': incident.severity === 'medium',
+                                              'low': incident.severity === 'low'
+                                          }">
+                                        <span class="sev-dot" :class="incident.severity"></span>
+                                        <span x-text="incident.severity?.toUpperCase()"></span>
                                     </span>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <div class="flex items-center space-x-2">
-                                        <div class="w-12 h-2 bg-gray-700 rounded-full overflow-hidden">
-                                            <div class="h-full rounded-full"
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div class="progress-track">
+                                            <div class="progress-fill"
                                                  :class="{
-                                                     'bg-red-500': extractRiskScore(incident) >= 80,
-                                                     'bg-orange-500': extractRiskScore(incident) >= 60 && extractRiskScore(incident) < 80,
-                                                     'bg-yellow-500': extractRiskScore(incident) >= 40 && extractRiskScore(incident) < 60,
-                                                     'bg-green-500': extractRiskScore(incident) < 40
+                                                     'critical': extractRiskScore(incident) >= 80,
+                                                     'high': extractRiskScore(incident) >= 60 && extractRiskScore(incident) < 80,
+                                                     'medium': extractRiskScore(incident) >= 40 && extractRiskScore(incident) < 60,
+                                                     'low': extractRiskScore(incident) < 40
                                                  }"
                                                  :style="`width: ${extractRiskScore(incident)}%`"></div>
                                         </div>
-                                        <span class="text-xs font-mono" x-text="extractRiskScore(incident)"></span>
+                                        <span class="font-mono" style="font-size: 11px;" x-text="extractRiskScore(incident)"></span>
                                     </div>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="text-sm" x-text="formatAttackType(incident.attack_type)"></span>
+                                <td>
+                                    <span style="font-size: 13px;" x-text="formatAttackType(incident.attack_type)"></span>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="text-sm capitalize" x-text="incident.affected_chains?.[0] || 'Unknown'"></span>
+                                <td>
+                                    <span style="font-size: 13px; text-transform: capitalize;" x-text="incident.affected_chains?.[0] || 'Unknown'"></span>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <div class="flex items-center">
-                                        <div class="w-12 h-2 bg-gray-700 rounded-full overflow-hidden mr-2">
-                                            <div class="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div class="progress-track">
+                                            <div class="progress-fill gradient"
                                                  :style="`width: ${(incident.confidence || 0) * 100}%`"></div>
                                         </div>
-                                        <span class="text-xs" x-text="`${((incident.confidence || 0) * 100).toFixed(0)}%`"></span>
+                                        <span style="font-size: 11px;" x-text="`${((incident.confidence || 0) * 100).toFixed(0)}%`"></span>
                                     </div>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="text-sm font-medium" x-text="formatUSD(incident.total_loss_usd)"></span>
+                                <td>
+                                    <span style="font-size: 13px; font-weight: 500;" x-text="formatUSD(incident.total_loss_usd)"></span>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="text-xs text-gray-400" x-text="formatTime(incident.created_at)"></span>
+                                <td>
+                                    <span style="font-size: 12px; color: var(--s3-text-2);" x-text="formatTime(incident.created_at)"></span>
                                 </td>
-                                <td class="px-3 py-3">
-                                    <span class="px-2 py-1 rounded text-xs"
+                                <td>
+                                    <span class="status-badge"
                                           :class="{
-                                              'bg-red-500/20 text-red-400': incident.status === 'open_pending',
-                                              'bg-yellow-500/20 text-yellow-400': incident.status === 'open_acknowledged' || incident.status === 'acknowledged',
-                                              'bg-blue-500/20 text-blue-400': incident.status === 'investigating',
-                                              'bg-green-500/20 text-green-400': incident.status === 'resolved' || incident.status === 'closed',
-                                              'bg-gray-500/20 text-gray-400': incident.status === 'false_positive'
+                                              'open': incident.status === 'open_pending',
+                                              'acknowledged': incident.status === 'open_acknowledged' || incident.status === 'acknowledged',
+                                              'investigating': incident.status === 'investigating',
+                                              'resolved': incident.status === 'resolved' || incident.status === 'closed',
+                                              'fp': incident.status === 'false_positive'
                                           }"
                                           x-text="formatStatus(incident.status)">
                                     </span>
                                 </td>
-                                <td class="px-3 py-3 text-center">
-                                    <div class="flex items-center justify-center space-x-1" @click.stop>
+                                <td style="text-align: center;">
+                                    <div style="display: flex; align-items: center; justify-content: center; gap: 4px;" @click.stop>
                                         <button @click="showCorrelatedEvents(incident)"
-                                                class="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded text-xs transition"
-                                                title="Correlated Events">🔗</button>
+                                                class="btn btn-xs btn-purple" title="Correlated Events">Events</button>
                                         <button @click="selectIncident(incident)"
-                                                class="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-xs transition"
-                                                title="Details">👁️</button>
+                                                class="btn btn-xs btn-blue" title="Details">View</button>
                                         <button x-show="incident.status === 'open_pending'"
                                                 @click="acknowledgeIncident(incident)"
-                                                class="px-2 py-1 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded text-xs transition"
-                                                title="Acknowledge">✓</button>
+                                                class="btn btn-xs btn-medium" title="Acknowledge">Ack</button>
                                         <button x-show="incident.status !== 'resolved' && incident.status !== 'closed' && incident.status !== 'false_positive'"
                                                 @click="resolveIncident(incident)"
-                                                class="px-2 py-1 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded text-xs transition"
-                                                title="Resolve">✔</button>
+                                                class="btn btn-xs btn-low" title="Resolve">Res</button>
                                         <button x-show="!incident.feedbackSubmitted && incident.status !== 'false_positive'"
                                                 @click="submitFeedback(incident, true)"
-                                                class="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 rounded text-xs transition"
-                                                title="Mark True Positive">TP</button>
+                                                class="btn btn-xs btn-low" title="Mark True Positive">TP</button>
                                         <button x-show="!incident.feedbackSubmitted && incident.status !== 'false_positive'"
                                                 @click="submitFeedback(incident, false)"
-                                                class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition"
-                                                title="Mark False Positive">FP</button>
+                                                class="btn btn-xs btn-critical" title="Mark False Positive">FP</button>
                                     </div>
                                 </td>
                             </tr>
                         </template>
-                        
+
                         <template x-if="filteredIncidents.length === 0">
                             <tr>
-                                <td colspan="11" class="px-4 py-12 text-center text-gray-500">
-                                    <div class="text-4xl mb-2">🔍</div>
-                                    <div>No incidents found</div>
+                                <td colspan="11">
+                                    <div class="empty-state">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                        </svg>
+                                        <div>No incidents found</div>
+                                    </div>
                                 </td>
                             </tr>
                         </template>
                     </tbody>
                 </table>
             </div>
-            
+
             <!-- Pagination -->
-            <div class="p-4 border-t border-gray-800 flex items-center justify-between">
-                <div class="text-sm text-gray-400">Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></div>
-                <div class="flex items-center space-x-2">
-                    <button @click="prevPage()" :disabled="currentPage === 1" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-sm">← Prev</button>
+            <div class="pagination">
+                <div class="page-info">Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></div>
+                <div class="page-btns">
+                    <button @click="prevPage()" :disabled="currentPage === 1" class="page-btn">&larr; Prev</button>
                     <template x-for="page in visiblePages" :key="page">
-                        <button @click="goToPage(page)" :class="page === currentPage ? 'bg-blue-600' : 'bg-gray-700'" class="px-3 py-1.5 rounded-lg text-sm" x-text="page"></button>
+                        <button @click="goToPage(page)" :class="{'active': page === currentPage}" class="page-btn" x-text="page"></button>
                     </template>
-                    <button @click="nextPage()" :disabled="currentPage === totalPages" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-sm">Next →</button>
+                    <button @click="nextPage()" :disabled="currentPage === totalPages" class="page-btn">Next &rarr;</button>
                 </div>
-                <select x-model="perPage" @change="currentPage = 1" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                <select x-model="perPage" @change="currentPage = 1" class="s3-select" style="width: auto; padding: 6px 10px; font-size: 12px;">
                     <option value="10">10</option>
                     <option value="25">25</option>
                     <option value="50">50</option>
@@ -452,214 +1083,235 @@
                 </select>
             </div>
         </div>
-    </main>
-    
-    <!-- Incident Details Modal -->
-    <div x-show="selectedIncident" x-cloak class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" @click.self="selectedIncident = null">
-        <div class="bg-[#12121a] border border-gray-700 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl"
-             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95">
-            
-            <div class="p-4 border-b border-gray-800 flex items-center justify-between"
-                 :class="{'bg-red-900/20': selectedIncident?.severity === 'critical', 'bg-orange-900/20': selectedIncident?.severity === 'high'}">
+    </div><!-- /page-content -->
+
+    <!-- ═══════════════════════════════════════════════════════
+         Incident Details Modal
+         ═══════════════════════════════════════════════════════ -->
+    <div x-show="selectedIncident" x-cloak
+         class="modal-backdrop"
+         style="position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;"
+         @click.self="selectedIncident = null">
+        <div class="modal-panel" style="max-width: 900px;"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 transform scale-95">
+
+            <!-- Header -->
+            <div class="modal-header"
+                 :style="selectedIncident?.severity === 'critical' ? 'border-left: 3px solid var(--s3-critical)' : selectedIncident?.severity === 'high' ? 'border-left: 3px solid var(--s3-high)' : ''">
                 <div>
-                    <h3 class="text-lg font-bold" x-text="selectedIncident?.title || 'Incident Details'"></h3>
-                    <p class="text-sm text-gray-400 font-mono" x-text="selectedIncident?.id"></p>
+                    <div style="font-size: 16px; font-weight: 600;" x-text="selectedIncident?.title || 'Incident Details'"></div>
+                    <div class="font-mono" style="font-size: 11px; color: var(--s3-text-3); margin-top: 4px;" x-text="selectedIncident?.id"></div>
                 </div>
-                <button @click="selectedIncident = null" class="p-2 hover:bg-gray-700 rounded-lg">✕</button>
+                <button @click="selectedIncident = null" class="close-btn">&times;</button>
             </div>
-            
-            <div class="p-6 overflow-y-auto max-h-[60vh] scrollbar-thin">
+
+            <!-- Body -->
+            <div class="modal-body">
                 <!-- Incident Lifecycle Timeline -->
-                <div class="mb-6 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
-                    <label class="text-xs text-gray-500 uppercase mb-3 block">Incident Lifecycle</label>
-                    <div class="flex items-center justify-between">
+                <div style="margin-bottom: 24px; padding: 16px 20px; background: var(--s3-bg-2); border-radius: var(--s3-radius-sm); border: 1px solid var(--s3-border);">
+                    <label class="s3-label" style="margin-bottom: 14px;">Incident Lifecycle</label>
+                    <div class="lifecycle">
                         <template x-for="(step, idx) in [
-                            {key: 'open_pending', label: 'Open', icon: '🔴'},
-                            {key: 'acknowledged', label: 'Acknowledged', icon: '🟡'},
-                            {key: 'investigating', label: 'Investigating', icon: '🔵'},
-                            {key: 'resolved', label: 'Resolved', icon: '🟢'}
+                            {key: 'open_pending', label: 'Open', icon: 'O'},
+                            {key: 'acknowledged', label: 'Acknowledged', icon: 'A'},
+                            {key: 'investigating', label: 'Investigating', icon: 'I'},
+                            {key: 'resolved', label: 'Resolved', icon: 'R'}
                         ]" :key="step.key">
-                            <div class="flex items-center">
-                                <div class="flex flex-col items-center">
-                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 transition-all"
-                                         :class="isLifecycleStepActive(selectedIncident?.status, step.key)
-                                             ? 'border-blue-500 bg-blue-500/20'
-                                             : isLifecycleStepDone(selectedIncident?.status, step.key)
-                                                 ? 'border-green-500 bg-green-500/20'
-                                                 : 'border-gray-600 bg-gray-800'"
-                                         x-text="isLifecycleStepDone(selectedIncident?.status, step.key) ? '✓' : step.icon">
+                            <div class="lifecycle-step">
+                                <div class="lifecycle-node">
+                                    <div class="lifecycle-circle"
+                                         :class="{
+                                             'active': isLifecycleStepActive(selectedIncident?.status, step.key),
+                                             'done': isLifecycleStepDone(selectedIncident?.status, step.key)
+                                         }"
+                                         x-text="isLifecycleStepDone(selectedIncident?.status, step.key) ? '\u2713' : step.icon">
                                     </div>
-                                    <span class="text-xs mt-1" :class="isLifecycleStepActive(selectedIncident?.status, step.key) ? 'text-blue-400 font-bold' : 'text-gray-500'" x-text="step.label"></span>
+                                    <span class="lifecycle-label"
+                                          :class="{'active': isLifecycleStepActive(selectedIncident?.status, step.key)}"
+                                          x-text="step.label"></span>
                                 </div>
-                                <div x-show="idx < 3" class="w-16 h-0.5 mx-2 mb-4"
-                                     :class="isLifecycleStepDone(selectedIncident?.status, step.key) ? 'bg-green-500' : 'bg-gray-700'"></div>
+                                <div x-show="idx < 3" class="lifecycle-connector"
+                                     :class="{'done': isLifecycleStepDone(selectedIncident?.status, step.key)}"></div>
                             </div>
                         </template>
                     </div>
-                    <div class="mt-3 flex items-center space-x-4 text-xs text-gray-500">
-                        <span x-show="selectedIncident?.created_at">Created: <span class="text-gray-400" x-text="formatTime(selectedIncident?.created_at)"></span></span>
-                        <span x-show="selectedIncident?.acknowledged_at">Ack'd: <span class="text-yellow-400" x-text="formatTime(selectedIncident?.acknowledged_at)"></span></span>
-                        <span x-show="selectedIncident?.resolved_at">Resolved: <span class="text-green-400" x-text="formatTime(selectedIncident?.resolved_at)"></span></span>
+                    <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px; font-size: 11px; color: var(--s3-text-3);">
+                        <span x-show="selectedIncident?.created_at">Created: <span style="color: var(--s3-text-2);" x-text="formatTime(selectedIncident?.created_at)"></span></span>
+                        <span x-show="selectedIncident?.acknowledged_at">Ack'd: <span style="color: var(--s3-medium);" x-text="formatTime(selectedIncident?.acknowledged_at)"></span></span>
+                        <span x-show="selectedIncident?.resolved_at">Resolved: <span style="color: var(--s3-low);" x-text="formatTime(selectedIncident?.resolved_at)"></span></span>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-6">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">Severity & Risk Score</label>
-                            <div class="mt-2 flex items-center space-x-4">
-                                <span class="px-3 py-1 rounded text-sm font-medium"
-                                      :class="{'bg-red-500/20 text-red-400': selectedIncident?.severity === 'critical'}"
+                <div class="detail-grid">
+                    <div class="detail-section">
+                        <div class="detail-block">
+                            <label>Severity & Risk Score</label>
+                            <div style="display: flex; align-items: center; gap: 14px; margin-top: 4px;">
+                                <span class="sev-badge"
+                                      :class="{
+                                          'critical': selectedIncident?.severity === 'critical',
+                                          'high': selectedIncident?.severity === 'high',
+                                          'medium': selectedIncident?.severity === 'medium',
+                                          'low': selectedIncident?.severity === 'low'
+                                      }"
                                       x-text="selectedIncident?.severity?.toUpperCase()"></span>
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-sm text-gray-400">Risk:</span>
-                                    <span class="text-xl font-bold" x-text="extractRiskScore(selectedIncident)"></span>
-                                    <span class="text-sm text-gray-500">/100</span>
+                                <div style="display: flex; align-items: baseline; gap: 4px;">
+                                    <span style="font-size: 12px; color: var(--s3-text-3);">Risk:</span>
+                                    <span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700;" x-text="extractRiskScore(selectedIncident)"></span>
+                                    <span style="font-size: 12px; color: var(--s3-text-3);">/100</span>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">ML Confidence Breakdown</label>
-                            <div class="mt-2 space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm text-gray-400">Overall Confidence</span>
-                                    <div class="flex items-center">
-                                        <div class="w-32 h-3 bg-gray-700 rounded-full overflow-hidden mr-3">
-                                            <div class="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+
+                        <div class="detail-block">
+                            <label>ML Confidence Breakdown</label>
+                            <div style="margin-top: 4px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                    <span style="font-size: 13px; color: var(--s3-text-2);">Overall Confidence</span>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div class="progress-track" style="width: 120px;">
+                                            <div class="progress-fill gradient"
                                                  :style="`width: ${(selectedIncident?.confidence || 0) * 100}%`"></div>
                                         </div>
-                                        <span class="font-bold" x-text="`${((selectedIncident?.confidence || 0) * 100).toFixed(1)}%`"></span>
+                                        <span style="font-weight: 600; font-size: 13px;" x-text="`${((selectedIncident?.confidence || 0) * 100).toFixed(1)}%`"></span>
                                     </div>
                                 </div>
-                                <div class="text-xs text-gray-500 bg-gray-800/50 p-2 rounded">
-                                    <div>• Bytecode Analysis: <span class="text-blue-400">Transformer Model</span></div>
-                                    <div>• Pattern Matching: <span class="text-purple-400">XGBoost Ensemble</span></div>
-                                    <div>• Rule Correlation: <span class="text-green-400">Domain Knowledge</span></div>
+                                <div class="confidence-breakdown">
+                                    <div>Bytecode Analysis: <span style="color: #93c5fd;">Transformer Model</span></div>
+                                    <div>Pattern Matching: <span style="color: var(--s3-accent-light);">XGBoost Ensemble</span></div>
+                                    <div>Rule Correlation: <span style="color: #34d399;">Domain Knowledge</span></div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">Attack Type</label>
-                            <p class="mt-1 text-white" x-text="formatAttackType(selectedIncident?.attack_type)"></p>
+
+                        <div class="detail-block">
+                            <label>Attack Type</label>
+                            <div class="value" x-text="formatAttackType(selectedIncident?.attack_type)"></div>
                         </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">Total Loss (USD)</label>
-                            <p class="mt-1 text-2xl font-bold text-red-400" x-text="formatUSD(selectedIncident?.total_loss_usd)"></p>
+
+                        <div class="detail-block">
+                            <label>Total Loss (USD)</label>
+                            <div class="value-lg" x-text="formatUSD(selectedIncident?.total_loss_usd)"></div>
                         </div>
                     </div>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">Affected Chains</label>
-                            <div class="mt-1 flex flex-wrap gap-2">
+
+                    <div class="detail-section">
+                        <div class="detail-block">
+                            <label>Affected Chains</label>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
                                 <template x-for="chain in selectedIncident?.affected_chains || []" :key="chain">
-                                    <span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-sm capitalize" x-text="chain"></span>
+                                    <span class="tag tag-blue" style="text-transform: capitalize;" x-text="chain"></span>
                                 </template>
                             </div>
                         </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">Affected Contracts</label>
-                            <div class="mt-1 space-y-1 max-h-20 overflow-y-auto">
+
+                        <div class="detail-block">
+                            <label>Affected Contracts</label>
+                            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 80px; overflow-y: auto; margin-top: 4px;">
                                 <template x-for="contract in selectedIncident?.affected_contracts || []" :key="contract">
-                                    <div class="font-mono text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded" x-text="contract"></div>
+                                    <div class="mono-block" x-text="contract"></div>
                                 </template>
                             </div>
                         </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-500 uppercase">Created At</label>
-                            <p class="mt-1" x-text="formatDateTime(selectedIncident?.created_at)"></p>
+
+                        <div class="detail-block">
+                            <label>Created At</label>
+                            <div class="value" x-text="formatDateTime(selectedIncident?.created_at)"></div>
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="mt-6">
-                    <label class="text-xs text-gray-500 uppercase">Summary</label>
-                    <p class="mt-2 text-gray-300 bg-gray-800/50 p-4 rounded-lg" x-text="selectedIncident?.summary"></p>
+                    <div class="detail-block">
+                        <label>Summary</label>
+                        <div class="summary-block" x-text="selectedIncident?.summary"></div>
+                    </div>
                 </div>
-                
+
                 <div class="mt-6" x-show="selectedIncident?.recommended_actions?.length > 0">
-                    <label class="text-xs text-gray-500 uppercase">Recommended Actions</label>
-                    <ul class="mt-2 space-y-2">
-                        <template x-for="action in selectedIncident?.recommended_actions || []" :key="action">
-                            <li class="flex items-start"><span class="text-blue-400 mr-2">•</span><span class="text-gray-300" x-text="action"></span></li>
-                        </template>
-                    </ul>
+                    <div class="detail-block">
+                        <label>Recommended Actions</label>
+                        <ul class="action-list" style="margin-top: 8px;">
+                            <template x-for="action in selectedIncident?.recommended_actions || []" :key="action">
+                                <li><span class="bullet">&bull;</span><span x-text="action"></span></li>
+                            </template>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- LLM Triage Section -->
-                <div class="mt-6 border-t border-gray-700 pt-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-purple-400 text-lg">🧠</span>
-                            <label class="text-xs text-gray-500 uppercase">AI Triage (Claude LLM)</label>
+                <div class="triage-section">
+                    <div class="triage-header">
+                        <div class="triage-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--s3-accent-light);">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                            AI Triage (Claude LLM)
                         </div>
                         <button @click="runLLMTriage()"
                                 x-show="!llmTriageLoading && !llmTriageResult"
-                                class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs font-medium transition">
+                                class="btn btn-sm btn-accent">
                             Run LLM Triage
                         </button>
                     </div>
 
                     <!-- Loading -->
-                    <div x-show="llmTriageLoading" class="flex items-center space-x-3 p-4 bg-purple-900/10 rounded-lg">
-                        <div class="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full"></div>
-                        <span class="text-sm text-gray-400">Claude is analyzing this incident...</span>
+                    <div x-show="llmTriageLoading" style="display: flex; align-items: center; gap: 12px; padding: 16px; background: rgba(139,92,246,0.06); border-radius: var(--s3-radius-sm);">
+                        <div class="spinner"></div>
+                        <span style="font-size: 13px; color: var(--s3-text-2);">Claude is analyzing this incident...</span>
                     </div>
 
                     <!-- Results -->
-                    <div x-show="llmTriageResult" class="space-y-3">
-                        <div class="p-4 rounded-lg border"
+                    <div x-show="llmTriageResult" style="display: flex; flex-direction: column; gap: 12px;">
+                        <div class="triage-verdict"
                              :class="{
-                                 'bg-green-900/15 border-green-500/30': llmTriageResult?.verdict === 'false_positive',
-                                 'bg-red-900/15 border-red-500/30': llmTriageResult?.verdict === 'true_positive',
-                                 'bg-yellow-900/15 border-yellow-500/30': llmTriageResult?.verdict === 'needs_review'
+                                 'tp': llmTriageResult?.verdict === 'true_positive',
+                                 'fp': llmTriageResult?.verdict === 'false_positive',
+                                 'rev': llmTriageResult?.verdict === 'needs_review'
                              }">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="font-semibold"
-                                      :class="{
-                                          'text-red-400': llmTriageResult?.verdict === 'true_positive',
-                                          'text-green-400': llmTriageResult?.verdict === 'false_positive',
-                                          'text-yellow-400': llmTriageResult?.verdict === 'needs_review'
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="font-weight: 600; font-size: 14px;"
+                                      :style="{
+                                          color: llmTriageResult?.verdict === 'true_positive' ? 'var(--s3-critical)' :
+                                                 llmTriageResult?.verdict === 'false_positive' ? 'var(--s3-low)' : 'var(--s3-medium)'
                                       }"
                                       x-text="llmTriageResult?.verdict?.replace(/_/g, ' ')?.toUpperCase()"></span>
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-xs text-gray-500">Confidence:</span>
-                                    <span class="text-sm font-bold" x-text="`${((llmTriageResult?.confidence || 0) * 100).toFixed(0)}%`"></span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 11px; color: var(--s3-text-3);">Confidence:</span>
+                                    <span style="font-size: 13px; font-weight: 600;" x-text="`${((llmTriageResult?.confidence || 0) * 100).toFixed(0)}%`"></span>
                                 </div>
                             </div>
-                            <p class="text-sm text-gray-300" x-text="llmTriageResult?.reasoning"></p>
+                            <p style="font-size: 13px; color: var(--s3-text-2); margin: 0;" x-text="llmTriageResult?.reasoning"></p>
                         </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="bg-gray-800/50 rounded-lg p-3">
-                                <span class="text-xs text-gray-500">Suggested Action</span>
-                                <p class="text-sm font-medium mt-1 capitalize" x-text="llmTriageResult?.suggested_action?.replace(/_/g, ' ')"></p>
+                        <div class="triage-meta">
+                            <div class="triage-meta-card">
+                                <span class="s3-label" style="margin-bottom: 4px;">Suggested Action</span>
+                                <div style="font-size: 13px; font-weight: 500; text-transform: capitalize;" x-text="llmTriageResult?.suggested_action?.replace(/_/g, ' ')"></div>
                             </div>
-                            <div class="bg-gray-800/50 rounded-lg p-3">
-                                <span class="text-xs text-gray-500">Rule ID</span>
-                                <p class="text-sm font-mono mt-1" x-text="llmTriageResult?.rule_id"></p>
+                            <div class="triage-meta-card">
+                                <span class="s3-label" style="margin-bottom: 4px;">Rule ID</span>
+                                <div class="font-mono" style="font-size: 12px;" x-text="llmTriageResult?.rule_id"></div>
                             </div>
                         </div>
-                        <div x-show="llmTriageResult?.risk_factors?.length > 0" class="bg-red-900/10 rounded-lg p-3">
-                            <span class="text-xs text-red-400 uppercase">Risk Factors</span>
-                            <ul class="mt-1 space-y-1">
+                        <div x-show="llmTriageResult?.risk_factors?.length > 0" class="triage-factors risk">
+                            <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--s3-critical);">Risk Factors</span>
+                            <ul>
                                 <template x-for="f in llmTriageResult?.risk_factors || []" :key="f">
-                                    <li class="text-xs text-gray-300 flex items-start">
-                                        <span class="text-red-400 mr-1">!</span><span x-text="f"></span>
+                                    <li>
+                                        <span style="color: var(--s3-critical); flex-shrink: 0;">!</span>
+                                        <span x-text="f"></span>
                                     </li>
                                 </template>
                             </ul>
                         </div>
-                        <div x-show="llmTriageResult?.mitigating_factors?.length > 0" class="bg-green-900/10 rounded-lg p-3">
-                            <span class="text-xs text-green-400 uppercase">Mitigating Factors</span>
-                            <ul class="mt-1 space-y-1">
+                        <div x-show="llmTriageResult?.mitigating_factors?.length > 0" class="triage-factors mitigating">
+                            <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--s3-low);">Mitigating Factors</span>
+                            <ul>
                                 <template x-for="f in llmTriageResult?.mitigating_factors || []" :key="f">
-                                    <li class="text-xs text-gray-300 flex items-start">
-                                        <span class="text-green-400 mr-1">+</span><span x-text="f"></span>
+                                    <li>
+                                        <span style="color: var(--s3-low); flex-shrink: 0;">+</span>
+                                        <span x-text="f"></span>
                                     </li>
                                 </template>
                             </ul>
@@ -667,203 +1319,208 @@
                     </div>
 
                     <!-- Error -->
-                    <div x-show="llmTriageError" class="p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-                        <p class="text-xs text-red-400" x-text="llmTriageError"></p>
+                    <div x-show="llmTriageError" style="padding: 12px 16px; background: rgba(244,63,94,0.06); border: 1px solid rgba(244,63,94,0.2); border-radius: var(--s3-radius-sm);">
+                        <p style="font-size: 12px; color: var(--s3-critical); margin: 0;" x-text="llmTriageError"></p>
                     </div>
                 </div>
-            </div>
-            
-            <div class="p-4 border-t border-gray-800 bg-gray-900/50">
+            </div><!-- /modal-body -->
+
+            <!-- Footer -->
+            <div class="modal-footer">
                 <!-- Feedback Section -->
-                <div class="mb-4 p-3 bg-gray-800/50 rounded-lg" x-show="!selectedIncident?.feedbackSubmitted">
-                    <label class="text-xs text-gray-500 uppercase mb-2 block">Analyst Feedback (TP/FP)</label>
-                    <div class="flex items-center space-x-3">
-                        <button @click="submitFeedback(selectedIncident, true)" 
-                                class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium flex items-center space-x-2"
+                <div class="feedback-panel" x-show="!selectedIncident?.feedbackSubmitted">
+                    <label class="s3-label">Analyst Feedback (TP/FP)</label>
+                    <div class="feedback-row">
+                        <button @click="submitFeedback(selectedIncident, true)"
+                                class="btn btn-sm btn-green-solid"
                                 :disabled="submittingFeedback">
-                            <span>✅</span><span>True Positive</span>
+                            True Positive
                         </button>
-                        <button @click="submitFeedback(selectedIncident, false)" 
-                                class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium flex items-center space-x-2"
+                        <button @click="submitFeedback(selectedIncident, false)"
+                                class="btn btn-sm btn-red-solid"
                                 :disabled="submittingFeedback">
-                            <span>❌</span><span>False Positive</span>
+                            False Positive
                         </button>
-                        <input type="text" x-model="feedbackNotes" placeholder="Optional notes..." 
-                               class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:outline-none focus:border-blue-500">
+                        <input type="text" x-model="feedbackNotes" placeholder="Optional notes..."
+                               class="feedback-input">
                     </div>
-                    <p class="text-xs text-gray-500 mt-2">Your feedback helps improve ML detection accuracy</p>
+                    <p style="font-size: 11px; color: var(--s3-text-3); margin-top: 8px;">Your feedback helps improve ML detection accuracy</p>
                 </div>
-                <div class="mb-4 p-3 bg-green-900/20 border border-green-500/30 rounded-lg" x-show="selectedIncident?.feedbackSubmitted">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-green-400">✓</span>
-                        <span class="text-sm text-green-400">Feedback submitted - marked as <span x-text="selectedIncident?.feedbackIsTP ? 'True Positive' : 'False Positive'"></span></span>
-                    </div>
+                <div x-show="selectedIncident?.feedbackSubmitted" class="feedback-success">
+                    <span>&#10003;</span>
+                    <span>Feedback submitted &mdash; marked as <span x-text="selectedIncident?.feedbackIsTP ? 'True Positive' : 'False Positive'"></span></span>
                 </div>
-                
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-2">
-                        <button @click="showCorrelatedEvents(selectedIncident)" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium">🔗 Events</button>
-                        <button @click="acknowledgeIncident(selectedIncident)" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm" x-show="selectedIncident?.status === 'open_pending'">✓ Acknowledge</button>
-                        <button @click="updateIncidentStatus(selectedIncident, 'INVESTIGATING')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm" x-show="selectedIncident?.status === 'open_acknowledged' || selectedIncident?.status === 'acknowledged'">🔍 Investigate</button>
-                        <button @click="resolveIncident(selectedIncident)" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm" x-show="selectedIncident?.status !== 'resolved' && selectedIncident?.status !== 'closed' && selectedIncident?.status !== 'false_positive'">✓ Resolve</button>
+
+                <div class="modal-actions">
+                    <div class="modal-actions-left">
+                        <button @click="showCorrelatedEvents(selectedIncident)" class="btn btn-sm btn-purple">Events</button>
+                        <button @click="acknowledgeIncident(selectedIncident)" class="btn btn-sm btn-medium" x-show="selectedIncident?.status === 'open_pending'">Acknowledge</button>
+                        <button @click="updateIncidentStatus(selectedIncident, 'INVESTIGATING')" class="btn btn-sm btn-blue" x-show="selectedIncident?.status === 'open_acknowledged' || selectedIncident?.status === 'acknowledged'">Investigate</button>
+                        <button @click="resolveIncident(selectedIncident)" class="btn btn-sm btn-low" x-show="selectedIncident?.status !== 'resolved' && selectedIncident?.status !== 'closed' && selectedIncident?.status !== 'false_positive'">Resolve</button>
                     </div>
-                    <button @click="selectedIncident = null" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">Close</button>
+                    <button @click="selectedIncident = null" class="btn btn-sm btn-ghost">Close</button>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Correlated Events Modal -->
-    <div x-show="showEventsModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" @click.self="showEventsModal = false">
-        <div class="bg-[#12121a] border border-gray-700 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl">
-            <div class="p-4 border-b border-gray-800 bg-purple-900/20 flex items-center justify-between">
+
+    <!-- ═══════════════════════════════════════════════════════
+         Correlated Events Modal
+         ═══════════════════════════════════════════════════════ -->
+    <div x-show="showEventsModal" x-cloak
+         class="modal-backdrop"
+         style="position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;"
+         @click.self="showEventsModal = false">
+        <div class="modal-panel" style="max-width: 1040px;">
+
+            <div class="modal-header" style="border-left: 3px solid var(--s3-accent);">
                 <div>
-                    <h3 class="text-lg font-bold">🔗 Correlated Events</h3>
-                    <p class="text-sm text-gray-400">Events related to: <span class="font-mono" x-text="eventsForIncident?.id?.substring(0, 30)"></span></p>
+                    <div style="font-size: 16px; font-weight: 600;">Correlated Events</div>
+                    <div style="font-size: 12px; color: var(--s3-text-3); margin-top: 4px;">Events related to: <span class="font-mono" x-text="eventsForIncident?.id?.substring(0, 30)"></span></div>
                 </div>
-                <button @click="showEventsModal = false" class="p-2 hover:bg-gray-700 rounded-lg">✕</button>
+                <button @click="showEventsModal = false" class="close-btn">&times;</button>
             </div>
-            
-            <div x-show="loadingEvents" class="p-12 text-center">
-                <div class="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p class="text-gray-400">Loading events...</p>
+
+            <div x-show="loadingEvents" style="padding: 60px 20px; text-align: center;">
+                <div class="spinner" style="margin: 0 auto 14px;"></div>
+                <p style="font-size: 13px; color: var(--s3-text-3);">Loading events...</p>
             </div>
-            
-            <div x-show="!loadingEvents" class="overflow-y-auto max-h-[70vh]">
-                <!-- ML Detection Info Cards (for ML-detected incidents) -->
+
+            <div x-show="!loadingEvents" style="overflow-y: auto; max-height: 70vh;">
+                <!-- ML Detection Info Cards -->
                 <template x-if="correlatedEvents.some(e => e.is_ml_detection)">
-                    <div class="p-4 space-y-4">
-                        <div class="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
-                            <div class="flex items-center space-x-2 mb-3">
-                                <span class="text-2xl">🤖</span>
-                                <h4 class="text-lg font-semibold text-purple-400">ML Contract Analysis</h4>
+                    <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                        <div style="background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.15); border-radius: var(--s3-radius-sm); padding: 16px 20px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--s3-accent-light);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                <span style="font-size: 15px; font-weight: 600; color: var(--s3-accent-light);">ML Contract Analysis</span>
                             </div>
-                            <p class="text-sm text-gray-400 mb-4">This incident was detected by our ML model analyzing contract bytecode. No transaction events are associated yet.</p>
+                            <p style="font-size: 13px; color: var(--s3-text-2); margin: 0;">This incident was detected by our ML model analyzing contract bytecode. No transaction events are associated yet.</p>
                         </div>
-                        
+
                         <template x-for="event in correlatedEvents.filter(e => e.is_ml_detection)" :key="event.event_id">
-                            <div class="card p-4" :class="{'border-l-4 border-purple-500': event.event_type.includes('ML'), 'border-l-4 border-blue-500': event.event_type.includes('Deployer')}">
-                                <div class="flex items-start justify-between mb-3">
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-xl" x-text="event.event_type.includes('ML') ? '📋' : '👤'"></span>
-                                        <span class="font-medium" x-text="event.event_type"></span>
-                                        <span class="px-2 py-0.5 bg-gray-700 rounded text-xs capitalize" x-text="event.chain"></span>
+                            <div class="event-card" :class="{'ml': event.event_type.includes('ML'), 'deployer': event.event_type.includes('Deployer')}">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-weight: 500; font-size: 14px;" x-text="event.event_type"></span>
+                                        <span class="tag tag-accent" style="text-transform: capitalize;" x-text="event.chain"></span>
                                     </div>
-                                    <a x-show="event.ml_details?.explorer_url" 
-                                       :href="event.ml_details?.explorer_url" 
-                                       target="_blank" 
-                                       class="px-3 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-sm transition">
-                                        🔗 View on Explorer
+                                    <a x-show="event.ml_details?.explorer_url"
+                                       :href="event.ml_details?.explorer_url"
+                                       target="_blank"
+                                       class="btn btn-xs btn-blue">
+                                        View on Explorer
                                     </a>
                                 </div>
-                                
-                                <div class="space-y-2 text-sm">
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-gray-500 w-24">Address:</span>
-                                        <span class="font-mono text-xs bg-gray-800 px-2 py-1 rounded" x-text="event.contract_address"></span>
+
+                                <div style="display: flex; flex-direction: column; gap: 6px;">
+                                    <div class="event-row">
+                                        <span class="event-label">Address:</span>
+                                        <span class="mono-block" x-text="event.contract_address"></span>
                                     </div>
-                                    
+
                                     <template x-if="event.ml_details?.detection_type">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-gray-500 w-24">Threat Type:</span>
-                                            <span class="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs" x-text="event.ml_details.detection_type"></span>
+                                        <div class="event-row">
+                                            <span class="event-label">Threat Type:</span>
+                                            <span class="sev-badge critical" style="font-size: 11px;" x-text="event.ml_details.detection_type"></span>
                                         </div>
                                     </template>
-                                    
+
                                     <template x-if="event.ml_details?.confidence">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-gray-500 w-24">Confidence:</span>
-                                            <span class="text-yellow-400" x-text="event.ml_details.confidence"></span>
+                                        <div class="event-row">
+                                            <span class="event-label">Confidence:</span>
+                                            <span style="color: var(--s3-medium);" x-text="event.ml_details.confidence"></span>
                                         </div>
                                     </template>
-                                    
+
                                     <template x-if="event.ml_details?.risk_score">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-gray-500 w-24">Risk Score:</span>
-                                            <div class="flex items-center space-x-2">
-                                                <div class="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
-                                                    <div class="h-full rounded-full"
+                                        <div class="event-row">
+                                            <span class="event-label">Risk Score:</span>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <div class="progress-track" style="width: 80px;">
+                                                    <div class="progress-fill"
                                                          :class="{
-                                                             'bg-red-500': event.ml_details.risk_score >= 80,
-                                                             'bg-orange-500': event.ml_details.risk_score >= 60,
-                                                             'bg-yellow-500': event.ml_details.risk_score >= 40,
-                                                             'bg-green-500': event.ml_details.risk_score < 40
+                                                             'critical': event.ml_details.risk_score >= 80,
+                                                             'high': event.ml_details.risk_score >= 60,
+                                                             'medium': event.ml_details.risk_score >= 40,
+                                                             'low': event.ml_details.risk_score < 40
                                                          }"
                                                          :style="`width: ${event.ml_details.risk_score}%`"></div>
                                                 </div>
-                                                <span x-text="`${event.ml_details.risk_score}/100`"></span>
+                                                <span style="font-size: 12px;" x-text="`${event.ml_details.risk_score}/100`"></span>
                                             </div>
                                         </div>
                                     </template>
-                                    
+
                                     <template x-if="event.ml_details?.deployer">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-gray-500 w-24">Deployer:</span>
-                                            <span class="font-mono text-xs text-gray-400" x-text="event.ml_details.deployer"></span>
+                                        <div class="event-row">
+                                            <span class="event-label">Deployer:</span>
+                                            <span class="font-mono" style="font-size: 11px; color: var(--s3-text-2);" x-text="event.ml_details.deployer"></span>
                                         </div>
                                     </template>
-                                    
+
                                     <template x-if="event.ml_details?.note">
-                                        <div class="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded text-xs text-yellow-400">
-                                            💡 <span x-text="event.ml_details.note"></span>
-                                        </div>
+                                        <div class="event-note" x-text="event.ml_details.note"></div>
                                     </template>
-                                    
+
                                     <template x-if="event.ml_details?.analysis_summary">
-                                        <div class="mt-2 p-2 bg-gray-800 rounded text-xs text-gray-400">
-                                            <span x-text="event.ml_details.analysis_summary"></span>
-                                        </div>
+                                        <div class="event-summary-block" x-text="event.ml_details.analysis_summary"></div>
                                     </template>
                                 </div>
-                                
-                                <div class="mt-3 text-xs text-gray-500">
+
+                                <div style="margin-top: 10px; font-size: 11px; color: var(--s3-text-3);">
                                     Detected: <span x-text="formatTime(event.timestamp)"></span>
                                 </div>
                             </div>
                         </template>
                     </div>
                 </template>
-                
-                <!-- Regular Events Table (for non-ML incidents) -->
+
+                <!-- Regular Events Table -->
                 <template x-if="!correlatedEvents.some(e => e.is_ml_detection)">
-                    <table class="w-full">
-                        <thead class="bg-gray-800/50 sticky top-0">
+                    <table class="s3-table">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Chain</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Contract</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Amount</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">USD</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Time</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tx</th>
+                                <th>Type</th>
+                                <th>Chain</th>
+                                <th>Contract</th>
+                                <th>Amount</th>
+                                <th>USD</th>
+                                <th>Time</th>
+                                <th>Tx</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-800">
+                        <tbody>
                             <template x-for="event in correlatedEvents" :key="event.event_id">
-                                <tr class="hover:bg-gray-800/30">
-                                    <td class="px-4 py-3"><span class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-xs" x-text="event.event_type"></span></td>
-                                    <td class="px-4 py-3 text-sm capitalize" x-text="event.chain || event.chain_id"></td>
-                                    <td class="px-4 py-3"><span class="font-mono text-xs text-gray-400" x-text="event.contract_address?.substring(0, 10) + '...'"></span></td>
-                                    <td class="px-4 py-3 text-sm" x-text="formatAmount(event.amount)"></td>
-                                    <td class="px-4 py-3 text-sm font-medium" x-text="formatUSD(event.amount_usd)"></td>
-                                    <td class="px-4 py-3 text-xs text-gray-400" x-text="formatTime(event.timestamp || event.block_timestamp)"></td>
-                                    <td class="px-4 py-3"><a :href="`https://etherscan.io/tx/${event.tx_hash}`" target="_blank" class="font-mono text-xs text-blue-400 hover:underline" x-text="event.tx_hash?.substring(0, 10) + '...'"></a></td>
+                                <tr>
+                                    <td><span class="tag tag-blue" style="font-size: 11px;" x-text="event.event_type"></span></td>
+                                    <td style="font-size: 13px; text-transform: capitalize;" x-text="event.chain || event.chain_id"></td>
+                                    <td><span class="font-mono" style="font-size: 11px; color: var(--s3-text-2);" x-text="event.contract_address?.substring(0, 10) + '...'"></span></td>
+                                    <td style="font-size: 13px;" x-text="formatAmount(event.amount)"></td>
+                                    <td style="font-size: 13px; font-weight: 500;" x-text="formatUSD(event.amount_usd)"></td>
+                                    <td style="font-size: 12px; color: var(--s3-text-2);" x-text="formatTime(event.timestamp || event.block_timestamp)"></td>
+                                    <td><a :href="`https://etherscan.io/tx/${event.tx_hash}`" target="_blank" class="font-mono" style="font-size: 11px; color: var(--s3-cyan); text-decoration: none;" x-text="event.tx_hash?.substring(0, 10) + '...'"></a></td>
                                 </tr>
                             </template>
                             <template x-if="correlatedEvents.length === 0">
-                                <tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">📭 No events found</td></tr>
+                                <tr><td colspan="7">
+                                    <div class="empty-state">No events found</div>
+                                </td></tr>
                             </template>
                         </tbody>
                     </table>
                 </template>
             </div>
-            
-            <div class="p-4 border-t border-gray-800 flex justify-between">
-                <span class="text-sm text-gray-400" x-text="`${correlatedEvents.length} events`"></span>
-                <button @click="showEventsModal = false" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">Close</button>
+
+            <div class="modal-footer" style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 12px; color: var(--s3-text-3);" x-text="`${correlatedEvents.length} events`"></span>
+                <button @click="showEventsModal = false" class="btn btn-sm btn-ghost">Close</button>
             </div>
         </div>
     </div>
+
 </div><!-- /app -->
 
     <script>
@@ -890,10 +1547,10 @@
                 llmTriageResult: null,
                 llmTriageLoading: false,
                 llmTriageError: null,
-                
+
                 filters: { timeRange: '30d', startDate: '', endDate: '', severity: '', status: '', attackType: '', chain: '', search: '' },
                 stats: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
-                
+
                 get totalPages() { return Math.ceil(this.filteredIncidents.length / this.perPage) || 1; },
                 get paginatedIncidents() { const start = (this.currentPage - 1) * this.perPage; return this.filteredIncidents.slice(start, start + parseInt(this.perPage)); },
                 get visiblePages() {
@@ -903,25 +1560,18 @@
                     for (let i = start; i <= end; i++) pages.push(i);
                     return pages;
                 },
-                
-                async init() {
-                    // Diagnostic
-                    var dInit = document.getElementById('d-init');
-                    if(dInit){dInit.textContent='✓ called';dInit.style.color='#3bff7e';}
 
+                async init() {
                     await new Promise(r => setTimeout(r, 100));
                     await this.loadIncidents();
-
-                    if(dInit){dInit.textContent='✓ loaded '+this.incidents.length;dInit.style.color='#3bff7e';}
-
                     this.connectWebSocket();
                     setInterval(() => this.loadIncidents(), 30000);
                 },
-                
+
                 getApiBase() {
                     return window.SENTINEL3_API_BASE || window.API_BASE_URL || '';
                 },
-                
+
                 connectWebSocket() {
                     const wsBase = this.getApiBase().replace('https://', 'wss://').replace('http://', 'ws://');
                     try {
@@ -938,43 +1588,33 @@
                         };
                     } catch (e) { console.error('WS connection error:', e); }
                 },
-                
+
                 handleNewIncident(incident) {
-                    // Add to list if not exists
                     const exists = this.incidents.find(i => i.id === incident.id);
                     if (!exists) {
                         this.incidents.unshift(incident);
                         this.applyFilters();
-                        
-                        // Show notification
                         this.notifications.unshift({
                             id: Date.now(),
                             title: `New ${incident.severity?.toUpperCase()} Incident`,
                             message: incident.title?.substring(0, 50) + '...',
                             severity: incident.severity
                         });
-                        
-                        // Auto-dismiss after 5 seconds
                         setTimeout(() => this.notifications.pop(), 5000);
                     }
                 },
-                
+
                 dismissNotification(id) {
                     this.notifications = this.notifications.filter(n => n.id !== id);
                 },
-                
+
                 async loadIncidents() {
                     try {
-                        // Build query params for server-side filtering
                         const params = new URLSearchParams();
-                        params.append('limit', '500'); // Fetch up to 500 incidents
-                        
-                        // Add time range filter (server-side)
+                        params.append('limit', '500');
                         if (this.filters.timeRange && this.filters.timeRange !== 'custom') {
                             params.append('time_range', this.filters.timeRange);
                         }
-                        
-                        // Add other filters
                         if (this.filters.severity) {
                             params.append('severity', this.filters.severity);
                         }
@@ -984,10 +1624,10 @@
                         if (this.filters.attackType) {
                             params.append('attack_type', this.filters.attackType);
                         }
-                        
+
                         const url = `${this.getApiBase()}/api/incidents?${params.toString()}`;
                         console.log('Fetching incidents:', url);
-                        
+
                         const response = await fetch(url);
                         if (!response.ok) {
                             throw new Error(`API returned ${response.status}`);
@@ -1002,25 +1642,21 @@
                         this.incidents = [];
                     }
                 },
-                
+
                 refreshIncidents() { this.loadIncidents(); },
-                
-                // Parse timestamp as UTC (API returns UTC timestamps without Z suffix)
+
                 parseUTCTimestamp(timestamp) {
                     if (!timestamp) return new Date(0);
-                    // If timestamp doesn't have timezone info, treat as UTC
                     if (!timestamp.endsWith('Z') && !timestamp.includes('+')) {
                         timestamp = timestamp + 'Z';
                     }
                     return new Date(timestamp);
                 },
-                
+
                 applyFilters() {
-                    // Server-side filtering already applied, just do client-side refinements
                     let filtered = [...this.incidents];
                     const now = new Date();
-                    
-                    // Custom time range (client-side only for custom dates)
+
                     if (this.filters.timeRange === 'custom') {
                         if (this.filters.startDate) {
                             const startTime = new Date(this.filters.startDate);
@@ -1030,34 +1666,30 @@
                             filtered = filtered.filter(inc => this.parseUTCTimestamp(inc.created_at) <= new Date(this.filters.endDate));
                         }
                     }
-                    
-                    // Status filter (client-side, not in server yet)
+
                     if (this.filters.status) {
                         filtered = filtered.filter(inc => inc.status?.toLowerCase() === this.filters.status.toLowerCase());
                     }
-                    
-                    // Search filter (client-side)
+
                     if (this.filters.search) {
                         const s = this.filters.search.toLowerCase();
-                        filtered = filtered.filter(inc => 
-                            inc.id?.toLowerCase().includes(s) || 
-                            inc.title?.toLowerCase().includes(s) || 
+                        filtered = filtered.filter(inc =>
+                            inc.id?.toLowerCase().includes(s) ||
+                            inc.title?.toLowerCase().includes(s) ||
                             inc.affected_contracts?.some(c => c.toLowerCase().includes(s))
                         );
                     }
-                    
-                    // Sort by time (most recent first)
+
                     filtered.sort((a, b) => this.parseUTCTimestamp(b.created_at) - this.parseUTCTimestamp(a.created_at));
                     this.filteredIncidents = filtered;
                     this.currentPage = 1;
                     this.updateStats();
                 },
-                
-                // Reload incidents when major filters change (server-side)
+
                 async onFilterChange() {
                     await this.loadIncidents();
                 },
-                
+
                 updateStats() {
                     this.stats = {
                         critical: this.filteredIncidents.filter(i => i.severity === 'critical').length,
@@ -1067,34 +1699,34 @@
                         total: this.filteredIncidents.length
                     };
                 },
-                
+
                 resetFilters() {
                     this.filters = { timeRange: '24h', startDate: '', endDate: '', severity: '', status: '', attackType: '', chain: '', search: '' };
                     this.applyFilters();
                 },
-                
+
                 debounceSearch() { clearTimeout(this.searchTimeout); this.searchTimeout = setTimeout(() => this.applyFilters(), 300); },
-                
+
                 selectIncident(incident) {
                     this.selectedIncident = incident;
                     this.llmTriageResult = null;
                     this.llmTriageLoading = false;
                     this.llmTriageError = null;
                 },
-                
+
                 toggleIncidentSelection(id) {
                     const idx = this.selectedIncidents.indexOf(id);
                     if (idx > -1) this.selectedIncidents.splice(idx, 1);
                     else this.selectedIncidents.push(id);
                 },
-                
+
                 toggleSelectAll(event) {
                     if (event.target.checked) this.selectedIncidents = this.paginatedIncidents.map(i => i.id);
                     else this.selectedIncidents = [];
                 },
-                
+
                 clearSelection() { this.selectedIncidents = []; },
-                
+
                 async bulkAcknowledge() {
                     for (const id of this.selectedIncidents) {
                         try { await fetch(`${this.getApiBase()}/api/incidents/${id}/acknowledge`, { method: 'POST' }); } catch (e) {}
@@ -1102,7 +1734,7 @@
                     this.selectedIncidents = [];
                     await this.loadIncidents();
                 },
-                
+
                 async bulkResolve() {
                     for (const id of this.selectedIncidents) {
                         try { await fetch(`${this.getApiBase()}/api/incidents/${id}/resolve`, { method: 'POST' }); } catch (e) {}
@@ -1110,20 +1742,20 @@
                     this.selectedIncidents = [];
                     await this.loadIncidents();
                 },
-                
+
                 async showCorrelatedEvents(incident) {
                     this.eventsForIncident = incident;
                     this.showEventsModal = true;
                     this.loadingEvents = true;
                     this.correlatedEvents = [];
-                    
+
                     try {
                         const contracts = incident.affected_contracts || [];
                         const chain = incident.affected_chains?.[0] || '';
                         const response = await fetch(`${this.getApiBase()}/api/events?limit=100&chain_id=${chain}`);
                         const data = await response.json();
                         let events = Array.isArray(data) ? data : (data.events || []);
-                        
+
                         this.correlatedEvents = events.filter(event => {
                             if (contracts.length > 0) {
                                 const ec = event.contract_address?.toLowerCase();
@@ -1140,7 +1772,7 @@
                     } catch (e) { console.error('Events error:', e); }
                     finally { this.loadingEvents = false; }
                 },
-                
+
                 async acknowledgeIncident(incident) {
                     try {
                         await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/acknowledge`, { method: 'POST' });
@@ -1148,7 +1780,7 @@
                         await this.loadIncidents();
                     } catch (e) { console.error('Acknowledge error:', e); }
                 },
-                
+
                 async resolveIncident(incident) {
                     try {
                         await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/resolve`, { method: 'POST' });
@@ -1157,11 +1789,11 @@
                         await this.loadIncidents();
                     } catch (e) { console.error('Resolve error:', e); }
                 },
-                
+
                 async submitFeedback(incident, isTP) {
                     if (!incident) return;
                     this.submittingFeedback = true;
-                    
+
                     try {
                         const response = await fetch(`${this.getApiBase()}/api/incidents/${incident.id}/feedback`, {
                             method: 'POST',
@@ -1172,14 +1804,12 @@
                                 analyst_id: 'web_user'
                             })
                         });
-                        
+
                         if (response.ok) {
-                            // Mark as feedback submitted
                             incident.feedbackSubmitted = true;
                             incident.feedbackIsTP = isTP;
                             this.feedbackNotes = '';
-                            
-                            // Show notification
+
                             this.notifications.unshift({
                                 id: Date.now(),
                                 title: 'Feedback Submitted',
@@ -1187,8 +1817,7 @@
                                 severity: isTP ? 'medium' : 'low'
                             });
                             setTimeout(() => this.notifications.pop(), 3000);
-                            
-                            // Reload to get updated status
+
                             await this.loadIncidents();
                         } else {
                             const error = await response.text();
@@ -1202,7 +1831,7 @@
                         this.submittingFeedback = false;
                     }
                 },
-                
+
                 async runLLMTriage() {
                     if (!this.selectedIncident) return;
                     this.llmTriageLoading = true;
@@ -1257,14 +1886,14 @@
                         console.error('Feedback stats error:', e);
                     }
                 },
-                
+
                 extractRiskScore(incident) {
                     if (!incident) return 0;
                     const summary = incident.summary || '';
                     const match = summary.match(/risk score[:\s]+(\d+)/i);
                     return match ? parseInt(match[1]) : Math.round((incident.confidence || 0) * 100);
                 },
-                
+
                 exportCSV() {
                     const headers = ['ID', 'Severity', 'Risk Score', 'Attack Type', 'Chain', 'Confidence', 'Loss USD', 'Status', 'Created At'];
                     const rows = this.filteredIncidents.map(inc => [inc.id, inc.severity, this.extractRiskScore(inc), inc.attack_type, inc.affected_chains?.join(';'), inc.confidence, inc.total_loss_usd, inc.status, inc.created_at]);
@@ -1272,18 +1901,16 @@
                     const blob = new Blob([csv], { type: 'text/csv' });
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `incidents_${new Date().toISOString().split('T')[0]}.csv`; a.click();
                 },
-                
+
                 prevPage() { if (this.currentPage > 1) this.currentPage--; },
                 nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
                 goToPage(page) { this.currentPage = page; },
-                
+
                 formatTime(iso) {
                     if (!iso) return '';
-                    // Treat timestamps without timezone as UTC
                     const utcDate = (iso.endsWith('Z') || iso.includes('+')) ? new Date(iso) : new Date(iso + 'Z');
-                    // Format in IST (UTC+5:30)
-                    const options = { 
-                        hour: '2-digit', 
+                    const options = {
+                        hour: '2-digit',
                         minute: '2-digit',
                         day: '2-digit',
                         month: 'short',
@@ -1291,14 +1918,14 @@
                     };
                     return utcDate.toLocaleString('en-IN', options) + ' IST';
                 },
-                formatDateTime(iso) { 
+                formatDateTime(iso) {
                     if (!iso) return '';
                     const utcDate = (iso.endsWith('Z') || iso.includes('+')) ? new Date(iso) : new Date(iso + 'Z');
-                    const options = { 
+                    const options = {
                         year: 'numeric',
                         month: 'short',
                         day: '2-digit',
-                        hour: '2-digit', 
+                        hour: '2-digit',
                         minute: '2-digit',
                         second: '2-digit',
                         timeZone: 'Asia/Kolkata'
@@ -1333,7 +1960,6 @@
                     return map[status?.toLowerCase()] || status || 'Unknown';
                 },
 
-                // Incident lifecycle helpers
                 isLifecycleStepActive(status, stepKey) {
                     const s = (status || '').toLowerCase();
                     const normalizedStep = stepKey === 'acknowledged' ? ['open_acknowledged', 'acknowledged'] : [stepKey];

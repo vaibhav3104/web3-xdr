@@ -4,126 +4,188 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Parser Management | Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --border-color: #2a2a3a;
-            --text-primary: #f0f0f0;
-            --text-secondary: #a0a0b0;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --accent-cyan: #06b6d4;
-            --severity-low: #4ade80;
-            --severity-medium: #facc15;
-            --severity-high: #f97316;
-            --severity-critical: #ef4444;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        /* ── Page-Specific Styles ─────────────────────────────────────── */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
         }
 
-        /* Main Content */
-        .main-content {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 2rem;
+        /* ── Main Layout ──────────────────────────────────────────────── */
+        .page-shell {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
 
+        .page-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            padding: 16px 32px;
+            background: rgba(3,3,5,0.65);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--s3-border);
+        }
+
+        .page-topbar h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--s3-text);
+            letter-spacing: -0.01em;
+        }
+
+        .main-content {
+            flex: 1;
+            max-width: 1520px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 28px 32px 48px;
+        }
+
+        /* ── Page Header ──────────────────────────────────────────────── */
         .page-header {
-            margin-bottom: 2rem;
+            margin-bottom: 28px;
         }
 
         .page-header h2 {
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--s3-text);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-header h2 .header-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--s3-accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--s3-accent-light);
+        }
+
+        .page-header h2 .header-icon svg {
+            width: 18px;
+            height: 18px;
         }
 
         .page-header p {
-            color: var(--text-secondary);
+            color: var(--s3-text-2);
+            font-size: 14px;
+            margin-top: 6px;
+            padding-left: 42px;
         }
 
-        /* Stats Cards */
+        /* ── Stats Grid ───────────────────────────────────────────────── */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
         }
 
         .stat-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.25rem;
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.25s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--s3-border-hover);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.3), transparent);
         }
 
         .stat-card .label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
+            font-size: 11px;
+            color: var(--s3-text-3);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.08em;
+            font-weight: 500;
         }
 
         .stat-card .value {
-            font-size: 2rem;
+            font-size: 28px;
             font-weight: 700;
-            margin-top: 0.25rem;
+            color: var(--s3-text);
+            margin-top: 6px;
+            letter-spacing: -0.02em;
         }
 
-        /* Tabs */
+        .stat-card .value.text-small {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--s3-text-2);
+        }
+
+        /* ── Tabs ─────────────────────────────────────────────────────── */
         .tabs {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.5rem;
+            gap: 4px;
+            margin-bottom: 20px;
+            padding: 4px;
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--s3-radius);
+            border: 1px solid var(--s3-border);
+            width: fit-content;
         }
 
         .tab {
-            padding: 0.75rem 1.5rem;
+            padding: 9px 18px;
             border: none;
             background: transparent;
-            color: var(--text-secondary);
+            color: var(--s3-text-3);
             cursor: pointer;
-            border-radius: 6px 6px 0 0;
-            font-size: 0.95rem;
-            transition: all 0.2s;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            white-space: nowrap;
         }
 
         .tab:hover {
-            color: var(--text-primary);
-            background: var(--bg-tertiary);
+            color: var(--s3-text-2);
+            background: rgba(255,255,255,0.03);
         }
 
         .tab.active {
-            color: var(--accent-cyan);
-            background: var(--bg-tertiary);
-            border-bottom: 2px solid var(--accent-cyan);
+            color: var(--s3-accent-light);
+            background: var(--s3-accent-dim);
+            box-shadow: 0 0 12px rgba(139,92,246,0.08);
         }
 
-        /* Parser Table */
+        /* ── Glass Card Section ───────────────────────────────────────── */
         .parser-section {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
             overflow: hidden;
         }
 
@@ -131,136 +193,306 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--s3-border);
         }
 
         .section-header h3 {
-            font-size: 1.1rem;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 10px;
         }
 
+        .section-header h3 .section-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .section-header .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* ── Buttons ──────────────────────────────────────────────────── */
         .btn {
-            padding: 0.5rem 1rem;
+            padding: 8px 16px;
             border: none;
-            border-radius: 6px;
+            border-radius: var(--s3-radius-sm);
             cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 6px;
+            white-space: nowrap;
         }
 
         .btn-primary {
-            background: var(--accent-blue);
-            color: white;
+            background: linear-gradient(135deg, var(--s3-accent), #7c3aed);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(139,92,246,0.25);
         }
 
         .btn-primary:hover {
-            background: #2563eb;
+            background: linear-gradient(135deg, var(--s3-accent-light), var(--s3-accent));
+            box-shadow: 0 4px 20px rgba(139,92,246,0.35);
+            transform: translateY(-1px);
         }
 
         .btn-secondary {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
+            background: rgba(255,255,255,0.04);
+            color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
         }
 
         .btn-secondary:hover {
-            background: var(--border-color);
+            background: rgba(255,255,255,0.08);
+            color: var(--s3-text);
+            border-color: var(--s3-border-hover);
         }
 
         .btn-danger {
-            background: var(--severity-critical);
-            color: white;
+            background: rgba(244,63,94,0.12);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244,63,94,0.2);
+        }
+
+        .btn-danger:hover {
+            background: rgba(244,63,94,0.2);
+            border-color: rgba(244,63,94,0.4);
         }
 
         .btn-sm {
-            padding: 0.35rem 0.75rem;
-            font-size: 0.8rem;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 8px;
         }
 
-        /* Parser Grid */
+        .btn-icon {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+        }
+
+        /* ── Filters ──────────────────────────────────────────────────── */
+        .filters-bar {
+            display: flex;
+            gap: 12px;
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--s3-border);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .filter-group select,
+        .search-box input {
+            padding: 7px 12px;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: 8px;
+            color: var(--s3-text);
+            font-family: inherit;
+            font-size: 13px;
+            transition: border-color 0.2s ease;
+            outline: none;
+        }
+
+        .filter-group select:focus,
+        .search-box input:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 2px rgba(139,92,246,0.12);
+        }
+
+        .filter-group select option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 220px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding-left: 34px;
+        }
+
+        .search-box::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23475569' stroke-width='2'%3E%3Cpath d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E") center/contain no-repeat;
+        }
+
+        /* ── Parser Table ─────────────────────────────────────────────── */
         .parser-grid {
-            display: grid;
-            gap: 1px;
-            background: var(--border-color);
+            display: flex;
+            flex-direction: column;
         }
 
         .parser-row {
             display: grid;
-            grid-template-columns: 1fr 120px 100px 100px 150px 100px;
-            gap: 1rem;
-            padding: 1rem 1.5rem;
-            background: var(--bg-secondary);
+            grid-template-columns: 1fr 110px 100px 110px 110px 90px;
+            gap: 12px;
+            padding: 14px 24px;
             align-items: center;
-            transition: background 0.2s;
+            border-bottom: 1px solid var(--s3-border);
+            transition: background 0.15s ease;
         }
 
-        .parser-row:hover {
-            background: var(--bg-tertiary);
+        .parser-row:last-child {
+            border-bottom: none;
+        }
+
+        .parser-row:hover:not(.header) {
+            background: rgba(255,255,255,0.02);
         }
 
         .parser-row.header {
-            background: var(--bg-tertiary);
+            background: rgba(255,255,255,0.015);
             font-weight: 600;
-            font-size: 0.8rem;
+            font-size: 11px;
             text-transform: uppercase;
-            color: var(--text-secondary);
-            letter-spacing: 0.5px;
+            color: var(--s3-text-3);
+            letter-spacing: 0.06em;
+            padding: 10px 24px;
+            position: sticky;
+            top: 0;
         }
 
         .parser-name {
             display: flex;
             flex-direction: column;
-            gap: 0.25rem;
+            gap: 3px;
+            min-width: 0;
         }
 
         .parser-name .name {
             font-weight: 500;
+            font-size: 13.5px;
+            color: var(--s3-text);
         }
 
         .parser-name .signature {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
+            font-size: 11px;
+            color: var(--s3-text-3);
             word-break: break-all;
+            opacity: 0.8;
         }
 
         .parser-name .description {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
+            font-size: 12px;
+            color: var(--s3-text-2);
         }
 
-        /* Badges */
+        /* ── Badges ───────────────────────────────────────────────────── */
         .badge {
             display: inline-flex;
-            padding: 0.25rem 0.75rem;
+            padding: 3px 10px;
             border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 500;
+            font-size: 11px;
+            font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
         }
 
-        .badge-low { background: rgba(74, 222, 128, 0.2); color: var(--severity-low); }
-        .badge-medium { background: rgba(250, 204, 21, 0.2); color: var(--severity-medium); }
-        .badge-high { background: rgba(249, 115, 22, 0.2); color: var(--severity-high); }
-        .badge-critical { background: rgba(239, 68, 68, 0.2); color: var(--severity-critical); }
+        .badge-low      { background: rgba(16,185,129,0.12); color: var(--s3-low); border: 1px solid rgba(16,185,129,0.2); }
+        .badge-medium   { background: rgba(234,179,8,0.12);  color: var(--s3-medium); border: 1px solid rgba(234,179,8,0.2); }
+        .badge-high     { background: rgba(249,115,22,0.12); color: var(--s3-high); border: 1px solid rgba(249,115,22,0.2); }
+        .badge-critical { background: rgba(244,63,94,0.12);  color: var(--s3-critical); border: 1px solid rgba(244,63,94,0.2); }
 
-        .badge-token { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
-        .badge-bridge { background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); }
-        .badge-governance { background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); }
-        .badge-defi { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+        .badge-token      { background: rgba(34,211,238,0.1);  color: var(--s3-cyan); border: 1px solid rgba(34,211,238,0.2); }
+        .badge-bridge     { background: rgba(139,92,246,0.1);  color: var(--s3-accent-light); border: 1px solid rgba(139,92,246,0.2); }
+        .badge-governance { background: rgba(16,185,129,0.1);  color: var(--s3-low); border: 1px solid rgba(16,185,129,0.2); }
+        .badge-defi       { background: rgba(244,63,94,0.1);   color: #fb7185; border: 1px solid rgba(244,63,94,0.2); }
+
+        .protocol-label {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .usd-label {
+            font-size: 13px;
+            color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
 
         .actions {
             display: flex;
-            gap: 0.5rem;
+            gap: 6px;
         }
 
-        /* Modal */
+        /* ── Code Blocks ──────────────────────────────────────────────── */
+        .code-block {
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--s3-text-2);
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.6;
+        }
+
+        .content-area {
+            padding: 24px;
+        }
+
+        .content-area h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .content-area h4 + .code-block {
+            margin-bottom: 24px;
+        }
+
+        /* ── Modal ────────────────────────────────────────────────────── */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -268,7 +500,8 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
             z-index: 1000;
             justify-content: center;
             align-items: center;
@@ -279,209 +512,305 @@
         }
 
         .modal {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
             width: 90%;
-            max-width: 600px;
+            max-width: 580px;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 80px rgba(139,92,246,0.06);
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid var(--border-color);
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--s3-border);
         }
 
         .modal-header h3 {
-            font-size: 1.1rem;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--s3-text);
         }
 
         .modal-close {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--s3-border);
+            color: var(--s3-text-3);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .modal-close:hover {
+            background: rgba(244,63,94,0.1);
+            color: var(--s3-critical);
+            border-color: rgba(244,63,94,0.3);
         }
 
         .modal-body {
-            padding: 1.5rem;
+            padding: 24px;
         }
 
         .form-group {
-            margin-bottom: 1.25rem;
+            margin-bottom: 18px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
         }
 
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
+            padding: 10px 14px;
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: 8px;
+            color: var(--s3-text);
             font-family: inherit;
-            font-size: 0.95rem;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
-            outline: none;
-            border-color: var(--accent-blue);
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 2px rgba(139,92,246,0.12);
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: var(--s3-text-3);
+        }
+
+        .form-group select option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
         }
 
         .form-group textarea {
-            min-height: 100px;
+            min-height: 90px;
             resize: vertical;
             font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.5;
         }
 
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1rem;
+            gap: 14px;
         }
 
         .modal-footer {
             display: flex;
             justify-content: flex-end;
-            gap: 1rem;
-            padding: 1.25rem 1.5rem;
-            border-top: 1px solid var(--border-color);
+            gap: 10px;
+            padding: 18px 24px;
+            border-top: 1px solid var(--s3-border);
         }
 
-        /* Code Block */
-        .code-block {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 1rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            overflow-x: auto;
-            white-space: pre;
-        }
-
-        /* Filters */
-        .filters {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .filter-group {
+        /* ── Severity Level Cards ─────────────────────────────────────── */
+        .severity-row {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 16px;
+            padding: 16px;
+            border-bottom: 1px solid var(--s3-border);
+            transition: background 0.15s ease;
         }
 
-        .filter-group label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+        .severity-row:last-child {
+            border-bottom: none;
         }
 
-        .filter-group select {
-            padding: 0.5rem 1rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.9rem;
+        .severity-row:hover {
+            background: rgba(255,255,255,0.015);
         }
 
-        .search-box {
+        .severity-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .severity-info {
             flex: 1;
-            min-width: 200px;
         }
 
-        .search-box input {
-            width: 100%;
-            padding: 0.5rem 1rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
+        .severity-info .sev-name {
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--s3-text);
         }
 
-        /* Empty State */
+        .severity-info .sev-desc {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            margin-top: 2px;
+        }
+
+        .severity-response {
+            text-align: right;
+        }
+
+        .severity-response .resp-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--s3-text-3);
+        }
+
+        .severity-response .resp-value {
+            font-size: 13px;
+            color: var(--s3-text);
+            font-weight: 500;
+        }
+
+        /* ── Empty State ──────────────────────────────────────────────── */
         .empty-state {
             text-align: center;
-            padding: 3rem;
-            color: var(--text-secondary);
+            padding: 48px 24px;
+            color: var(--s3-text-3);
         }
 
-        .empty-state .icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
+        .empty-state .empty-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: var(--s3-accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 20px;
         }
 
-        /* Toast */
+        .empty-state p {
+            font-size: 13px;
+        }
+
+        /* ── Toast ────────────────────────────────────────────────────── */
         .toast {
             position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            bottom: 28px;
+            right: 28px;
+            padding: 12px 20px;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
             display: none;
             z-index: 1001;
-            animation: slideIn 0.3s ease;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--s3-text);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            animation: toastIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .toast.success {
-            border-color: var(--severity-low);
+            border-color: rgba(16,185,129,0.4);
+            background: linear-gradient(135deg, var(--s3-bg-3), rgba(16,185,129,0.06));
         }
 
         .toast.error {
-            border-color: var(--severity-critical);
+            border-color: rgba(244,63,94,0.4);
+            background: linear-gradient(135deg, var(--s3-bg-3), rgba(244,63,94,0.06));
         }
 
         .toast.show {
             display: block;
         }
 
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        @keyframes toastIn {
+            from { transform: translateY(16px) scale(0.96); opacity: 0; }
+            to   { transform: translateY(0) scale(1); opacity: 1; }
         }
 
-        /* Responsive */
+        /* ── Responsive ───────────────────────────────────────────────── */
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
         @media (max-width: 1024px) {
             .parser-row {
                 grid-template-columns: 1fr;
-                gap: 0.5rem;
+                gap: 8px;
             }
             .parser-row.header {
                 display: none;
+            }
+            .main-content {
+                padding: 20px 16px 40px;
+            }
+            .filters-bar {
+                padding: 12px 16px;
+            }
+            .section-header {
+                padding: 14px 16px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .tabs {
+                overflow-x: auto;
+            }
+            .form-row {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <div id="app" style="flex:1;min-width:0;">
-    <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-        <h1 class="text-lg font-semibold">Parser Management</h1>
-    </header>
+    <div id="app" class="page-shell">
+
+    <!-- Top Bar -->
+    <div class="page-topbar">
+        <h1>Parser Management</h1>
+    </div>
 
     <!-- Main Content -->
     <main class="main-content">
+
+        <!-- Page Header -->
         <div class="page-header">
-            <h2>🔄 Event Parser Management</h2>
+            <h2>
+                <span class="header-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </span>
+                Event Parser Management
+            </h2>
             <p>Configure how raw blockchain events are normalized into unified security events</p>
         </div>
 
@@ -496,12 +825,12 @@
                 <div class="value" id="cosmos-count">-</div>
             </div>
             <div class="stat-card">
-                <div class="label">By Category</div>
+                <div class="label">Categories</div>
                 <div class="value" id="category-count">-</div>
             </div>
             <div class="stat-card">
                 <div class="label">Last Updated</div>
-                <div class="value" id="last-updated" style="font-size: 1rem;">-</div>
+                <div class="value text-small" id="last-updated">-</div>
             </div>
         </div>
 
@@ -518,21 +847,30 @@
         <div id="evm-tab" class="tab-content">
             <div class="parser-section">
                 <div class="section-header">
-                    <h3>📝 EVM Event Signatures</h3>
-                    <div>
+                    <h3>
+                        <span class="section-icon" style="background: rgba(34,211,238,0.1); color: var(--s3-cyan);">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </span>
+                        EVM Event Signatures
+                    </h3>
+                    <div class="header-actions">
                         <button class="btn btn-secondary" onclick="reloadParsers()">
-                            🔄 Reload
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.93 9A8 8 0 0119.07 9M19.07 15A8 8 0 014.93 15"/></svg>
+                            Reload
                         </button>
                         <button class="btn btn-primary" onclick="showAddEvmModal()">
-                            + Add Parser
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                            Add Parser
                         </button>
                     </div>
                 </div>
 
                 <!-- Filters -->
-                <div class="filters" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+                <div class="filters-bar">
                     <div class="filter-group">
-                        <label>Severity:</label>
+                        <label>Severity</label>
                         <select id="filter-severity" onchange="filterParsers()">
                             <option value="">All</option>
                             <option value="low">Low</option>
@@ -542,7 +880,7 @@
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label>Category:</label>
+                        <label>Category</label>
                         <select id="filter-category" onchange="filterParsers()">
                             <option value="">All</option>
                             <option value="token">Token</option>
@@ -574,9 +912,18 @@
         <div id="cosmos-tab" class="tab-content" style="display: none;">
             <div class="parser-section">
                 <div class="section-header">
-                    <h3>⚛️ Cosmos Event Types</h3>
+                    <h3>
+                        <span class="section-icon" style="background: rgba(139,92,246,0.1); color: var(--s3-accent-light);">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12a3 3 0 106 0 3 3 0 00-6 0z"/>
+                            </svg>
+                        </span>
+                        Cosmos Event Types
+                    </h3>
                     <button class="btn btn-primary" onclick="showAddCosmosModal()">
-                        + Add Parser
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Add Parser
                     </button>
                 </div>
                 <div class="parser-grid" id="cosmos-parsers">
@@ -589,13 +936,26 @@
         <div id="move-tab" class="tab-content" style="display: none;">
             <div class="parser-section">
                 <div class="section-header">
-                    <h3>🔷 Move-based Chains (Aptos/Sui)</h3>
+                    <h3>
+                        <span class="section-icon" style="background: rgba(34,211,238,0.1); color: var(--s3-cyan);">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                        </span>
+                        Move-based Chains (Aptos/Sui)
+                    </h3>
                 </div>
-                <div style="padding: 1.5rem;">
-                    <h4 style="margin-bottom: 1rem;">Bridge Functions to Detect:</h4>
+                <div class="content-area">
+                    <h4>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        Bridge Functions to Detect
+                    </h4>
                     <div class="code-block" id="move-functions">Loading...</div>
-                    
-                    <h4 style="margin: 1.5rem 0 1rem;">Severity Patterns:</h4>
+
+                    <h4 style="margin-top: 24px;">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                        Severity Patterns
+                    </h4>
                     <div class="code-block" id="move-patterns">Loading...</div>
                 </div>
             </div>
@@ -605,13 +965,26 @@
         <div id="near-tab" class="tab-content" style="display: none;">
             <div class="parser-section">
                 <div class="section-header">
-                    <h3>🌈 Near Protocol Events</h3>
+                    <h3>
+                        <span class="section-icon" style="background: rgba(16,185,129,0.1); color: var(--s3-low);">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                            </svg>
+                        </span>
+                        Near Protocol Events
+                    </h3>
                 </div>
-                <div style="padding: 1.5rem;">
-                    <h4 style="margin-bottom: 1rem;">Action Types:</h4>
+                <div class="content-area">
+                    <h4>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Action Types
+                    </h4>
                     <div class="code-block" id="near-actions">Loading...</div>
-                    
-                    <h4 style="margin: 1.5rem 0 1rem;">Bridge Contracts:</h4>
+
+                    <h4 style="margin-top: 24px;">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        Bridge Contracts
+                    </h4>
                     <div class="code-block" id="near-bridges">Loading...</div>
                 </div>
             </div>
@@ -621,13 +994,21 @@
         <div id="severity-tab" class="tab-content" style="display: none;">
             <div class="parser-section">
                 <div class="section-header">
-                    <h3>📊 Severity Level Definitions</h3>
+                    <h3>
+                        <span class="section-icon" style="background: rgba(249,115,22,0.1); color: var(--s3-high);">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                        </span>
+                        Severity Level Definitions
+                    </h3>
                 </div>
-                <div id="severity-levels" style="padding: 1.5rem;">
+                <div id="severity-levels">
                     <!-- Dynamic content -->
                 </div>
             </div>
         </div>
+
     </main>
 
     <!-- Add/Edit EVM Modal -->
@@ -694,8 +1075,11 @@
 
     <!-- Toast -->
     <div class="toast" id="toast"></div>
+
     </div><!-- /app -->
 
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script>
         const API_BASE = (window.SENTINEL3_API_BASE || '') + '/api/parsers';
         let allEvmParsers = [];
@@ -706,7 +1090,7 @@
             tab.addEventListener('click', () => {
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-                
+
                 tab.classList.add('active');
                 document.getElementById(`${tab.dataset.tab}-tab`).style.display = 'block';
             });
@@ -717,7 +1101,7 @@
             try {
                 const res = await fetch(`${API_BASE}/stats`);
                 const data = await res.json();
-                
+
                 document.getElementById('evm-count').textContent = data.total_evm_parsers || 0;
                 document.getElementById('cosmos-count').textContent = data.total_cosmos_parsers || 0;
                 document.getElementById('category-count').textContent = Object.keys(data.evm_by_category || {}).length;
@@ -741,7 +1125,7 @@
 
         function renderEvmParsers(parsers) {
             const container = document.getElementById('evm-parsers');
-            
+
             let html = `
                 <div class="parser-row header">
                     <div>Event</div>
@@ -752,11 +1136,13 @@
                     <div>Actions</div>
                 </div>
             `;
-            
+
             if (parsers.length === 0) {
                 html += `
                     <div class="empty-state">
-                        <div class="icon">📝</div>
+                        <div class="empty-icon">
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </div>
                         <p>No parsers found</p>
                     </div>
                 `;
@@ -771,17 +1157,21 @@
                             </div>
                             <div><span class="badge badge-${p.category}">${p.category}</span></div>
                             <div><span class="badge badge-${p.severity}">${p.severity}</span></div>
-                            <div>${p.protocol || '-'}</div>
-                            <div>$${(p.estimated_usd || 0).toLocaleString()}</div>
+                            <div class="protocol-label">${p.protocol || '-'}</div>
+                            <div class="usd-label">$${(p.estimated_usd || 0).toLocaleString()}</div>
                             <div class="actions">
-                                <button class="btn btn-secondary btn-sm" onclick="editEvmParser('${p.signature}')">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="deleteEvmParser('${p.signature}')">🗑️</button>
+                                <button class="btn btn-secondary btn-icon btn-sm" onclick="editEvmParser('${p.signature}')" title="Edit">
+                                    <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </button>
+                                <button class="btn btn-danger btn-icon btn-sm" onclick="deleteEvmParser('${p.signature}')" title="Delete">
+                                    <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
                             </div>
                         </div>
                     `;
                 });
             }
-            
+
             container.innerHTML = html;
         }
 
@@ -789,9 +1179,9 @@
             const severity = document.getElementById('filter-severity').value;
             const category = document.getElementById('filter-category').value;
             const search = document.getElementById('search-input').value.toLowerCase();
-            
+
             let filtered = allEvmParsers;
-            
+
             if (severity) {
                 filtered = filtered.filter(p => p.severity === severity);
             }
@@ -799,13 +1189,13 @@
                 filtered = filtered.filter(p => p.category === category);
             }
             if (search) {
-                filtered = filtered.filter(p => 
+                filtered = filtered.filter(p =>
                     p.name.toLowerCase().includes(search) ||
                     p.signature.toLowerCase().includes(search) ||
                     (p.description || '').toLowerCase().includes(search)
                 );
             }
-            
+
             renderEvmParsers(filtered);
         }
 
@@ -814,7 +1204,7 @@
             try {
                 const res = await fetch(`${API_BASE}/cosmos`);
                 const data = await res.json();
-                
+
                 const container = document.getElementById('cosmos-parsers');
                 let html = `
                     <div class="parser-row header">
@@ -826,22 +1216,24 @@
                         <div>Actions</div>
                     </div>
                 `;
-                
+
                 (data.parsers || []).forEach(p => {
                     html += `
                         <div class="parser-row">
-                            <div><code>${p.type}</code></div>
-                            <div>${p.name}</div>
+                            <div><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--s3-cyan);">${p.type}</code></div>
+                            <div style="font-size:13px;color:var(--s3-text);">${p.name}</div>
                             <div><span class="badge badge-${p.severity}">${p.severity}</span></div>
                             <div><span class="badge badge-${p.category}">${p.category}</span></div>
                             <div></div>
                             <div class="actions">
-                                <button class="btn btn-secondary btn-sm">✏️</button>
+                                <button class="btn btn-secondary btn-icon btn-sm" title="Edit">
+                                    <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </button>
                             </div>
                         </div>
                     `;
                 });
-                
+
                 container.innerHTML = html;
             } catch (e) {
                 console.error('Failed to load Cosmos parsers:', e);
@@ -853,10 +1245,10 @@
             try {
                 const res = await fetch(`${API_BASE}/move`);
                 const data = await res.json();
-                
-                document.getElementById('move-functions').textContent = 
+
+                document.getElementById('move-functions').textContent =
                     JSON.stringify(data.bridge_functions || [], null, 2);
-                document.getElementById('move-patterns').textContent = 
+                document.getElementById('move-patterns').textContent =
                     JSON.stringify(data.severity_patterns || [], null, 2);
             } catch (e) {
                 console.error('Failed to load Move parsers:', e);
@@ -868,10 +1260,10 @@
             try {
                 const res = await fetch(`${API_BASE}/near`);
                 const data = await res.json();
-                
-                document.getElementById('near-actions').textContent = 
+
+                document.getElementById('near-actions').textContent =
                     JSON.stringify(data.action_types || [], null, 2);
-                document.getElementById('near-bridges').textContent = 
+                document.getElementById('near-bridges').textContent =
                     JSON.stringify(data.bridge_contracts || [], null, 2);
             } catch (e) {
                 console.error('Failed to load Near parsers:', e);
@@ -883,24 +1275,24 @@
             try {
                 const res = await fetch(`${API_BASE}/severity`);
                 const data = await res.json();
-                
+
                 let html = '';
                 for (const [level, info] of Object.entries(data)) {
                     html += `
-                        <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border-color);">
-                            <div style="width: 20px; height: 20px; border-radius: 50%; background: ${info.color};"></div>
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; text-transform: uppercase;">${level}</div>
-                                <div style="color: var(--text-secondary); font-size: 0.9rem;">${info.description}</div>
+                        <div class="severity-row">
+                            <div class="severity-dot" style="background: ${info.color}; color: ${info.color};"></div>
+                            <div class="severity-info">
+                                <div class="sev-name">${level}</div>
+                                <div class="sev-desc">${info.description}</div>
                             </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);">Response</div>
-                                <div>${info.response}</div>
+                            <div class="severity-response">
+                                <div class="resp-label">Response</div>
+                                <div class="resp-value">${info.response}</div>
                             </div>
                         </div>
                     `;
                 }
-                
+
                 document.getElementById('severity-levels').innerHTML = html;
             } catch (e) {
                 console.error('Failed to load severity levels:', e);
@@ -926,7 +1318,7 @@
         function editEvmParser(signature) {
             const parser = allEvmParsers.find(p => p.signature === signature);
             if (!parser) return;
-            
+
             editingSignature = signature;
             document.getElementById('evm-modal-title').textContent = 'Edit EVM Parser';
             document.getElementById('evm-signature').value = parser.signature;
@@ -956,24 +1348,24 @@
                 estimated_usd: parseInt(document.getElementById('evm-usd').value) || 0,
                 abi: document.getElementById('evm-abi').value || null
             };
-            
+
             if (!parser.signature || !parser.name) {
                 showToast('Signature and name are required', 'error');
                 return;
             }
-            
+
             try {
                 const method = editingSignature ? 'PUT' : 'POST';
-                const url = editingSignature 
+                const url = editingSignature
                     ? `${API_BASE}/evm/${editingSignature}`
                     : `${API_BASE}/evm`;
-                
+
                 const res = await fetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(parser)
                 });
-                
+
                 if (res.ok) {
                     showToast('Parser saved successfully', 'success');
                     closeEvmModal();
@@ -990,12 +1382,12 @@
 
         async function deleteEvmParser(signature) {
             if (!confirm('Are you sure you want to delete this parser?')) return;
-            
+
             try {
                 const res = await fetch(`${API_BASE}/evm/${signature}`, {
                     method: 'DELETE'
                 });
-                
+
                 if (res.ok) {
                     showToast('Parser deleted', 'success');
                     loadEvmParsers();
@@ -1041,4 +1433,3 @@
     </script>
 </body>
 </html>
-

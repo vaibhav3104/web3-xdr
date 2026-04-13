@@ -3,342 +3,896 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Protocol Monitoring - Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
-    <!-- DOMPurify for XSS Protection -->
+    <title>Protocol Monitoring — Sentinel3</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
         [x-cloak] { display: none !important; }
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-red: #ff3b3b;
-            --accent-orange: #ff8a3b;
-            --accent-yellow: #ffd93b;
-            --accent-green: #3bff7e;
-            --accent-blue: #3b8aff;
-            --accent-purple: #8a3bff;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --border-color: #2a2a3a;
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; margin: 0; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* ── Page Content Area ── */
+        .page-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
         }
-        
-        body {
+
+        /* ── Sticky Header ── */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .s3-header-title {
             font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--s3-text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        
-        .font-mono {
+        .s3-header-title svg {
+            width: 20px; height: 20px;
+            color: var(--s3-accent-light);
+        }
+        .s3-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .s3-header-ts {
             font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--s3-text-3);
         }
-        
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+        .s3-btn-primary {
+            background: var(--s3-accent);
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            font-family: inherit;
         }
-        
-        .status-healthy { color: var(--accent-green); }
-        .status-warning { color: var(--accent-yellow); }
-        .status-critical { color: var(--accent-red); }
-        
-        .bg-healthy { background: rgba(59, 255, 126, 0.1); border-color: var(--accent-green); }
-        .bg-warning { background: rgba(255, 217, 59, 0.1); border-color: var(--accent-yellow); }
-        .bg-critical { background: rgba(255, 59, 59, 0.1); border-color: var(--accent-red); }
-        
+        .s3-btn-primary:hover {
+            background: var(--s3-accent-light);
+            box-shadow: 0 0 20px rgba(139,92,246,0.3);
+        }
+
+        /* ── Main Layout ── */
+        .s3-main {
+            padding: 28px;
+            max-width: 1360px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ── Page Header ── */
+        .page-header {
+            margin-bottom: 28px;
+        }
+        .page-header h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--s3-text);
+            margin: 0 0 6px 0;
+        }
+        .page-header p {
+            font-size: 13px;
+            color: var(--s3-text-3);
+            margin: 0;
+        }
+
+        /* ── Glass Card ── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover {
+            border-color: var(--s3-border-hover, rgba(255,255,255,0.1));
+        }
+        .glass-glow:hover {
+            box-shadow: 0 0 32px rgba(139,92,246,0.08);
+        }
+
+        /* ── Stat Cards Grid ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            position: relative;
+            overflow: hidden;
+            padding: 20px 22px;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: var(--s3-radius) var(--s3-radius) 0 0;
+        }
+        .stat-card.accent-purple::before { background: linear-gradient(90deg, var(--s3-accent), transparent); }
+        .stat-card.accent-green::before  { background: linear-gradient(90deg, var(--s3-low), transparent); }
+        .stat-card.accent-yellow::before { background: linear-gradient(90deg, var(--s3-medium), transparent); }
+        .stat-card.accent-red::before    { background: linear-gradient(90deg, var(--s3-critical), transparent); }
+
+        .stat-icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 14px;
+            font-size: 18px;
+        }
+        .stat-icon.purple { background: rgba(139,92,246,0.12); }
+        .stat-icon.green  { background: rgba(16,185,129,0.12); }
+        .stat-icon.yellow { background: rgba(234,179,8,0.12); }
+        .stat-icon.red    { background: rgba(244,63,94,0.12); }
+
+        .stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 30px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+            margin-bottom: 4px;
+            color: var(--s3-text);
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+        }
+
+        /* ── Pulsing Status Dot ── */
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: s3-pulse 2s ease-in-out infinite;
+        }
+        .status-dot.healthy  { background: var(--s3-low); box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+        .status-dot.warning  { background: var(--s3-medium); box-shadow: 0 0 8px rgba(234,179,8,0.4); }
+        .status-dot.critical { background: var(--s3-critical); box-shadow: 0 0 8px rgba(244,63,94,0.4); }
+
+        /* ── Activity & Chains Row ── */
+        .info-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+            margin-bottom: 24px;
+        }
+        .info-card {
+            padding: 22px;
+        }
+        .info-card h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            color: var(--s3-text);
+        }
+        .info-metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .info-metric-label {
+            font-size: 12px;
+            color: var(--s3-text-3);
+            margin-bottom: 4px;
+        }
+        .info-metric-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .info-metric-value.alerts { color: var(--s3-medium); }
+        .info-metric-value.liquidations { color: var(--s3-critical); }
+
+        /* ── Chain Tags ── */
+        .chain-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .chain-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            background: var(--s3-accent-dim);
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139,92,246,0.15);
+        }
+        .chain-tag::before {
+            content: '';
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            background: var(--s3-accent-light);
+            opacity: 0.6;
+        }
+
+        /* ── Section Title ── */
+        .section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin: 0 0 18px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-title::before {
+            content: '';
+            width: 3px; height: 18px;
+            border-radius: 2px;
+            background: var(--s3-accent);
+        }
+
+        /* ── Protocol Cards Grid ── */
+        .protocols-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+        }
+
+        /* ── Individual Protocol Card ── */
         .protocol-card {
-            transition: all 0.3s ease;
+            padding: 22px;
+            cursor: pointer;
+            transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
         }
-        
         .protocol-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 32px rgba(138, 59, 255, 0.2);
+            border-color: rgba(139,92,246,0.2);
+            box-shadow: 0 8px 40px rgba(139,92,246,0.1);
+            transform: translateY(-3px);
         }
-        
-        .pulse-dot {
-            animation: pulse 2s infinite;
+
+        .protocol-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
         }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .protocol-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        
-        .gradient-text {
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+        .protocol-icon-wrap {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+        .protocol-icon-wrap.aave     { background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.2)); }
+        .protocol-icon-wrap.uniswap  { background: linear-gradient(135deg, rgba(236,72,153,0.2), rgba(139,92,246,0.2)); }
+        .protocol-icon-wrap.compound { background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(20,184,166,0.2)); }
+        .protocol-icon-wrap.curve    { background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(34,211,238,0.2)); }
+        .protocol-icon-wrap.lido     { background: linear-gradient(135deg, rgba(34,211,238,0.2), rgba(59,130,246,0.2)); }
+        .protocol-icon-wrap.makerdao { background: linear-gradient(135deg, rgba(234,179,8,0.2), rgba(249,115,22,0.2)); }
+        .protocol-icon-wrap.default  { background: rgba(255,255,255,0.05); }
+
+        .protocol-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--s3-text);
+            line-height: 1.2;
+        }
+        .protocol-type {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: capitalize;
+            margin-top: 2px;
+        }
+
+        /* ── Status Badge ── */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: capitalize;
+        }
+        .status-badge.healthy {
+            background: rgba(16,185,129,0.12);
+            color: var(--s3-low);
+            border: 1px solid rgba(16,185,129,0.2);
+        }
+        .status-badge.warning {
+            background: rgba(234,179,8,0.12);
+            color: var(--s3-medium);
+            border: 1px solid rgba(234,179,8,0.2);
+        }
+        .status-badge.critical {
+            background: rgba(244,63,94,0.12);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244,63,94,0.2);
+        }
+
+        /* ── Health Bar ── */
+        .health-section {
+            margin-bottom: 18px;
+        }
+        .health-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .health-label {
+            font-size: 12px;
+            color: var(--s3-text-3);
+        }
+        .health-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--s3-text-2);
+            font-weight: 500;
+        }
+        .health-track {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .health-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }
+        .health-fill.high   { background: linear-gradient(90deg, var(--s3-low), #34d399); }
+        .health-fill.medium { background: linear-gradient(90deg, var(--s3-medium), #fbbf24); }
+        .health-fill.low    { background: linear-gradient(90deg, var(--s3-critical), #fb7185); }
+
+        /* ── Stats Row ── */
+        .protocol-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .protocol-stat-box {
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 6px;
+        }
+        .protocol-stat-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--s3-text);
+            line-height: 1;
+            margin-bottom: 3px;
+        }
+        .protocol-stat-num.alerts { color: var(--s3-medium); }
+        .protocol-stat-num.liquidations { color: var(--s3-critical); }
+        .protocol-stat-label {
+            font-size: 10px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ── Chain Tags (card footer) ── */
+        .protocol-chains {
+            border-top: 1px solid var(--s3-border);
+            padding-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .mini-chain-tag {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 500;
+            background: rgba(255,255,255,0.04);
+            color: var(--s3-text-3);
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+
+        /* ── Modal Overlay ── */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(3,3,5,0.80);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            padding: 24px;
+        }
+        .modal-panel {
+            background: var(--s3-bg-2, #111219);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            max-width: 680px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 28px;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 60px rgba(139,92,246,0.08);
+        }
+        .modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .modal-header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .modal-icon-large {
+            width: 56px; height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+        .modal-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--s3-text);
+            line-height: 1.2;
+        }
+        .modal-subtitle {
+            font-size: 13px;
+            color: var(--s3-text-3);
+            text-transform: capitalize;
+            margin-top: 2px;
+        }
+        .modal-close {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--s3-border);
+            color: var(--s3-text-3);
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .modal-close:hover {
+            background: rgba(244,63,94,0.1);
+            color: var(--s3-critical);
+            border-color: rgba(244,63,94,0.2);
+        }
+
+        /* ── Modal Status Banner ── */
+        .modal-status-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-radius: var(--s3-radius-sm);
+            margin-bottom: 22px;
+        }
+        .modal-status-banner.healthy {
+            background: rgba(16,185,129,0.08);
+            border: 1px solid rgba(16,185,129,0.15);
+        }
+        .modal-status-banner.warning {
+            background: rgba(234,179,8,0.08);
+            border: 1px solid rgba(234,179,8,0.15);
+        }
+        .modal-status-banner.critical {
+            background: rgba(244,63,94,0.08);
+            border: 1px solid rgba(244,63,94,0.15);
+        }
+        .modal-status-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .modal-status-text {
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: capitalize;
+        }
+        .modal-status-text.healthy  { color: var(--s3-low); }
+        .modal-status-text.warning  { color: var(--s3-medium); }
+        .modal-status-text.critical { color: var(--s3-critical); }
+        .modal-health-score {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--s3-text);
+        }
+
+        /* ── Modal Metrics ── */
+        .modal-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+        .modal-metric-box {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 16px 12px;
+            text-align: center;
+        }
+        .modal-metric-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 4px;
+            color: var(--s3-text);
+        }
+        .modal-metric-num.alerts { color: var(--s3-medium); }
+        .modal-metric-num.liquidations { color: var(--s3-critical); }
+        .modal-metric-num.chains { color: var(--s3-accent-light); }
+        .modal-metric-label {
+            font-size: 11px;
+            color: var(--s3-text-3);
+        }
+
+        /* ── Modal Chains ── */
+        .modal-chains {
+            margin-bottom: 24px;
+        }
+        .modal-chains h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin: 0 0 12px 0;
+        }
+
+        /* ── Modal Actions ── */
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+        }
+        .modal-btn {
+            flex: 1;
+            padding: 12px 18px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .modal-btn.primary {
+            background: var(--s3-accent);
+            color: #fff;
+            border: none;
+        }
+        .modal-btn.primary:hover {
+            background: var(--s3-accent-light);
+            box-shadow: 0 0 24px rgba(139,92,246,0.3);
+        }
+        .modal-btn.secondary {
+            background: rgba(255,255,255,0.04);
+            color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
+        }
+        .modal-btn.secondary:hover {
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(255,255,255,0.12);
+            color: var(--s3-text);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1100px) {
+            .protocols-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .info-row { grid-template-columns: 1fr; }
+            .protocols-grid { grid-template-columns: 1fr; }
+            .modal-metrics { grid-template-columns: repeat(2, 1fr); }
+            .s3-main { padding: 18px; }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 <div id="app" x-data="protocolDashboard()" x-init="init()">
-    <!-- Main Content (sidebar injected by nav.js) -->
-    <main>
-        <!-- Top Bar -->
-        <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-            <div class="flex items-center justify-between">
-                <h1 class="text-lg font-semibold">Protocol Monitoring</h1>
-                <div class="flex items-center space-x-4">
-                    <span class="text-xs text-zinc-500" x-text="lastUpdated"></span>
-                    <button @click="refresh()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition">
-                        Refresh
-                    </button>
-                </div>
+    <main class="page-content">
+
+        <!-- ── Sticky Top Bar ── -->
+        <header class="s3-header">
+            <div class="s3-header-title">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                </svg>
+                Protocol Monitoring
+            </div>
+            <div class="s3-header-actions">
+                <span class="s3-header-ts" x-text="lastUpdated"></span>
+                <button @click="refresh()" class="s3-btn-primary">Refresh</button>
             </div>
         </header>
 
-        <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold mb-2">Protocol Monitoring</h1>
-            <p class="text-gray-400">Real-time monitoring of DeFi protocols across multiple chains</p>
-        </div>
+        <div class="s3-main">
 
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="card p-6">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-sm">Total Protocols</span>
-                    <span class="text-2xl">📊</span>
-                </div>
-                <div class="text-3xl font-bold" x-text="summary.total_protocols"></div>
+            <!-- ── Page Header ── -->
+            <div class="page-header">
+                <h1>Protocol Monitoring</h1>
+                <p>Real-time monitoring of DeFi protocols across multiple chains</p>
             </div>
-            
-            <div class="card p-6 bg-healthy border">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-sm">Healthy</span>
-                    <span class="w-3 h-3 rounded-full bg-green-400 pulse-dot"></span>
-                </div>
-                <div class="text-3xl font-bold status-healthy" x-text="summary.healthy_count"></div>
-            </div>
-            
-            <div class="card p-6 bg-warning border">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-sm">Warning</span>
-                    <span class="w-3 h-3 rounded-full bg-yellow-400 pulse-dot"></span>
-                </div>
-                <div class="text-3xl font-bold status-warning" x-text="summary.warning_count"></div>
-            </div>
-            
-            <div class="card p-6 bg-critical border">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-sm">Critical</span>
-                    <span class="w-3 h-3 rounded-full bg-red-400 pulse-dot"></span>
-                </div>
-                <div class="text-3xl font-bold status-critical" x-text="summary.critical_count"></div>
-            </div>
-        </div>
 
-        <!-- Activity Summary -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="card p-6">
-                <h3 class="text-lg font-semibold mb-4">24h Activity</h3>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <div class="text-gray-400 text-sm mb-1">Total Alerts</div>
-                        <div class="text-2xl font-bold text-yellow-400" x-text="summary.total_alerts_24h"></div>
+            <!-- ── Summary Stat Cards ── -->
+            <div class="stats-grid">
+                <div class="glass stat-card accent-purple">
+                    <div class="stat-icon purple">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
                     </div>
-                    <div>
-                        <div class="text-gray-400 text-sm mb-1">Liquidations</div>
-                        <div class="text-2xl font-bold text-red-400" x-text="summary.total_liquidations_24h"></div>
-                    </div>
+                    <div class="stat-value" x-text="summary.total_protocols"></div>
+                    <div class="stat-label">Total Protocols</div>
                 </div>
-            </div>
-            
-            <div class="card p-6">
-                <h3 class="text-lg font-semibold mb-4">Chains Monitored</h3>
-                <div class="flex flex-wrap gap-2">
-                    <template x-for="chain in chains" :key="chain">
-                        <span class="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30" x-text="chain"></span>
-                    </template>
-                </div>
-            </div>
-        </div>
 
-        <!-- Protocol Cards -->
-        <div class="mb-6">
-            <h2 class="text-xl font-semibold mb-4">Monitored Protocols</h2>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <template x-for="protocol in protocols" :key="protocol.protocol_id">
-                <div class="card protocol-card p-6 cursor-pointer" @click="showProtocolDetails(protocol)">
-                    <!-- Header -->
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-                                 :class="getProtocolIcon(protocol.protocol_id).bg">
-                                <span x-text="getProtocolIcon(protocol.protocol_id).icon"></span>
-                            </div>
-                            <div>
-                                <h3 class="font-semibold" x-text="protocol.name"></h3>
-                                <span class="text-xs text-gray-400 capitalize" x-text="protocol.type"></span>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <span class="w-2 h-2 rounded-full"
-                                  :class="{
-                                      'bg-green-400': protocol.status === 'healthy',
-                                      'bg-yellow-400': protocol.status === 'warning',
-                                      'bg-red-400': protocol.status === 'critical'
-                                  }"></span>
-                            <span class="text-sm capitalize"
-                                  :class="{
-                                      'status-healthy': protocol.status === 'healthy',
-                                      'status-warning': protocol.status === 'warning',
-                                      'status-critical': protocol.status === 'critical'
-                                  }"
-                                  x-text="protocol.status"></span>
-                        </div>
+                <div class="glass stat-card accent-green">
+                    <div class="stat-icon green">
+                        <span class="status-dot healthy"></span>
                     </div>
-                    
-                    <!-- Health Score -->
-                    <div class="mb-4">
-                        <div class="flex justify-between text-sm mb-1">
-                            <span class="text-gray-400">Health Score</span>
-                            <span class="font-mono" x-text="protocol.health_score + '%'"></span>
-                        </div>
-                        <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
-                            <div class="h-full rounded-full transition-all duration-500"
-                                 :class="{
-                                     'bg-green-400': protocol.health_score >= 80,
-                                     'bg-yellow-400': protocol.health_score >= 50 && protocol.health_score < 80,
-                                     'bg-red-400': protocol.health_score < 50
-                                 }"
-                                 :style="'width: ' + protocol.health_score + '%'"></div>
-                        </div>
+                    <div class="stat-value" style="color: var(--s3-low);" x-text="summary.healthy_count"></div>
+                    <div class="stat-label">Healthy</div>
+                </div>
+
+                <div class="glass stat-card accent-yellow">
+                    <div class="stat-icon yellow">
+                        <span class="status-dot warning"></span>
                     </div>
-                    
-                    <!-- Stats -->
-                    <div class="grid grid-cols-3 gap-4 text-center">
+                    <div class="stat-value" style="color: var(--s3-medium);" x-text="summary.warning_count"></div>
+                    <div class="stat-label">Warning</div>
+                </div>
+
+                <div class="glass stat-card accent-red">
+                    <div class="stat-icon red">
+                        <span class="status-dot critical"></span>
+                    </div>
+                    <div class="stat-value" style="color: var(--s3-critical);" x-text="summary.critical_count"></div>
+                    <div class="stat-label">Critical</div>
+                </div>
+            </div>
+
+            <!-- ── Activity & Chains Row ── -->
+            <div class="info-row">
+                <div class="glass info-card">
+                    <h3>24h Activity</h3>
+                    <div class="info-metrics">
                         <div>
-                            <div class="text-lg font-bold" x-text="protocol.events_24h"></div>
-                            <div class="text-xs text-gray-400">Events</div>
+                            <div class="info-metric-label">Total Alerts</div>
+                            <div class="info-metric-value alerts" x-text="summary.total_alerts_24h"></div>
                         </div>
                         <div>
-                            <div class="text-lg font-bold text-yellow-400" x-text="protocol.alerts_24h"></div>
-                            <div class="text-xs text-gray-400">Alerts</div>
-                        </div>
-                        <div>
-                            <div class="text-lg font-bold text-red-400" x-text="protocol.liquidations_24h"></div>
-                            <div class="text-xs text-gray-400">Liquidations</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Chains -->
-                    <div class="mt-4 pt-4 border-t border-gray-700">
-                        <div class="flex flex-wrap gap-1">
-                            <template x-for="chain in protocol.chains.slice(0, 4)" :key="chain">
-                                <span class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300" x-text="chain"></span>
-                            </template>
-                            <span x-show="protocol.chains.length > 4" class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300"
-                                  x-text="'+' + (protocol.chains.length - 4)"></span>
+                            <div class="info-metric-label">Liquidations</div>
+                            <div class="info-metric-value liquidations" x-text="summary.total_liquidations_24h"></div>
                         </div>
                     </div>
                 </div>
-            </template>
-        </div>
 
-        <!-- Protocol Details Modal -->
-        <div x-show="selectedProtocol" x-cloak
-             class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-             @click.self="selectedProtocol = null">
-            <div class="card max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6" @click.stop>
-                <div class="flex items-center justify-between mb-6">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-16 h-16 rounded-xl flex items-center justify-center text-3xl"
-                             :class="selectedProtocol ? getProtocolIcon(selectedProtocol.protocol_id).bg : ''">
-                            <span x-text="selectedProtocol ? getProtocolIcon(selectedProtocol.protocol_id).icon : ''"></span>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold" x-text="selectedProtocol?.name"></h2>
-                            <span class="text-gray-400 capitalize" x-text="selectedProtocol?.type + ' Protocol'"></span>
-                        </div>
+                <div class="glass info-card">
+                    <h3>Chains Monitored</h3>
+                    <div class="chain-tags">
+                        <template x-for="chain in chains" :key="chain">
+                            <span class="chain-tag" x-text="chain"></span>
+                        </template>
                     </div>
-                    <button @click="selectedProtocol = null" class="text-gray-400 hover:text-white text-2xl">&times;</button>
                 </div>
-                
-                <template x-if="selectedProtocol">
-                    <div>
-                        <!-- Status Banner -->
-                        <div class="rounded-lg p-4 mb-6"
-                             :class="{
-                                 'bg-green-500/10 border border-green-500/30': selectedProtocol.status === 'healthy',
-                                 'bg-yellow-500/10 border border-yellow-500/30': selectedProtocol.status === 'warning',
-                                 'bg-red-500/10 border border-red-500/30': selectedProtocol.status === 'critical'
-                             }">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-3">
-                                    <span class="w-3 h-3 rounded-full"
-                                          :class="{
-                                              'bg-green-400': selectedProtocol.status === 'healthy',
-                                              'bg-yellow-400': selectedProtocol.status === 'warning',
-                                              'bg-red-400': selectedProtocol.status === 'critical'
-                                          }"></span>
-                                    <span class="font-medium capitalize" x-text="selectedProtocol.status"></span>
+            </div>
+
+            <!-- ── Protocol Cards ── -->
+            <h2 class="section-title">Monitored Protocols</h2>
+
+            <div class="protocols-grid">
+                <template x-for="protocol in protocols" :key="protocol.protocol_id">
+                    <div class="glass glass-glow protocol-card" @click="showProtocolDetails(protocol)">
+
+                        <!-- Header -->
+                        <div class="protocol-header">
+                            <div class="protocol-info">
+                                <div class="protocol-icon-wrap"
+                                     :class="getIconClass(protocol.protocol_id)">
+                                    <span x-text="getProtocolIcon(protocol.protocol_id).icon"></span>
                                 </div>
-                                <span class="text-2xl font-bold" x-text="selectedProtocol.health_score + '%'"></span>
+                                <div>
+                                    <div class="protocol-name" x-text="protocol.name"></div>
+                                    <div class="protocol-type" x-text="protocol.type"></div>
+                                </div>
+                            </div>
+                            <div class="status-badge"
+                                 :class="protocol.status">
+                                <span class="status-dot" :class="protocol.status" style="width:6px;height:6px;"></span>
+                                <span x-text="protocol.status"></span>
                             </div>
                         </div>
-                        
-                        <!-- Metrics Grid -->
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                            <div class="bg-gray-800 rounded-lg p-4 text-center">
-                                <div class="text-2xl font-bold" x-text="selectedProtocol.events_24h"></div>
-                                <div class="text-sm text-gray-400">Events (24h)</div>
+
+                        <!-- Health Score -->
+                        <div class="health-section">
+                            <div class="health-row">
+                                <span class="health-label">Health Score</span>
+                                <span class="health-value" x-text="protocol.health_score + '%'"></span>
                             </div>
-                            <div class="bg-gray-800 rounded-lg p-4 text-center">
-                                <div class="text-2xl font-bold text-yellow-400" x-text="selectedProtocol.alerts_24h"></div>
-                                <div class="text-sm text-gray-400">Alerts (24h)</div>
-                            </div>
-                            <div class="bg-gray-800 rounded-lg p-4 text-center">
-                                <div class="text-2xl font-bold text-red-400" x-text="selectedProtocol.liquidations_24h"></div>
-                                <div class="text-sm text-gray-400">Liquidations</div>
-                            </div>
-                            <div class="bg-gray-800 rounded-lg p-4 text-center">
-                                <div class="text-2xl font-bold text-purple-400" x-text="selectedProtocol.chains.length"></div>
-                                <div class="text-sm text-gray-400">Chains</div>
+                            <div class="health-track">
+                                <div class="health-fill"
+                                     :class="{
+                                         'high': protocol.health_score >= 80,
+                                         'medium': protocol.health_score >= 50 && protocol.health_score < 80,
+                                         'low': protocol.health_score < 50
+                                     }"
+                                     :style="'width: ' + protocol.health_score + '%'"></div>
                             </div>
                         </div>
-                        
-                        <!-- Supported Chains -->
-                        <div class="mb-6">
-                            <h3 class="text-lg font-semibold mb-3">Supported Chains</h3>
-                            <div class="flex flex-wrap gap-2">
-                                <template x-for="chain in selectedProtocol.chains" :key="chain">
-                                    <span class="px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                                          x-text="chain"></span>
-                                </template>
+
+                        <!-- Stats -->
+                        <div class="protocol-stats">
+                            <div class="protocol-stat-box">
+                                <div class="protocol-stat-num" x-text="protocol.events_24h"></div>
+                                <div class="protocol-stat-label">Events</div>
+                            </div>
+                            <div class="protocol-stat-box">
+                                <div class="protocol-stat-num alerts" x-text="protocol.alerts_24h"></div>
+                                <div class="protocol-stat-label">Alerts</div>
+                            </div>
+                            <div class="protocol-stat-box">
+                                <div class="protocol-stat-num liquidations" x-text="protocol.liquidations_24h"></div>
+                                <div class="protocol-stat-label">Liquidations</div>
                             </div>
                         </div>
-                        
-                        <!-- Actions -->
-                        <div class="flex space-x-4">
-                            <a :href="'https://' + (selectedProtocol.protocol_id === 'aave_v3' ? 'aave.com' : selectedProtocol.protocol_id === 'uniswap' ? 'uniswap.org' : 'compound.finance')"
-                               target="_blank"
-                               class="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-center font-medium transition">
-                                Visit Protocol
-                            </a>
-                            <button class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-center font-medium transition">
-                                View Alerts
-                            </button>
+
+                        <!-- Chains -->
+                        <div class="protocol-chains">
+                            <template x-for="chain in protocol.chains.slice(0, 4)" :key="chain">
+                                <span class="mini-chain-tag" x-text="chain"></span>
+                            </template>
+                            <span x-show="protocol.chains.length > 4" class="mini-chain-tag"
+                                  x-text="'+' + (protocol.chains.length - 4)"></span>
                         </div>
                     </div>
                 </template>
             </div>
-        </div>
+
+            <!-- ── Protocol Details Modal ── -->
+            <div x-show="selectedProtocol" x-cloak
+                 class="modal-overlay"
+                 @click.self="selectedProtocol = null">
+                <div class="modal-panel" @click.stop>
+
+                    <!-- Modal Header -->
+                    <div class="modal-header">
+                        <div class="modal-header-left">
+                            <div class="modal-icon-large"
+                                 :class="selectedProtocol ? getIconClass(selectedProtocol.protocol_id) : 'default'">
+                                <span x-text="selectedProtocol ? getProtocolIcon(selectedProtocol.protocol_id).icon : ''"></span>
+                            </div>
+                            <div>
+                                <div class="modal-title" x-text="selectedProtocol?.name"></div>
+                                <div class="modal-subtitle" x-text="selectedProtocol?.type + ' Protocol'"></div>
+                            </div>
+                        </div>
+                        <button @click="selectedProtocol = null" class="modal-close">&times;</button>
+                    </div>
+
+                    <template x-if="selectedProtocol">
+                        <div>
+                            <!-- Status Banner -->
+                            <div class="modal-status-banner" :class="selectedProtocol.status">
+                                <div class="modal-status-left">
+                                    <span class="status-dot" :class="selectedProtocol.status" style="width:10px;height:10px;"></span>
+                                    <span class="modal-status-text" :class="selectedProtocol.status" x-text="selectedProtocol.status"></span>
+                                </div>
+                                <span class="modal-health-score" x-text="selectedProtocol.health_score + '%'"></span>
+                            </div>
+
+                            <!-- Metrics -->
+                            <div class="modal-metrics">
+                                <div class="modal-metric-box">
+                                    <div class="modal-metric-num" x-text="selectedProtocol.events_24h"></div>
+                                    <div class="modal-metric-label">Events (24h)</div>
+                                </div>
+                                <div class="modal-metric-box">
+                                    <div class="modal-metric-num alerts" x-text="selectedProtocol.alerts_24h"></div>
+                                    <div class="modal-metric-label">Alerts (24h)</div>
+                                </div>
+                                <div class="modal-metric-box">
+                                    <div class="modal-metric-num liquidations" x-text="selectedProtocol.liquidations_24h"></div>
+                                    <div class="modal-metric-label">Liquidations</div>
+                                </div>
+                                <div class="modal-metric-box">
+                                    <div class="modal-metric-num chains" x-text="selectedProtocol.chains.length"></div>
+                                    <div class="modal-metric-label">Chains</div>
+                                </div>
+                            </div>
+
+                            <!-- Supported Chains -->
+                            <div class="modal-chains">
+                                <h3>Supported Chains</h3>
+                                <div class="chain-tags">
+                                    <template x-for="chain in selectedProtocol.chains" :key="chain">
+                                        <span class="chain-tag" x-text="chain"></span>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="modal-actions">
+                                <a :href="'https://' + (selectedProtocol.protocol_id === 'aave_v3' ? 'aave.com' : selectedProtocol.protocol_id === 'uniswap' ? 'uniswap.org' : 'compound.finance')"
+                                   target="_blank"
+                                   class="modal-btn primary">
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    Visit Protocol
+                                </a>
+                                <button class="modal-btn secondary">
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                    View Alerts
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
         </div>
     </main>
 </div><!-- /app -->
 
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script>
         function protocolDashboard() {
             return {
@@ -354,50 +908,62 @@
                 chains: [],
                 selectedProtocol: null,
                 lastUpdated: '',
-                
+
                 async init() {
                     await this.loadDashboard();
                     // Auto-refresh every 30 seconds
                     setInterval(() => this.loadDashboard(), 30000);
                 },
-                
+
                 async loadDashboard() {
                     try {
                         const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/protocols/dashboard');
                         const data = await response.json();
-                        
+
                         this.protocols = data.protocols || [];
                         this.summary = data.summary || this.summary;
-                        
+
                         // Extract unique chains
                         const chainSet = new Set();
                         this.protocols.forEach(p => p.chains.forEach(c => chainSet.add(c)));
                         this.chains = Array.from(chainSet).sort();
-                        
+
                         this.lastUpdated = new Date().toLocaleTimeString();
                     } catch (error) {
                         console.error('Failed to load dashboard:', error);
                     }
                 },
-                
+
                 async refresh() {
                     await this.loadDashboard();
                 },
-                
+
                 showProtocolDetails(protocol) {
                     this.selectedProtocol = protocol;
                 },
-                
+
                 getProtocolIcon(protocolId) {
                     const icons = {
-                        'aave_v3': { icon: '👻', bg: 'bg-gradient-to-br from-purple-500 to-pink-500' },
-                        'uniswap': { icon: '🦄', bg: 'bg-gradient-to-br from-pink-500 to-purple-500' },
-                        'compound': { icon: '🏦', bg: 'bg-gradient-to-br from-green-500 to-teal-500' },
-                        'curve': { icon: '🌀', bg: 'bg-gradient-to-br from-blue-500 to-cyan-500' },
-                        'lido': { icon: '🌊', bg: 'bg-gradient-to-br from-cyan-500 to-blue-500' },
-                        'makerdao': { icon: '🏛️', bg: 'bg-gradient-to-br from-yellow-500 to-orange-500' },
+                        'aave_v3':  { icon: '\u{1F47B}', bg: 'aave' },
+                        'uniswap':  { icon: '\u{1F984}', bg: 'uniswap' },
+                        'compound': { icon: '\u{1F3E6}', bg: 'compound' },
+                        'curve':    { icon: '\u{1F300}', bg: 'curve' },
+                        'lido':     { icon: '\u{1F30A}', bg: 'lido' },
+                        'makerdao': { icon: '\u{1F3DB}\uFE0F', bg: 'makerdao' },
                     };
-                    return icons[protocolId] || { icon: '📊', bg: 'bg-gradient-to-br from-gray-500 to-gray-600' };
+                    return icons[protocolId] || { icon: '\u{1F4CA}', bg: 'default' };
+                },
+
+                getIconClass(protocolId) {
+                    const mapping = {
+                        'aave_v3':  'aave',
+                        'uniswap':  'uniswap',
+                        'compound': 'compound',
+                        'curve':    'curve',
+                        'lido':     'lido',
+                        'makerdao': 'makerdao',
+                    };
+                    return mapping[protocolId] || 'default';
                 }
             };
         }

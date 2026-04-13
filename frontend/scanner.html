@@ -4,223 +4,748 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vulnerability Scanner | Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a25;
-            --accent-red: #ff3366;
-            --accent-orange: #ff6b35;
-            --accent-yellow: #ffc107;
-            --accent-green: #00ff88;
-            --accent-blue: #00d4ff;
-            --accent-purple: #a855f7;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-        }
-        
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
+            line-height: 1.5;
+        }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* ── Page wrapper (sits beside nav sidebar) ── */
+        .scanner-page {
+            flex: 1;
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+
+        /* ── Sticky header ── */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3,3,5,0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+        }
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .s3-header h1 {
             font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-size: 15px; font-weight: 600; color: var(--s3-text);
+            display: flex; align-items: center; gap: 10px;
         }
-        
-        .font-mono {
-            font-family: 'JetBrains Mono', monospace;
+        .s3-header h1 .icon {
+            width: 22px; height: 22px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(139,92,246,0.12);
+            border-radius: 6px; color: var(--s3-accent-light);
+            font-size: 12px;
         }
-        
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
+
+        /* ── Main content ── */
+        .scanner-main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 28px 28px 60px;
         }
-        
-        .card-hover:hover {
-            border-color: rgba(168, 85, 247, 0.3);
-            box-shadow: 0 0 30px rgba(168, 85, 247, 0.1);
+
+        /* ── Page hero ── */
+        .page-hero {
+            margin-bottom: 28px;
         }
-        
-        .severity-critical {
-            background: linear-gradient(135deg, rgba(255, 51, 102, 0.2), rgba(255, 51, 102, 0.1));
-            border-left: 3px solid var(--accent-red);
+        .page-hero h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px; font-weight: 700; color: #fff;
+            margin-bottom: 6px;
         }
-        
-        .severity-high {
-            background: linear-gradient(135deg, rgba(255, 107, 53, 0.2), rgba(255, 107, 53, 0.1));
-            border-left: 3px solid var(--accent-orange);
+        .page-hero p {
+            font-size: 13px; color: var(--s3-text-2);
         }
-        
-        .severity-medium {
-            background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 193, 7, 0.1));
-            border-left: 3px solid var(--accent-yellow);
+
+        /* ── Glass card ── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
-        
-        .severity-low {
-            background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.1));
-            border-left: 3px solid var(--accent-green);
+        .glass:hover {
+            border-color: rgba(255,255,255,0.1);
         }
-        
-        .severity-info {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 212, 255, 0.1));
-            border-left: 3px solid var(--accent-blue);
+        .glass-interactive:hover {
+            border-color: rgba(139,92,246,0.25);
+            box-shadow: 0 0 24px rgba(139,92,246,0.06);
         }
-        
-        .risk-meter {
-            height: 8px;
-            border-radius: 4px;
-            background: linear-gradient(90deg, 
-                var(--accent-green) 0%, 
-                var(--accent-yellow) 40%, 
-                var(--accent-orange) 70%, 
-                var(--accent-red) 100%
-            );
+
+        /* ── Scan mode tabs ── */
+        .scan-tabs {
+            display: flex; gap: 6px;
+            margin-bottom: 16px;
         }
-        
-        .risk-indicator {
-            width: 12px;
-            height: 12px;
-            background: white;
-            border-radius: 50%;
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-            transform: translateY(-2px);
+        .scan-tab {
+            padding: 9px 18px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px; font-weight: 600;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.25s;
+            background: var(--s3-bg-2);
+            color: var(--s3-text-2);
         }
-        
-        .pulse-scan {
-            animation: pulse-scan 2s ease-in-out infinite;
+        .scan-tab:hover {
+            background: var(--s3-bg-3);
+            color: var(--s3-text);
         }
-        
-        @keyframes pulse-scan {
-            0%, 100% { opacity: 0.5; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.05); }
+        .scan-tab.active {
+            background: rgba(139,92,246,0.15);
+            color: var(--s3-accent-light);
+            border-color: rgba(139,92,246,0.3);
         }
-        
-        .scan-line {
-            position: absolute;
-            height: 2px;
+
+        /* ── Form elements ── */
+        .form-label {
+            display: block;
+            font-size: 11px; font-weight: 500;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+        .form-input,
+        .form-select,
+        .form-textarea {
             width: 100%;
-            background: linear-gradient(90deg, transparent, var(--accent-purple), transparent);
-            animation: scan-line 2s linear infinite;
+            padding: 10px 14px;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text);
+            font-size: 13px;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            outline: none;
         }
-        
-        @keyframes scan-line {
+        .form-input::placeholder,
+        .form-textarea::placeholder {
+            color: var(--s3-text-3);
+        }
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            border-color: rgba(139,92,246,0.5);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+        }
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+        .form-select option {
+            background: var(--s3-bg-1);
+            color: var(--s3-text);
+        }
+        .form-textarea {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            resize: vertical;
+            line-height: 1.6;
+        }
+        .form-input.mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        /* ── Grid helpers ── */
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        @media (max-width: 768px) {
+            .grid-4, .grid-3 { grid-template-columns: 1fr; }
+            .grid-5 { grid-template-columns: repeat(3, 1fr); }
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-4.responsive-span .span-2 { grid-column: span 1; }
+        }
+        @media (min-width: 769px) {
+            .span-2 { grid-column: span 2; }
+        }
+        .flex-end { display: flex; align-items: flex-end; }
+
+        /* ── Primary button ── */
+        .btn-primary {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 22px;
+            background: linear-gradient(135deg, var(--s3-accent), #6366f1);
+            color: #fff;
+            font-size: 13px; font-weight: 600;
+            border: none; border-radius: var(--s3-radius-sm);
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(139,92,246,0.25);
+        }
+        .btn-primary:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* ── Small chip buttons ── */
+        .btn-chip {
+            padding: 4px 10px;
+            font-size: 11px; font-weight: 500;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: 6px;
+            color: var(--s3-text-2);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-chip:hover {
+            background: var(--s3-bg-4);
+            color: var(--s3-text);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        /* ── Checkbox ── */
+        .check-group {
+            display: flex; align-items: center; gap: 24px;
+            margin-top: 12px;
+        }
+        .check-item {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 12px; color: var(--s3-text-2);
+            cursor: pointer;
+        }
+        .check-item input[type="checkbox"] {
+            width: 16px; height: 16px;
+            accent-color: var(--s3-accent);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* ── Quick scan preset cards ── */
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+        @media (max-width: 768px) {
+            .preset-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .preset-card {
+            padding: 16px;
+            text-align: left;
+            cursor: pointer;
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .preset-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, var(--s3-accent), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .preset-card:hover::before { opacity: 1; }
+        .preset-icon {
+            font-size: 22px;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .preset-title {
+            font-size: 13px; font-weight: 600; color: var(--s3-text);
+            margin-bottom: 2px;
+        }
+        .preset-desc {
+            font-size: 11px; color: var(--s3-text-3);
+        }
+
+        /* ── Scanning animation ── */
+        .scan-overlay {
+            position: relative;
+            overflow: hidden;
+            padding: 48px 20px;
+            margin-bottom: 28px;
+        }
+        .scan-line-anim {
+            position: absolute;
+            height: 2px; width: 100%;
+            background: linear-gradient(90deg, transparent, var(--s3-accent), transparent);
+            animation: scanLine 2s linear infinite;
+            left: 0;
+        }
+        @keyframes scanLine {
             0% { top: 0; }
             100% { top: 100%; }
         }
-        
-        .glow-text {
-            text-shadow: 0 0 20px currentColor;
+        .scan-center {
+            text-align: center;
         }
-        
-        input, select {
-            background: var(--bg-tertiary);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: var(--text-primary);
+        .scan-pulse {
+            font-size: 48px;
+            animation: scanPulse 2s ease-in-out infinite;
+            display: inline-block;
+            margin-bottom: 16px;
         }
-        
-        input:focus, select:focus {
-            outline: none;
-            border-color: var(--accent-purple);
-            box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+        @keyframes scanPulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
         }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, var(--accent-purple), #6366f1);
-            transition: all 0.3s ease;
+        .scan-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px; font-weight: 600; color: #fff;
+            margin-bottom: 8px;
         }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(168, 85, 247, 0.3);
+        .scan-status {
+            font-size: 13px; color: var(--s3-text-2);
+            margin-bottom: 16px;
         }
-        
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
+        .progress-track {
+            max-width: 360px;
+            margin: 0 auto;
+            height: 4px;
+            background: var(--s3-bg-3);
+            border-radius: 4px;
+            overflow: hidden;
         }
-        
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: var(--bg-secondary);
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: var(--bg-tertiary);
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--s3-accent), var(--s3-cyan));
+            transition: width 0.5s;
             border-radius: 4px;
         }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(168, 85, 247, 0.5);
+
+        /* ── Results: Risk score section ── */
+        .results-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 24px;
         }
+        .results-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px; font-weight: 600; color: #fff;
+        }
+        .results-address {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; color: var(--s3-text-3);
+            margin-top: 2px;
+        }
+        .results-duration {
+            text-align: right;
+        }
+        .results-duration .label {
+            font-size: 11px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .results-duration .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px; color: var(--s3-text);
+        }
+
+        /* Risk meter */
+        .risk-section { margin-bottom: 24px; }
+        .risk-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .risk-label {
+            font-size: 12px; color: var(--s3-text-2);
+        }
+        .risk-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px; font-weight: 700;
+        }
+        .risk-value.low { color: var(--s3-low); text-shadow: 0 0 16px rgba(16,185,129,0.4); }
+        .risk-value.medium { color: var(--s3-medium); text-shadow: 0 0 16px rgba(234,179,8,0.4); }
+        .risk-value.high { color: var(--s3-high); text-shadow: 0 0 16px rgba(249,115,22,0.4); }
+        .risk-value.critical { color: var(--s3-critical); text-shadow: 0 0 16px rgba(244,63,94,0.4); }
+
+        .risk-bar-track {
+            position: relative;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(90deg,
+                var(--s3-low) 0%,
+                var(--s3-medium) 40%,
+                var(--s3-high) 70%,
+                var(--s3-critical) 100%
+            );
+        }
+        .risk-bar-indicator {
+            position: absolute;
+            width: 12px; height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            top: -3px;
+            box-shadow: 0 0 8px rgba(255,255,255,0.5);
+            transition: left 0.5s;
+        }
+
+        /* ── Summary stat pills ── */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+        @media (max-width: 640px) {
+            .summary-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        .summary-pill {
+            text-align: center;
+            padding: 14px 8px;
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid;
+        }
+        .summary-pill.s-critical {
+            background: rgba(244,63,94,0.08);
+            border-color: rgba(244,63,94,0.2);
+        }
+        .summary-pill.s-high {
+            background: rgba(249,115,22,0.08);
+            border-color: rgba(249,115,22,0.2);
+        }
+        .summary-pill.s-medium {
+            background: rgba(234,179,8,0.08);
+            border-color: rgba(234,179,8,0.2);
+        }
+        .summary-pill.s-low {
+            background: rgba(16,185,129,0.08);
+            border-color: rgba(16,185,129,0.2);
+        }
+        .summary-pill.s-total {
+            background: rgba(139,92,246,0.08);
+            border-color: rgba(139,92,246,0.2);
+        }
+        .summary-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px; font-weight: 700;
+            line-height: 1;
+        }
+        .summary-num.c-critical { color: var(--s3-critical); }
+        .summary-num.c-high { color: var(--s3-high); }
+        .summary-num.c-medium { color: var(--s3-medium); }
+        .summary-num.c-low { color: var(--s3-low); }
+        .summary-num.c-total { color: var(--s3-accent-light); }
+        .summary-lbl {
+            font-size: 10px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin-top: 4px; font-weight: 500;
+        }
+
+        /* ── Metadata grid ── */
+        .meta-cell {
+            padding: 14px;
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+        }
+        .meta-label {
+            font-size: 10px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin-bottom: 6px; font-weight: 500;
+        }
+        .meta-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; color: var(--s3-text);
+        }
+
+        /* ── Panel header ── */
+        .panel-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .panel-title {
+            font-size: 14px; font-weight: 600; color: #e2e8f0;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .panel-title .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--s3-accent);
+            box-shadow: 0 0 6px var(--s3-accent);
+        }
+        .panel-body {
+            padding: 20px;
+        }
+
+        /* ── Vulnerability cards ── */
+        .vuln-list {
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .vuln-card {
+            padding: 16px;
+            border-radius: var(--s3-radius-sm);
+            cursor: pointer;
+            transition: all 0.25s;
+            border-left: 3px solid;
+        }
+        .vuln-card:hover { background: rgba(255,255,255,0.02); }
+        .vuln-card.sev-critical {
+            background: rgba(244,63,94,0.06);
+            border-left-color: var(--s3-critical);
+        }
+        .vuln-card.sev-high {
+            background: rgba(249,115,22,0.06);
+            border-left-color: var(--s3-high);
+        }
+        .vuln-card.sev-medium {
+            background: rgba(234,179,8,0.06);
+            border-left-color: var(--s3-medium);
+        }
+        .vuln-card.sev-low {
+            background: rgba(16,185,129,0.06);
+            border-left-color: var(--s3-low);
+        }
+        .vuln-card.sev-info {
+            background: rgba(34,211,238,0.06);
+            border-left-color: var(--s3-cyan);
+        }
+        .vuln-top {
+            display: flex; align-items: flex-start; justify-content: space-between;
+        }
+        .vuln-meta {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 6px;
+        }
+        .sev-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px; font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .sev-badge.b-critical { background: var(--s3-critical); color: #fff; }
+        .sev-badge.b-high { background: var(--s3-high); color: #fff; }
+        .sev-badge.b-medium { background: var(--s3-medium); color: #111; }
+        .sev-badge.b-low { background: var(--s3-low); color: #fff; }
+        .sev-badge.b-info { background: var(--s3-cyan); color: #111; }
+        .vuln-title {
+            font-size: 13px; font-weight: 600; color: var(--s3-text);
+        }
+        .vuln-desc {
+            font-size: 12px; color: var(--s3-text-2);
+            line-height: 1.5;
+        }
+        .vuln-confidence {
+            text-align: right; flex-shrink: 0; margin-left: 16px;
+        }
+        .vuln-confidence .label {
+            font-size: 10px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .vuln-confidence .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; color: var(--s3-text);
+        }
+
+        /* ── Expanded vulnerability details ── */
+        .vuln-details {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        @media (max-width: 640px) {
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+        .detail-label {
+            font-size: 10px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            margin-bottom: 4px; font-weight: 500;
+        }
+        .detail-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; color: var(--s3-text);
+        }
+        .detail-value .fn-name {
+            color: var(--s3-accent-light);
+        }
+        .code-block {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            padding: 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--s3-border);
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: var(--s3-text-2);
+        }
+        .detail-text {
+            font-size: 12px; color: var(--s3-text-2);
+            line-height: 1.6;
+        }
+        .recommendation-text {
+            font-size: 12px;
+            color: var(--s3-low);
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        .ref-links {
+            display: flex; flex-wrap: wrap; gap: 8px;
+        }
+        .ref-link {
+            font-size: 11px;
+            color: var(--s3-cyan);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .ref-link:hover { color: #fff; text-decoration: underline; }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--s3-text-3);
+        }
+        .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
+        .empty-state p { font-size: 13px; }
+
+        /* ── Example contracts ── */
+        .example-card {
+            padding: 16px;
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+        }
+        .example-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .example-name {
+            font-size: 13px; font-weight: 600; color: var(--s3-text);
+        }
+        .example-tag {
+            font-size: 10px; font-weight: 600;
+            color: var(--s3-critical);
+            background: rgba(244,63,94,0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .example-address {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; color: var(--s3-text-3);
+            margin-bottom: 8px;
+            display: block;
+        }
+        .example-load {
+            font-size: 12px; font-weight: 500;
+            color: var(--s3-accent-light);
+            background: none; border: none;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.2s;
+        }
+        .example-load:hover { color: #fff; }
+
+        /* ── Tip ── */
+        .tip {
+            font-size: 12px; color: var(--s3-text-3);
+            margin-top: 12px;
+        }
+        .tip strong { color: var(--s3-text-2); }
+
+        /* ── Spacer ── */
+        .mb-6 { margin-bottom: 24px; }
+        .mb-7 { margin-bottom: 28px; }
+        .mt-7 { margin-top: 28px; }
+
+        /* ── Spinner SVG ── */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+            width: 18px; height: 18px;
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--s3-bg-3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.4); }
+
+        /* ── Hidden utility ── */
+        [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="min-h-screen">
-<div id="app" x-data="scannerApp()">
-    <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-        <h1 class="text-lg font-semibold">Vulnerability Scanner</h1>
+<body>
+<div class="scanner-page" id="app" x-data="scannerApp()">
+
+    <!-- ── Sticky Header ── -->
+    <header class="s3-header">
+        <h1><span class="icon">S</span> Vulnerability Scanner</h1>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold mb-2">🔬 Smart Contract Vulnerability Scanner</h1>
-            <p class="text-gray-400">
-                Detect vulnerabilities like Truebit's $26M integer overflow, reentrancy, and more
-            </p>
+    <main class="scanner-main">
+
+        <!-- ── Page Hero ── -->
+        <div class="page-hero">
+            <h2>Smart Contract Vulnerability Scanner</h2>
+            <p>Detect vulnerabilities like Truebit's $26M integer overflow, reentrancy, and more</p>
         </div>
 
-        <!-- Scan Mode Tabs -->
-        <div class="flex gap-2 mb-4">
-            <button 
+        <!-- ── Scan Mode Tabs ── -->
+        <div class="scan-tabs">
+            <button
+                class="scan-tab"
+                :class="{ active: scanMode === 'address' }"
                 @click="scanMode = 'address'"
-                :class="scanMode === 'address' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
-                class="px-4 py-2 rounded-lg font-semibold transition"
-            >
-                📍 Scan by Address
-            </button>
-            <button 
+            >Scan by Address</button>
+            <button
+                class="scan-tab"
+                :class="{ active: scanMode === 'source' }"
                 @click="scanMode = 'source'"
-                :class="scanMode === 'source' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
-                class="px-4 py-2 rounded-lg font-semibold transition"
-            >
-                📝 Scan Source Code
-            </button>
-            <button 
+            >Scan Source Code</button>
+            <button
+                class="scan-tab"
+                :class="{ active: scanMode === 'bytecode' }"
                 @click="scanMode = 'bytecode'"
-                :class="scanMode === 'bytecode' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
-                class="px-4 py-2 rounded-lg font-semibold transition"
-            >
-                🔢 Scan Bytecode
-            </button>
+            >Scan Bytecode</button>
         </div>
 
-        <!-- Address Scan Input -->
-        <div class="card p-6 mb-8" x-show="scanMode === 'address'">
-            <div class="grid md:grid-cols-4 gap-4 mb-4">
-                <div class="md:col-span-2">
-                    <label class="block text-sm text-gray-400 mb-2">Contract Address</label>
-                    <input 
-                        type="text" 
+        <!-- ═══════ Address Scan Input ═══════ -->
+        <div class="glass mb-7" style="padding: 24px;" x-show="scanMode === 'address'">
+            <div class="grid-4 responsive-span" style="margin-bottom: 16px;">
+                <div class="span-2">
+                    <label class="form-label">Contract Address</label>
+                    <input
+                        type="text"
                         x-model="contractAddress"
                         placeholder="0x764C64b2A09b09Acb100B80d8c505Aa6a0302EF2"
-                        class="w-full px-4 py-3 rounded-lg font-mono text-sm"
+                        class="form-input mono"
                     >
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">Chain</label>
-                    <select x-model="selectedChain" class="w-full px-4 py-3 rounded-lg">
+                    <label class="form-label">Chain</label>
+                    <select x-model="selectedChain" class="form-select">
                         <option value="ethereum">Ethereum</option>
                         <option value="bsc">BSC</option>
                         <option value="polygon">Polygon</option>
@@ -230,68 +755,53 @@
                         <option value="base">Base</option>
                     </select>
                 </div>
-                <div class="flex items-end">
-                    <button 
+                <div class="flex-end">
+                    <button
                         @click="scanContract()"
                         :disabled="scanning || !contractAddress"
-                        class="btn-primary w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
+                        class="btn-primary"
                     >
                         <template x-if="scanning">
-                            <span class="flex items-center gap-2">
-                                <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                            <span style="display:flex;align-items:center;gap:8px;">
+                                <svg class="spinner" viewBox="0 0 24 24">
+                                    <circle style="opacity:0.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                                    <path style="opacity:0.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                                 </svg>
                                 Scanning...
                             </span>
                         </template>
                         <template x-if="!scanning">
-                            <span>🔍 Scan Contract</span>
+                            <span>Scan Contract</span>
                         </template>
                     </button>
                 </div>
             </div>
-            
+
             <!-- Advanced Options -->
-            <div class="flex items-center gap-6 text-sm">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="includeTaint" class="rounded">
-                    <span class="text-gray-400">Taint Analysis</span>
+            <div class="check-group">
+                <label class="check-item">
+                    <input type="checkbox" x-model="includeTaint">
+                    <span>Taint Analysis</span>
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="includeSymbolic" class="rounded">
-                    <span class="text-gray-400">Symbolic Execution (Slower)</span>
+                <label class="check-item">
+                    <input type="checkbox" x-model="includeSymbolic">
+                    <span>Symbolic Execution (Slower)</span>
                 </label>
             </div>
         </div>
 
-        <!-- Source Code Scan Input -->
-        <div class="card p-6 mb-8" x-show="scanMode === 'source'">
-            <div class="mb-4">
-                <div class="flex items-center justify-between mb-2">
-                    <label class="block text-sm text-gray-400">Solidity Source Code</label>
-                    <div class="flex gap-2">
-                        <button 
-                            @click="loadSampleCode('reentrancy')"
-                            class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition"
-                        >
-                            Load Reentrancy Example
-                        </button>
-                        <button 
-                            @click="loadSampleCode('overflow')"
-                            class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition"
-                        >
-                            Load Overflow Example
-                        </button>
-                        <button 
-                            @click="loadSampleCode('flashloan')"
-                            class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition"
-                        >
-                            Load Flash Loan Example
-                        </button>
+        <!-- ═══════ Source Code Scan Input ═══════ -->
+        <div class="glass mb-7" style="padding: 24px;" x-show="scanMode === 'source'">
+            <div style="margin-bottom: 16px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                    <label class="form-label" style="margin-bottom:0;">Solidity Source Code</label>
+                    <div style="display:flex;gap:6px;">
+                        <button @click="loadSampleCode('reentrancy')" class="btn-chip">Reentrancy Example</button>
+                        <button @click="loadSampleCode('overflow')" class="btn-chip">Overflow Example</button>
+                        <button @click="loadSampleCode('flashloan')" class="btn-chip">Flash Loan Example</button>
                     </div>
                 </div>
-                <textarea 
+                <textarea
                     x-model="sourceCode"
                     placeholder="// Paste your Solidity source code here...
 pragma solidity ^0.8.0;
@@ -299,392 +809,385 @@ pragma solidity ^0.8.0;
 contract MyContract {
     // Your code here
 }"
-                    class="w-full h-64 px-4 py-3 rounded-lg font-mono text-sm bg-gray-900 border border-gray-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                    style="resize: vertical; min-height: 200px;"
+                    class="form-textarea"
+                    style="height: 260px; min-height: 200px;"
                 ></textarea>
             </div>
-            
-            <div class="grid md:grid-cols-3 gap-4 mb-4">
+
+            <div class="grid-3" style="margin-bottom: 16px;">
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">Contract Name (Optional)</label>
-                    <input 
-                        type="text" 
+                    <label class="form-label">Contract Name (Optional)</label>
+                    <input
+                        type="text"
                         x-model="contractName"
                         placeholder="MyContract"
-                        class="w-full px-4 py-3 rounded-lg text-sm"
+                        class="form-input"
                     >
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-2">Filename</label>
-                    <input 
-                        type="text" 
+                    <label class="form-label">Filename</label>
+                    <input
+                        type="text"
                         x-model="filename"
                         placeholder="contract.sol"
-                        class="w-full px-4 py-3 rounded-lg text-sm"
+                        class="form-input mono"
                     >
                 </div>
-                <div class="flex items-end">
-                    <button 
+                <div class="flex-end">
+                    <button
                         @click="scanSourceCode()"
                         :disabled="scanning || !sourceCode"
-                        class="btn-primary w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
+                        class="btn-primary"
                     >
                         <template x-if="scanning">
-                            <span class="flex items-center gap-2">
-                                <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                            <span style="display:flex;align-items:center;gap:8px;">
+                                <svg class="spinner" viewBox="0 0 24 24">
+                                    <circle style="opacity:0.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                                    <path style="opacity:0.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                                 </svg>
                                 Analyzing...
                             </span>
                         </template>
                         <template x-if="!scanning">
-                            <span>📝 Analyze Source Code</span>
+                            <span>Analyze Source Code</span>
                         </template>
                     </button>
                 </div>
             </div>
-            
-            <div class="text-sm text-gray-500">
-                💡 <strong>Tip:</strong> Source code scanning provides precise line numbers and better context for vulnerabilities.
+
+            <div class="tip">
+                <strong>Tip:</strong> Source code scanning provides precise line numbers and better context for vulnerabilities.
             </div>
         </div>
 
-        <!-- Bytecode Scan Input -->
-        <div class="card p-6 mb-8" x-show="scanMode === 'bytecode'">
-            <div class="mb-4">
-                <label class="block text-sm text-gray-400 mb-2">Contract Bytecode</label>
-                <textarea 
+        <!-- ═══════ Bytecode Scan Input ═══════ -->
+        <div class="glass mb-7" style="padding: 24px;" x-show="scanMode === 'bytecode'">
+            <div style="margin-bottom: 16px;">
+                <label class="form-label">Contract Bytecode</label>
+                <textarea
                     x-model="bytecode"
                     placeholder="0x608060405234801561001057600080fd5b50..."
-                    class="w-full h-32 px-4 py-3 rounded-lg font-mono text-xs bg-gray-900 border border-gray-700 focus:border-purple-500"
-                    style="resize: vertical;"
+                    class="form-textarea"
+                    style="height: 120px;"
                 ></textarea>
             </div>
-            
-            <div class="flex items-center gap-4">
-                <button 
+
+            <div style="display:flex;align-items:center;gap:16px;">
+                <button
                     @click="scanBytecode()"
                     :disabled="scanning || !bytecode"
-                    class="btn-primary px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
+                    class="btn-primary"
+                    style="width:auto;"
                 >
                     <template x-if="scanning">
-                        <span class="flex items-center gap-2">
-                            <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        <span style="display:flex;align-items:center;gap:8px;">
+                            <svg class="spinner" viewBox="0 0 24 24">
+                                <circle style="opacity:0.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                                <path style="opacity:0.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                             </svg>
                             Analyzing...
                         </span>
                     </template>
                     <template x-if="!scanning">
-                        <span>🔢 Analyze Bytecode</span>
+                        <span>Analyze Bytecode</span>
                     </template>
                 </button>
-                
-                <div class="text-sm text-gray-500">
-                    💡 Useful for analyzing contracts before deployment
-                </div>
+                <span class="tip" style="margin-top:0;">Useful for analyzing contracts before deployment</span>
             </div>
         </div>
 
-        <!-- Quick Scan Presets -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <button 
-                @click="quickScan('truebit')"
-                class="card card-hover p-4 text-left transition"
-            >
-                <div class="text-2xl mb-2">💥</div>
-                <div class="font-semibold">Truebit-Style</div>
-                <div class="text-xs text-gray-400">Integer Overflow Check</div>
+        <!-- ═══════ Quick Scan Presets ═══════ -->
+        <div class="preset-grid">
+            <button class="glass glass-interactive preset-card" @click="quickScan('truebit')">
+                <span class="preset-icon">&#x1F4A5;</span>
+                <div class="preset-title">Truebit-Style</div>
+                <div class="preset-desc">Integer Overflow Check</div>
             </button>
-            <button 
-                @click="quickScan('reentrancy')"
-                class="card card-hover p-4 text-left transition"
-            >
-                <div class="text-2xl mb-2">🔄</div>
-                <div class="font-semibold">Reentrancy</div>
-                <div class="text-xs text-gray-400">Call-before-state Check</div>
+            <button class="glass glass-interactive preset-card" @click="quickScan('reentrancy')">
+                <span class="preset-icon">&#x1F504;</span>
+                <div class="preset-title">Reentrancy</div>
+                <div class="preset-desc">Call-before-state Check</div>
             </button>
-            <button 
-                @click="quickScan('access')"
-                class="card card-hover p-4 text-left transition"
-            >
-                <div class="text-2xl mb-2">🔐</div>
-                <div class="font-semibold">Access Control</div>
-                <div class="text-xs text-gray-400">Permission Check</div>
+            <button class="glass glass-interactive preset-card" @click="quickScan('access')">
+                <span class="preset-icon">&#x1F510;</span>
+                <div class="preset-title">Access Control</div>
+                <div class="preset-desc">Permission Check</div>
             </button>
-            <button 
-                @click="quickScan('flashloan')"
-                class="card card-hover p-4 text-left transition"
-            >
-                <div class="text-2xl mb-2">⚡</div>
-                <div class="font-semibold">Flash Loan</div>
-                <div class="text-xs text-gray-400">Price Manipulation Check</div>
+            <button class="glass glass-interactive preset-card" @click="quickScan('flashloan')">
+                <span class="preset-icon">&#x26A1;</span>
+                <div class="preset-title">Flash Loan</div>
+                <div class="preset-desc">Price Manipulation Check</div>
             </button>
         </div>
 
-        <!-- Scanning Animation -->
+        <!-- ═══════ Scanning Animation ═══════ -->
         <template x-if="scanning">
-            <div class="card p-8 mb-8 relative overflow-hidden">
-                <div class="scan-line"></div>
-                <div class="text-center">
-                    <div class="text-6xl mb-4 pulse-scan">🔬</div>
-                    <h3 class="text-xl font-semibold mb-2">Scanning Contract...</h3>
-                    <p class="text-gray-400 mb-4" x-text="scanStatus"></p>
-                    <div class="max-w-md mx-auto bg-gray-800 rounded-full h-2 overflow-hidden">
-                        <div 
-                            class="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
-                            :style="`width: ${scanProgress}%`"
-                        ></div>
+            <div class="glass scan-overlay">
+                <div class="scan-line-anim"></div>
+                <div class="scan-center">
+                    <div class="scan-pulse">&#x1F52C;</div>
+                    <div class="scan-title">Scanning Contract...</div>
+                    <div class="scan-status" x-text="scanStatus"></div>
+                    <div class="progress-track">
+                        <div class="progress-fill" :style="`width: ${scanProgress}%`"></div>
                     </div>
                 </div>
             </div>
         </template>
 
-        <!-- Results Section -->
+        <!-- ═══════ Results Section ═══════ -->
         <template x-if="scanResult && !scanning">
             <div>
                 <!-- Risk Score Card -->
-                <div class="card p-6 mb-8">
-                    <div class="flex items-center justify-between mb-6">
+                <div class="glass mb-7" style="padding: 24px;">
+                    <div class="results-header">
                         <div>
-                            <h2 class="text-xl font-semibold mb-1">Scan Results</h2>
-                            <p class="text-gray-400 font-mono text-sm" x-text="scanResult.contract_address"></p>
+                            <div class="results-title">Scan Results</div>
+                            <div class="results-address" x-text="scanResult.contract_address"></div>
                         </div>
-                        <div class="text-right">
-                            <div class="text-sm text-gray-400">Scan Duration</div>
-                            <div class="font-mono" x-text="`${scanResult.scan_duration_ms}ms`"></div>
+                        <div class="results-duration">
+                            <div class="label">Scan Duration</div>
+                            <div class="value" x-text="`${scanResult.scan_duration_ms}ms`"></div>
                         </div>
                     </div>
-                    
+
                     <!-- Risk Score -->
-                    <div class="mb-6">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-gray-400">Risk Score</span>
-                            <span 
-                                class="text-2xl font-bold glow-text"
+                    <div class="risk-section">
+                        <div class="risk-header">
+                            <span class="risk-label">Risk Score</span>
+                            <span
+                                class="risk-value"
                                 :class="{
-                                    'text-green-400': scanResult.risk_score < 25,
-                                    'text-yellow-400': scanResult.risk_score >= 25 && scanResult.risk_score < 50,
-                                    'text-orange-400': scanResult.risk_score >= 50 && scanResult.risk_score < 75,
-                                    'text-red-400': scanResult.risk_score >= 75
+                                    'low': scanResult.risk_score < 25,
+                                    'medium': scanResult.risk_score >= 25 && scanResult.risk_score < 50,
+                                    'high': scanResult.risk_score >= 50 && scanResult.risk_score < 75,
+                                    'critical': scanResult.risk_score >= 75
                                 }"
                                 x-text="`${Math.round(scanResult.risk_score)}/100`"
                             ></span>
                         </div>
-                        <div class="relative">
-                            <div class="risk-meter"></div>
-                            <div 
-                                class="risk-indicator absolute"
-                                :style="`left: ${scanResult.risk_score}%`"
-                            ></div>
+                        <div class="risk-bar-track">
+                            <div class="risk-bar-indicator" :style="`left: calc(${scanResult.risk_score}% - 6px)`"></div>
                         </div>
                     </div>
-                    
+
                     <!-- Summary Stats -->
-                    <div class="grid grid-cols-5 gap-4">
-                        <div class="text-center p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                            <div class="text-2xl font-bold text-red-400" x-text="scanResult.summary.critical"></div>
-                            <div class="text-xs text-gray-400">Critical</div>
+                    <div class="summary-grid">
+                        <div class="summary-pill s-critical">
+                            <div class="summary-num c-critical" x-text="scanResult.summary.critical"></div>
+                            <div class="summary-lbl">Critical</div>
                         </div>
-                        <div class="text-center p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                            <div class="text-2xl font-bold text-orange-400" x-text="scanResult.summary.high"></div>
-                            <div class="text-xs text-gray-400">High</div>
+                        <div class="summary-pill s-high">
+                            <div class="summary-num c-high" x-text="scanResult.summary.high"></div>
+                            <div class="summary-lbl">High</div>
                         </div>
-                        <div class="text-center p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                            <div class="text-2xl font-bold text-yellow-400" x-text="scanResult.summary.medium"></div>
-                            <div class="text-xs text-gray-400">Medium</div>
+                        <div class="summary-pill s-medium">
+                            <div class="summary-num c-medium" x-text="scanResult.summary.medium"></div>
+                            <div class="summary-lbl">Medium</div>
                         </div>
-                        <div class="text-center p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                            <div class="text-2xl font-bold text-green-400" x-text="scanResult.summary.low"></div>
-                            <div class="text-xs text-gray-400">Low</div>
+                        <div class="summary-pill s-low">
+                            <div class="summary-num c-low" x-text="scanResult.summary.low"></div>
+                            <div class="summary-lbl">Low</div>
                         </div>
-                        <div class="text-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                            <div class="text-2xl font-bold text-blue-400" x-text="scanResult.summary.total"></div>
-                            <div class="text-xs text-gray-400">Total</div>
+                        <div class="summary-pill s-total">
+                            <div class="summary-num c-total" x-text="scanResult.summary.total"></div>
+                            <div class="summary-lbl">Total</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Contract Metadata -->
-                <div class="card p-6 mb-8">
-                    <h3 class="text-lg font-semibold mb-4">📋 Contract Metadata</h3>
-                    <div class="grid md:grid-cols-4 gap-4">
-                        <div class="p-3 bg-gray-800/50 rounded-lg">
-                            <div class="text-xs text-gray-400 mb-1">Solidity Version</div>
-                            <div class="font-mono" x-text="scanResult.metadata?.solidity_version || 'Unknown'"></div>
-                        </div>
-                        <div class="p-3 bg-gray-800/50 rounded-lg">
-                            <div class="text-xs text-gray-400 mb-1">Bytecode Size</div>
-                            <div class="font-mono" x-text="`${scanResult.metadata?.bytecode_size || 0} bytes`"></div>
-                        </div>
-                        <div class="p-3 bg-gray-800/50 rounded-lg">
-                            <div class="text-xs text-gray-400 mb-1">Is Proxy</div>
-                            <div x-text="scanResult.metadata?.is_proxy ? '✅ Yes' : '❌ No'"></div>
-                        </div>
-                        <div class="p-3 bg-gray-800/50 rounded-lg">
-                            <div class="text-xs text-gray-400 mb-1">Has Selfdestruct</div>
-                            <div x-text="scanResult.metadata?.has_selfdestruct ? '⚠️ Yes' : '✅ No'"></div>
+                <div class="glass mb-7">
+                    <div class="panel-head">
+                        <div class="panel-title"><span class="dot"></span> Contract Metadata</div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="grid-4">
+                            <div class="meta-cell">
+                                <div class="meta-label">Solidity Version</div>
+                                <div class="meta-value" x-text="scanResult.metadata?.solidity_version || 'Unknown'"></div>
+                            </div>
+                            <div class="meta-cell">
+                                <div class="meta-label">Bytecode Size</div>
+                                <div class="meta-value" x-text="`${scanResult.metadata?.bytecode_size || 0} bytes`"></div>
+                            </div>
+                            <div class="meta-cell">
+                                <div class="meta-label">Is Proxy</div>
+                                <div class="meta-value" x-text="scanResult.metadata?.is_proxy ? 'Yes' : 'No'"></div>
+                            </div>
+                            <div class="meta-cell">
+                                <div class="meta-label">Has Selfdestruct</div>
+                                <div class="meta-value" x-text="scanResult.metadata?.has_selfdestruct ? 'Yes' : 'No'"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Vulnerabilities List -->
-                <div class="card p-6">
-                    <h3 class="text-lg font-semibold mb-4">🔍 Detected Vulnerabilities</h3>
-                    
-                    <template x-if="scanResult.vulnerabilities.length === 0">
-                        <div class="text-center py-8 text-gray-400">
-                            <div class="text-4xl mb-2">✅</div>
-                            <p>No vulnerabilities detected</p>
-                        </div>
-                    </template>
-                    
-                    <div class="space-y-4">
-                        <template x-for="vuln in scanResult.vulnerabilities" :key="vuln.title + vuln.location">
-                            <div 
-                                class="p-4 rounded-lg cursor-pointer transition"
-                                :class="{
-                                    'severity-critical': vuln.severity === 'critical',
-                                    'severity-high': vuln.severity === 'high',
-                                    'severity-medium': vuln.severity === 'medium',
-                                    'severity-low': vuln.severity === 'low',
-                                    'severity-info': vuln.severity === 'info'
-                                }"
-                                @click="vuln.expanded = !vuln.expanded"
-                            >
-                                <div class="flex items-start justify-between">
-                                    <div class="flex-1">
-                                        <div class="flex items-center gap-3 mb-2">
-                                            <span 
-                                                class="px-2 py-1 rounded text-xs font-bold uppercase"
-                                                :class="{
-                                                    'bg-red-500 text-white': vuln.severity === 'critical',
-                                                    'bg-orange-500 text-white': vuln.severity === 'high',
-                                                    'bg-yellow-500 text-black': vuln.severity === 'medium',
-                                                    'bg-green-500 text-white': vuln.severity === 'low',
-                                                    'bg-blue-500 text-white': vuln.severity === 'info'
-                                                }"
-                                                x-text="vuln.severity"
-                                            ></span>
-                                            <span class="font-semibold" x-text="vuln.title"></span>
-                                        </div>
-                                        <p class="text-sm text-gray-300" x-text="vuln.description"></p>
-                                    </div>
-                                    <div class="text-right ml-4">
-                                        <div class="text-xs text-gray-400">Confidence</div>
-                                        <div class="font-mono" x-text="`${Math.round(vuln.confidence * 100)}%`"></div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Expanded Details -->
-                                <template x-if="vuln.expanded">
-                                    <div class="mt-4 pt-4 border-t border-white/10">
-                                        <div class="grid md:grid-cols-2 gap-4">
-                                            <div>
-                                                <div class="text-xs text-gray-400 mb-1">Location</div>
-                                                <div class="font-mono text-sm">
-                                                    <span x-text="vuln.location"></span>
-                                                    <template x-if="vuln.function_name">
-                                                        <span class="text-purple-400"> in <span x-text="vuln.function_name"></span>()</span>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div class="text-xs text-gray-400 mb-1">Type</div>
-                                                <div class="font-mono text-sm" x-text="vuln.type"></div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Code Snippet for Source Code Scans -->
-                                        <template x-if="vuln.code_snippet">
-                                            <div class="mt-3">
-                                                <div class="text-xs text-gray-400 mb-1">Code Context</div>
-                                                <pre class="text-xs bg-black/50 p-3 rounded overflow-x-auto font-mono border border-gray-700" x-text="vuln.code_snippet"></pre>
-                                            </div>
-                                        </template>
-                                        
-                                        <template x-if="vuln.attack_vector">
-                                            <div class="mt-3">
-                                                <div class="text-xs text-gray-400 mb-1">Attack Vector</div>
-                                                <div class="text-sm" x-text="vuln.attack_vector"></div>
-                                            </div>
-                                        </template>
-                                        
-                                        <template x-if="vuln.exploit_scenario">
-                                            <div class="mt-3">
-                                                <div class="text-xs text-gray-400 mb-1">Exploit Scenario</div>
-                                                <pre class="text-sm bg-black/30 p-3 rounded overflow-x-auto whitespace-pre-wrap" x-text="vuln.exploit_scenario"></pre>
-                                            </div>
-                                        </template>
-                                        
-                                        <template x-if="vuln.recommendation">
-                                            <div class="mt-3">
-                                                <div class="text-xs text-gray-400 mb-1">💡 Recommendation</div>
-                                                <div class="text-sm text-green-400 whitespace-pre-wrap" x-text="vuln.recommendation"></div>
-                                            </div>
-                                        </template>
-                                        
-                                        <template x-if="vuln.references && vuln.references.length > 0">
-                                            <div class="mt-3">
-                                                <div class="text-xs text-gray-400 mb-1">📚 References</div>
-                                                <div class="flex flex-wrap gap-2">
-                                                    <template x-for="ref in vuln.references" :key="ref">
-                                                        <a 
-                                                            :href="ref" 
-                                                            target="_blank"
-                                                            class="text-xs text-blue-400 hover:underline"
-                                                            x-text="ref.split('/').pop()"
-                                                        ></a>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
+                <div class="glass">
+                    <div class="panel-head">
+                        <div class="panel-title"><span class="dot"></span> Detected Vulnerabilities</div>
+                    </div>
+                    <div class="panel-body">
+                        <template x-if="scanResult.vulnerabilities.length === 0">
+                            <div class="empty-state">
+                                <div class="icon">&#x2705;</div>
+                                <p>No vulnerabilities detected</p>
                             </div>
                         </template>
+
+                        <div class="vuln-list">
+                            <template x-for="vuln in scanResult.vulnerabilities" :key="vuln.title + vuln.location">
+                                <div
+                                    class="vuln-card"
+                                    :class="{
+                                        'sev-critical': vuln.severity === 'critical',
+                                        'sev-high': vuln.severity === 'high',
+                                        'sev-medium': vuln.severity === 'medium',
+                                        'sev-low': vuln.severity === 'low',
+                                        'sev-info': vuln.severity === 'info'
+                                    }"
+                                    @click="vuln.expanded = !vuln.expanded"
+                                >
+                                    <div class="vuln-top">
+                                        <div style="flex:1;">
+                                            <div class="vuln-meta">
+                                                <span
+                                                    class="sev-badge"
+                                                    :class="{
+                                                        'b-critical': vuln.severity === 'critical',
+                                                        'b-high': vuln.severity === 'high',
+                                                        'b-medium': vuln.severity === 'medium',
+                                                        'b-low': vuln.severity === 'low',
+                                                        'b-info': vuln.severity === 'info'
+                                                    }"
+                                                    x-text="vuln.severity"
+                                                ></span>
+                                                <span class="vuln-title" x-text="vuln.title"></span>
+                                            </div>
+                                            <p class="vuln-desc" x-text="vuln.description"></p>
+                                        </div>
+                                        <div class="vuln-confidence">
+                                            <div class="label">Confidence</div>
+                                            <div class="value" x-text="`${Math.round(vuln.confidence * 100)}%`"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Expanded Details -->
+                                    <template x-if="vuln.expanded">
+                                        <div class="vuln-details">
+                                            <div class="detail-grid">
+                                                <div>
+                                                    <div class="detail-label">Location</div>
+                                                    <div class="detail-value">
+                                                        <span x-text="vuln.location"></span>
+                                                        <template x-if="vuln.function_name">
+                                                            <span class="fn-name"> in <span x-text="vuln.function_name"></span>()</span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div class="detail-label">Type</div>
+                                                    <div class="detail-value" x-text="vuln.type"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Code Snippet for Source Code Scans -->
+                                            <template x-if="vuln.code_snippet">
+                                                <div style="margin-bottom:12px;">
+                                                    <div class="detail-label">Code Context</div>
+                                                    <pre class="code-block" x-text="vuln.code_snippet"></pre>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="vuln.attack_vector">
+                                                <div style="margin-bottom:12px;">
+                                                    <div class="detail-label">Attack Vector</div>
+                                                    <div class="detail-text" x-text="vuln.attack_vector"></div>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="vuln.exploit_scenario">
+                                                <div style="margin-bottom:12px;">
+                                                    <div class="detail-label">Exploit Scenario</div>
+                                                    <pre class="code-block" x-text="vuln.exploit_scenario"></pre>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="vuln.recommendation">
+                                                <div style="margin-bottom:12px;">
+                                                    <div class="detail-label">Recommendation</div>
+                                                    <div class="recommendation-text" x-text="vuln.recommendation"></div>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="vuln.references && vuln.references.length > 0">
+                                                <div>
+                                                    <div class="detail-label">References</div>
+                                                    <div class="ref-links">
+                                                        <template x-for="ref in vuln.references" :key="ref">
+                                                            <a
+                                                                :href="ref"
+                                                                target="_blank"
+                                                                class="ref-link"
+                                                                x-text="ref.split('/').pop()"
+                                                            ></a>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>
         </template>
 
-        <!-- Example Vulnerable Contracts -->
-        <div class="card p-6 mt-8">
-            <h3 class="text-lg font-semibold mb-4">📚 Example Vulnerable Contracts</h3>
-            <p class="text-gray-400 text-sm mb-4">Test the scanner with these known vulnerable contracts:</p>
-            
-            <div class="grid md:grid-cols-2 gap-4">
-                <div class="p-4 bg-gray-800/50 rounded-lg">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-semibold">Truebit Purchase Contract</span>
-                        <span class="text-xs text-red-400">$26M Hack</span>
+        <!-- ═══════ Example Vulnerable Contracts ═══════ -->
+        <div class="glass mt-7">
+            <div class="panel-head">
+                <div class="panel-title"><span class="dot"></span> Example Vulnerable Contracts</div>
+            </div>
+            <div class="panel-body">
+                <p style="font-size:12px;color:var(--s3-text-3);margin-bottom:16px;">
+                    Test the scanner with these known vulnerable contracts:
+                </p>
+
+                <div class="grid-2">
+                    <div class="example-card">
+                        <div class="example-header">
+                            <span class="example-name">Truebit Purchase Contract</span>
+                            <span class="example-tag">$26M Hack</span>
+                        </div>
+                        <code class="example-address">0x764C64b2A09b09Acb100B80d8c505Aa6a0302EF2</code>
+                        <button
+                            @click="contractAddress = '0x764C64b2A09b09Acb100B80d8c505Aa6a0302EF2'; selectedChain = 'ethereum'; scanMode = 'address'"
+                            class="example-load"
+                        >
+                            Load Contract &rarr;
+                        </button>
                     </div>
-                    <code class="text-xs text-gray-400 block mb-2">0x764C64b2A09b09Acb100B80d8c505Aa6a0302EF2</code>
-                    <button 
-                        @click="contractAddress = '0x764C64b2A09b09Acb100B80d8c505Aa6a0302EF2'; selectedChain = 'ethereum'"
-                        class="text-xs text-purple-400 hover:underline"
-                    >
-                        Load Contract →
-                    </button>
-                </div>
-                
-                <div class="p-4 bg-gray-800/50 rounded-lg">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-semibold">The DAO</span>
-                        <span class="text-xs text-red-400">$60M Hack (Reentrancy)</span>
+
+                    <div class="example-card">
+                        <div class="example-header">
+                            <span class="example-name">The DAO</span>
+                            <span class="example-tag">$60M Hack (Reentrancy)</span>
+                        </div>
+                        <code class="example-address">0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413</code>
+                        <button
+                            @click="contractAddress = '0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413'; selectedChain = 'ethereum'; scanMode = 'address'"
+                            class="example-load"
+                        >
+                            Load Contract &rarr;
+                        </button>
                     </div>
-                    <code class="text-xs text-gray-400 block mb-2">0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413</code>
-                    <button 
-                        @click="contractAddress = '0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413'; selectedChain = 'ethereum'"
-                        class="text-xs text-purple-400 hover:underline"
-                    >
-                        Load Contract →
-                    </button>
                 </div>
             </div>
         </div>
+
     </main>
 </div><!-- /app -->
 
@@ -693,31 +1196,31 @@ contract MyContract {
             return {
                 // Scan mode
                 scanMode: 'address', // 'address', 'source', 'bytecode'
-                
+
                 // Address scan
                 contractAddress: '',
                 selectedChain: 'ethereum',
                 includeTaint: true,
                 includeSymbolic: false,
-                
+
                 // Source code scan
                 sourceCode: '',
                 contractName: '',
                 filename: 'contract.sol',
-                
+
                 // Bytecode scan
                 bytecode: '',
-                
+
                 // State
                 scanning: false,
                 scanProgress: 0,
                 scanStatus: 'Initializing...',
                 scanResult: null,
-                
+
                 getApiBase() {
                     return window.SENTINEL3_API_BASE || '';
                 },
-                
+
                 // Sample code examples
                 loadSampleCode(type) {
                     const samples = {
@@ -727,20 +1230,20 @@ pragma solidity ^0.7.0;
 // ⚠️ VULNERABLE CONTRACT - Reentrancy Attack
 contract VulnerableBank {
     mapping(address => uint256) public balances;
-    
+
     function deposit() public payable {
         balances[msg.sender] += msg.value;
     }
-    
+
     // ⚠️ VULNERABLE: External call before state update
     function withdraw() public {
         uint256 amount = balances[msg.sender];
         require(amount > 0, "No balance");
-        
+
         // BUG: Call happens before balance is set to 0
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Transfer failed");
-        
+
         // State update happens AFTER external call
         balances[msg.sender] = 0;
     }
@@ -752,21 +1255,21 @@ pragma solidity ^0.7.0;
 contract VulnerableToken {
     mapping(address => uint256) public balances;
     uint256 public totalSupply;
-    
+
     // ⚠️ VULNERABLE: No overflow protection in Solidity < 0.8.0
     function mint(uint256 amount) public {
         // BUG: totalSupply + amount can overflow
         totalSupply = totalSupply + amount;
         balances[msg.sender] = balances[msg.sender] + amount;
     }
-    
+
     // ⚠️ VULNERABLE: No underflow protection
     function transfer(address to, uint256 amount) public {
         // BUG: balance - amount can underflow
         balances[msg.sender] = balances[msg.sender] - amount;
         balances[to] = balances[to] + amount;
     }
-    
+
     // ⚠️ VULNERABLE: Division by zero possible
     function calculatePrice(uint256 supply, uint256 amount) public pure returns (uint256) {
         return supply / amount;
@@ -783,53 +1286,53 @@ interface IUniswapV2Pair {
 contract VulnerableLending {
     IUniswapV2Pair public priceFeed;
     mapping(address => uint256) public deposits;
-    
+
     constructor(address _pair) {
         priceFeed = IUniswapV2Pair(_pair);
     }
-    
+
     // ⚠️ VULNERABLE: Uses spot price from AMM
     function getPrice() public view returns (uint256) {
         // BUG: This price can be manipulated in a single transaction
         (uint112 reserve0, uint112 reserve1, ) = priceFeed.getReserves();
         return uint256(reserve0) * 1e18 / uint256(reserve1);
     }
-    
+
     // ⚠️ VULNERABLE: Lending based on manipulatable price
     function borrow(uint256 collateralAmount) public {
         uint256 price = getPrice();
         uint256 borrowAmount = collateralAmount * price / 1e18;
-        
+
         // Attacker can:
         // 1. Flash loan to manipulate reserves
         // 2. Call borrow() with inflated price
         // 3. Repay flash loan
         // Result: Borrow more than collateral is worth
-        
+
         deposits[msg.sender] += collateralAmount;
         payable(msg.sender).transfer(borrowAmount);
     }
 }`
                     };
-                    
+
                     this.sourceCode = samples[type] || '';
-                    this.contractName = type === 'reentrancy' ? 'VulnerableBank' : 
+                    this.contractName = type === 'reentrancy' ? 'VulnerableBank' :
                                        type === 'overflow' ? 'VulnerableToken' : 'VulnerableLending';
                     this.filename = `${this.contractName}.sol`;
                 },
-                
+
                 async scanContract() {
                     if (!this.contractAddress) return;
-                    
+
                     this.scanning = true;
                     this.scanProgress = 0;
                     this.scanResult = null;
-                    
+
                     // Simulate progress
                     const progressInterval = setInterval(() => {
                         if (this.scanProgress < 90) {
                             this.scanProgress += Math.random() * 15;
-                            
+
                             if (this.scanProgress < 20) {
                                 this.scanStatus = 'Fetching bytecode...';
                             } else if (this.scanProgress < 40) {
@@ -843,7 +1346,7 @@ contract VulnerableLending {
                             }
                         }
                     }, 200);
-                    
+
                     try {
                         const response = await fetch(`${this.getApiBase()}/api/scanner/scan`, {
                             method: 'POST',
@@ -855,9 +1358,9 @@ contract VulnerableLending {
                                 include_symbolic: this.includeSymbolic
                             })
                         });
-                        
+
                         const data = await response.json();
-                        
+
                         // Add expanded property to vulnerabilities
                         if (data.vulnerabilities) {
                             data.vulnerabilities = data.vulnerabilities.map(v => ({
@@ -865,10 +1368,10 @@ contract VulnerableLending {
                                 expanded: false
                             }));
                         }
-                        
+
                         this.scanResult = data;
                         this.scanProgress = 100;
-                        
+
                     } catch (error) {
                         console.error('Scan failed:', error);
                         alert('Scan failed: ' + error.message);
@@ -877,19 +1380,19 @@ contract VulnerableLending {
                         this.scanning = false;
                     }
                 },
-                
+
                 async scanSourceCode() {
                     if (!this.sourceCode) return;
-                    
+
                     this.scanning = true;
                     this.scanProgress = 0;
                     this.scanResult = null;
-                    
+
                     // Simulate progress
                     const progressInterval = setInterval(() => {
                         if (this.scanProgress < 90) {
                             this.scanProgress += Math.random() * 20;
-                            
+
                             if (this.scanProgress < 30) {
                                 this.scanStatus = 'Parsing Solidity...';
                             } else if (this.scanProgress < 60) {
@@ -901,7 +1404,7 @@ contract VulnerableLending {
                             }
                         }
                     }, 150);
-                    
+
                     try {
                         const response = await fetch(`${this.getApiBase()}/api/scanner/scan/source`, {
                             method: 'POST',
@@ -912,9 +1415,9 @@ contract VulnerableLending {
                                 filename: this.filename || 'contract.sol'
                             })
                         });
-                        
+
                         const data = await response.json();
-                        
+
                         // Convert source scan result to standard format
                         this.scanResult = {
                             success: data.success,
@@ -945,9 +1448,9 @@ contract VulnerableLending {
                                 contract_name: this.contractName
                             }
                         };
-                        
+
                         this.scanProgress = 100;
-                        
+
                     } catch (error) {
                         console.error('Source scan failed:', error);
                         alert('Source scan failed: ' + error.message);
@@ -956,19 +1459,19 @@ contract VulnerableLending {
                         this.scanning = false;
                     }
                 },
-                
+
                 async scanBytecode() {
                     if (!this.bytecode) return;
-                    
+
                     this.scanning = true;
                     this.scanProgress = 0;
                     this.scanResult = null;
-                    
+
                     // Simulate progress
                     const progressInterval = setInterval(() => {
                         if (this.scanProgress < 90) {
                             this.scanProgress += Math.random() * 15;
-                            
+
                             if (this.scanProgress < 30) {
                                 this.scanStatus = 'Parsing bytecode...';
                             } else if (this.scanProgress < 60) {
@@ -980,15 +1483,15 @@ contract VulnerableLending {
                             }
                         }
                     }, 150);
-                    
+
                     try {
                         const response = await fetch(`${this.getApiBase()}/api/scanner/analyze/bytecode?bytecode=${encodeURIComponent(this.bytecode)}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' }
                         });
-                        
+
                         const data = await response.json();
-                        
+
                         // Convert bytecode scan result to standard format
                         this.scanResult = {
                             success: data.success,
@@ -1012,9 +1515,9 @@ contract VulnerableLending {
                                 bytecode_size: this.bytecode.length / 2
                             }
                         };
-                        
+
                         this.scanProgress = 100;
-                        
+
                     } catch (error) {
                         console.error('Bytecode scan failed:', error);
                         alert('Bytecode scan failed: ' + error.message);
@@ -1023,28 +1526,28 @@ contract VulnerableLending {
                         this.scanning = false;
                     }
                 },
-                
+
                 async quickScan(type) {
                     if (!this.contractAddress) {
                         alert('Please enter a contract address first');
                         return;
                     }
-                    
+
                     this.scanning = true;
                     this.scanProgress = 0;
                     this.scanResult = null;
-                    
+
                     const endpoints = {
                         'truebit': `/api/scanner/analyze/truebit-style/${this.contractAddress}?chain=${this.selectedChain}`,
                         'reentrancy': `/api/scanner/analyze/reentrancy/${this.contractAddress}?chain=${this.selectedChain}`,
                         'access': `/api/scanner/scan/${this.contractAddress}?chain=${this.selectedChain}`,
                         'flashloan': `/api/scanner/scan/${this.contractAddress}?chain=${this.selectedChain}`
                     };
-                    
+
                     try {
                         const response = await fetch(`${this.getApiBase()}${endpoints[type]}`);
                         const data = await response.json();
-                        
+
                         // Convert quick scan result to standard format
                         if (type === 'truebit' || type === 'reentrancy') {
                             this.scanResult = {
@@ -1078,7 +1581,7 @@ contract VulnerableLending {
                                 }))
                             };
                         }
-                        
+
                     } catch (error) {
                         console.error('Quick scan failed:', error);
                         alert('Scan failed: ' + error.message);
@@ -1089,5 +1592,7 @@ contract VulnerableLending {
             };
         }
     </script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
 </body>
 </html>

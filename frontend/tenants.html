@@ -4,311 +4,1058 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel3 - Multi-Tenancy Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ── Page-Specific Styles for Tenants ─────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
             font-family: 'Space Grotesk', sans-serif;
-            background: #0a0a0f;
-            color: #ffffff;
         }
+
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .card {
-            background: #12121a;
-            border: 1px solid #2a2a3a;
-            border-radius: 12px;
+
+        /* ── Page Layout ──────────────────────────────────────────────── */
+        .page-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            height: 100vh;
         }
-        .plan-free { border-top: 3px solid #6b7280; }
-        .plan-pro { border-top: 3px solid #8b5cf6; }
-        .plan-enterprise { border-top: 3px solid #f59e0b; }
+
+        /* ── Page Header ──────────────────────────────────────────────── */
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--s3-border);
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        .page-header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .page-header-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: var(--s3-radius-sm);
+            background: var(--s3-accent-dim);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--s3-accent-light);
+        }
+
+        .page-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--s3-text);
+            letter-spacing: -0.02em;
+        }
+
+        .page-header h1 span {
+            color: var(--s3-text-3);
+            font-weight: 400;
+            font-size: 13px;
+            margin-left: 10px;
+        }
+
+        /* ── Tenant Switcher ──────────────────────────────────────────── */
+        .tenant-switcher {
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 8px 14px;
+            color: var(--s3-text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 34px;
+        }
+
+        .tenant-switcher:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
+        }
+
+        .tenant-switcher option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
+        }
+
+        /* ── Main Content Area ────────────────────────────────────────── */
+        .main-area {
+            padding: 28px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        /* ── Stats Row ────────────────────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.25s, transform 0.25s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--s3-border-hover);
+            transform: translateY(-2px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--s3-accent), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stat-card:hover::before {
+            opacity: 0.6;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--s3-text);
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .stat-value.enterprise { color: var(--s3-high); }
+        .stat-value.pro { color: var(--s3-accent-light); }
+        .stat-value.free { color: var(--s3-text-3); }
+
+        /* ── Section Header ───────────────────────────────────────────── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--s3-text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--s3-accent);
+            box-shadow: 0 0 8px var(--s3-accent);
+        }
+
+        /* ── Buttons ──────────────────────────────────────────────────── */
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--s3-accent), #6d28d9);
+            border: none;
+            border-radius: var(--s3-radius-sm);
+            color: #fff;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+            letter-spacing: -0.01em;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.15);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text-2);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--s3-bg-4);
+            color: var(--s3-text);
+            border-color: var(--s3-border-hover);
+        }
+
+        .btn-danger {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: rgba(244, 63, 94, 0.08);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-critical);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            text-align: left;
+        }
+
+        .btn-danger:hover {
+            background: rgba(244, 63, 94, 0.15);
+            border-color: rgba(244, 63, 94, 0.35);
+        }
+
+        /* ── Tenant Cards Grid ────────────────────────────────────────── */
+        .tenant-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .tenant-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 22px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tenant-card:hover {
+            border-color: var(--s3-border-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .tenant-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .tenant-card.plan-enterprise::before {
+            background: linear-gradient(90deg, var(--s3-high), var(--s3-medium));
+        }
+
+        .tenant-card.plan-pro::before {
+            background: linear-gradient(90deg, var(--s3-accent), var(--s3-accent-light));
+        }
+
+        .tenant-card.plan-free::before {
+            background: var(--s3-text-3);
+        }
+
+        .tenant-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .tenant-card-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 3px;
+        }
+
+        .tenant-card-slug {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--s3-text-3);
+        }
+
+        .plan-badge {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .plan-badge.enterprise {
+            background: rgba(249, 115, 22, 0.12);
+            color: var(--s3-high);
+            border: 1px solid rgba(249, 115, 22, 0.2);
+        }
+
+        .plan-badge.pro {
+            background: var(--s3-accent-dim);
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .plan-badge.free {
+            background: rgba(71, 85, 105, 0.15);
+            color: var(--s3-text-3);
+            border: 1px solid rgba(71, 85, 105, 0.2);
+        }
+
+        .tenant-card-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .meta-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .meta-row .label {
+            color: var(--s3-text-3);
+        }
+
+        .meta-row .value {
+            color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        /* ── Tenant Detail Panel ──────────────────────────────────────── */
+        .detail-panel {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 28px;
+        }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--s3-border);
+        }
+
+        .detail-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--s3-text);
+            letter-spacing: -0.02em;
+        }
+
+        .close-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            color: var(--s3-text-3);
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .close-btn:hover {
+            color: var(--s3-text);
+            background: var(--s3-bg-4);
+            border-color: var(--s3-border-hover);
+        }
+
+        .detail-columns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px;
+        }
+
+        .detail-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--s3-text-3);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .detail-section-title svg {
+            width: 14px;
+            height: 14px;
+            color: var(--s3-accent-light);
+        }
+
+        .detail-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+        }
+
+        .detail-row:not(:last-child) {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .detail-row .label {
+            color: var(--s3-text-3);
+        }
+
+        .detail-row .value {
+            color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .detail-row .value.enabled {
+            color: var(--s3-low);
+        }
+
+        .detail-row .value.disabled {
+            color: var(--s3-critical);
+            opacity: 0.6;
+        }
+
+        .detail-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text-2);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            text-align: left;
+        }
+
+        .action-btn:hover {
+            background: var(--s3-bg-4);
+            border-color: var(--s3-border-hover);
+            color: var(--s3-text);
+        }
+
+        .action-btn svg {
+            width: 16px;
+            height: 16px;
+            color: var(--s3-accent-light);
+            flex-shrink: 0;
+        }
+
+        /* ── Pricing Plans ────────────────────────────────────────────── */
+        .plans-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .plan-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 28px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .plan-card:hover {
+            border-color: var(--s3-border-hover);
+            transform: translateY(-2px);
+        }
+
+        .plan-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+
+        .plan-card.tier-free::before { background: var(--s3-text-3); }
+        .plan-card.tier-pro::before { background: linear-gradient(90deg, var(--s3-accent), var(--s3-accent-light)); }
+        .plan-card.tier-enterprise::before { background: linear-gradient(90deg, var(--s3-high), var(--s3-medium)); }
+
+        .plan-card .popular-tag {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: var(--s3-accent);
+            color: #fff;
+        }
+
+        .plan-card h4 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--s3-text);
+            margin-bottom: 8px;
+        }
+
+        .plan-price {
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--s3-text);
+            margin-bottom: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .plan-price .period {
+            font-size: 14px;
+            font-weight: 400;
+            color: var(--s3-text-3);
+        }
+
+        .plan-features {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .plan-features li {
+            font-size: 13px;
+            color: var(--s3-text-2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .plan-features li .check {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .plan-features li .check.yes {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--s3-low);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .plan-features li .check.no {
+            background: rgba(71, 85, 105, 0.12);
+            color: var(--s3-text-3);
+            border: 1px solid rgba(71, 85, 105, 0.15);
+        }
+
+        .plan-features li.disabled {
+            color: var(--s3-text-3);
+        }
+
+        /* ── Modal ────────────────────────────────────────────────────── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 3, 5, 0.75);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal-card {
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 32px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--s3-text);
+            margin-bottom: 24px;
+            letter-spacing: -0.02em;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 14px;
+            color: var(--s3-text);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-input:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
+        }
+
+        .form-input.mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+
+        .form-select {
+            width: 100%;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 14px;
+            color: var(--s3-text);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 34px;
+        }
+
+        .form-select:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
+        }
+
+        .form-select option {
+            background: var(--s3-bg-3);
+            color: var(--s3-text);
+        }
+
+        .modal-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 28px;
+        }
+
+        /* ── Responsive ───────────────────────────────────────────────── */
+        @media (max-width: 1200px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .tenant-grid { grid-template-columns: repeat(2, 1fr); }
+            .detail-columns { grid-template-columns: 1fr 1fr; }
+            .plans-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .main-area { padding: 20px 16px; }
+            .page-header { padding: 16px; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .tenant-grid { grid-template-columns: 1fr; }
+            .detail-columns { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
-<body class="min-h-screen">
-<div id="app" x-data="tenantManager()">
-    <!-- Header -->
-    <header class="border-b border-gray-800 px-6 py-4">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <h1 class="text-orange-400 font-semibold text-lg">🏢 Multi-Tenancy</h1>
+<body>
+<div id="app" x-data="tenantManager()" class="page-content">
+
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="page-header-left">
+            <div class="page-header-icon">
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                </svg>
             </div>
-            <div class="flex items-center space-x-4">
-                <!-- Tenant Switcher -->
-                <select 
-                    x-model="currentTenant"
-                    @change="switchTenant()"
-                    class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-                >
-                    <template x-for="tenant in tenants" :key="tenant.slug">
-                        <option :value="tenant.slug" x-text="tenant.name"></option>
-                    </template>
-                </select>
-            </div>
+            <h1>Multi-Tenancy <span>Organization Management</span></h1>
+        </div>
+        <div>
+            <select
+                x-model="currentTenant"
+                @change="switchTenant()"
+                class="tenant-switcher"
+            >
+                <template x-for="tenant in tenants" :key="tenant.slug">
+                    <option :value="tenant.slug" x-text="tenant.name"></option>
+                </template>
+            </select>
         </div>
     </header>
-    
-    <main class="p-6">
-        <!-- Stats -->
-        <div class="grid grid-cols-4 gap-4 mb-6">
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">Total Organizations</div>
-                <div class="text-3xl font-bold" x-text="tenants.length">0</div>
+
+    <!-- Main Content -->
+    <div class="main-area">
+
+        <!-- Stats Row -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Organizations</div>
+                <div class="stat-value" x-text="tenants.length">0</div>
             </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">Enterprise</div>
-                <div class="text-3xl font-bold text-amber-400" x-text="tenants.filter(t => t.plan === 'enterprise').length">0</div>
+            <div class="stat-card">
+                <div class="stat-label">Enterprise</div>
+                <div class="stat-value enterprise" x-text="tenants.filter(t => t.plan === 'enterprise').length">0</div>
             </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">Pro</div>
-                <div class="text-3xl font-bold text-purple-400" x-text="tenants.filter(t => t.plan === 'pro').length">0</div>
+            <div class="stat-card">
+                <div class="stat-label">Pro</div>
+                <div class="stat-value pro" x-text="tenants.filter(t => t.plan === 'pro').length">0</div>
             </div>
-            <div class="card p-4">
-                <div class="text-gray-400 text-sm mb-1">Free</div>
-                <div class="text-3xl font-bold text-gray-400" x-text="tenants.filter(t => t.plan === 'free').length">0</div>
+            <div class="stat-card">
+                <div class="stat-label">Free Tier</div>
+                <div class="stat-value free" x-text="tenants.filter(t => t.plan === 'free').length">0</div>
             </div>
         </div>
-        
-        <!-- Tenant List -->
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold">🏢 Organizations</h3>
-            <button 
-                @click="showCreateModal = true"
-                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition"
-            >
-                + New Organization
-            </button>
-        </div>
-        
-        <div class="grid grid-cols-3 gap-4">
-            <template x-for="tenant in tenants" :key="tenant.slug">
-                <div 
-                    class="card p-4 cursor-pointer hover:bg-gray-800/50 transition"
-                    :class="'plan-' + tenant.plan"
-                    @click="selectTenant(tenant)"
+
+        <!-- Organizations Section -->
+        <div>
+            <div class="section-header">
+                <div class="section-title">
+                    <span class="dot"></span>
+                    Organizations
+                </div>
+                <button
+                    @click="showCreateModal = true"
+                    class="btn-primary"
                 >
-                    <div class="flex items-start justify-between mb-3">
-                        <div>
-                            <h4 class="font-semibold" x-text="tenant.name"></h4>
-                            <span class="font-mono text-xs text-gray-500" x-text="tenant.slug"></span>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    New Organization
+                </button>
+            </div>
+
+            <div class="tenant-grid" style="margin-top: 16px;">
+                <template x-for="tenant in tenants" :key="tenant.slug">
+                    <div
+                        class="tenant-card"
+                        :class="'plan-' + tenant.plan"
+                        @click="selectTenant(tenant)"
+                    >
+                        <div class="tenant-card-header">
+                            <div>
+                                <div class="tenant-card-name" x-text="tenant.name"></div>
+                                <div class="tenant-card-slug" x-text="tenant.slug"></div>
+                            </div>
+                            <span
+                                class="plan-badge"
+                                :class="{
+                                    'enterprise': tenant.plan === 'enterprise',
+                                    'pro': tenant.plan === 'pro',
+                                    'free': tenant.plan === 'free'
+                                }"
+                                x-text="tenant.plan"
+                            ></span>
                         </div>
-                        <span 
-                            class="text-xs px-2 py-1 rounded-full font-semibold uppercase"
-                            :class="{
-                                'bg-amber-500/20 text-amber-400': tenant.plan === 'enterprise',
-                                'bg-purple-500/20 text-purple-400': tenant.plan === 'pro',
-                                'bg-gray-500/20 text-gray-400': tenant.plan === 'free'
-                            }"
-                            x-text="tenant.plan"
-                        ></span>
+
+                        <div class="tenant-card-meta">
+                            <div class="meta-row">
+                                <span class="label">Chains</span>
+                                <span class="value" x-text="tenant.limits?.max_chains === -1 ? 'Unlimited' : tenant.limits?.max_chains"></span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="label">Users</span>
+                                <span class="value" x-text="tenant.limits?.max_users === -1 ? 'Unlimited' : tenant.limits?.max_users"></span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="label">Retention</span>
+                                <span class="value" x-text="tenant.settings?.retention_days + ' days'"></span>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Chains</span>
-                            <span x-text="tenant.limits?.max_chains === -1 ? 'Unlimited' : tenant.limits?.max_chains"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Users</span>
-                            <span x-text="tenant.limits?.max_users === -1 ? 'Unlimited' : tenant.limits?.max_users"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Retention</span>
-                            <span x-text="tenant.settings?.retention_days + ' days'"></span>
-                        </div>
-                    </div>
-                </div>
-            </template>
+                </template>
+            </div>
         </div>
-        
+
         <!-- Selected Tenant Details -->
-        <div x-show="selectedTenant" class="mt-6">
-            <div class="card p-6">
-                <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-xl font-semibold" x-text="selectedTenant?.name"></h3>
-                    <button @click="selectedTenant = null" class="text-gray-400 hover:text-white">✕</button>
+        <div x-show="selectedTenant" class="detail-panel">
+            <div class="detail-header">
+                <h3 class="detail-title" x-text="selectedTenant?.name"></h3>
+                <button @click="selectedTenant = null" class="close-btn">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="detail-columns">
+                <!-- Settings -->
+                <div>
+                    <div class="detail-section-title">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        Settings
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Alerts Enabled</span>
+                        <span class="value" :class="selectedTenant?.settings?.alerts_enabled ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.alerts_enabled ? 'Active' : 'Off'"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">API Access</span>
+                        <span class="value" :class="selectedTenant?.settings?.api_access ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.api_access ? 'Active' : 'Off'"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">SSO</span>
+                        <span class="value" :class="selectedTenant?.settings?.sso_enabled ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.sso_enabled ? 'Active' : 'Off'"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Custom Rules</span>
+                        <span class="value" :class="selectedTenant?.settings?.custom_rules ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.custom_rules ? 'Active' : 'Off'"></span>
+                    </div>
                 </div>
-                
-                <div class="grid grid-cols-3 gap-6">
-                    <!-- Settings -->
-                    <div>
-                        <h4 class="font-semibold mb-3">⚙️ Settings</h4>
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Alerts Enabled</span>
-                                <span x-text="selectedTenant?.settings?.alerts_enabled ? '✓' : '✗'"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">API Access</span>
-                                <span x-text="selectedTenant?.settings?.api_access ? '✓' : '✗'"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">SSO</span>
-                                <span x-text="selectedTenant?.settings?.sso_enabled ? '✓' : '✗'"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Custom Rules</span>
-                                <span x-text="selectedTenant?.settings?.custom_rules ? '✓' : '✗'"></span>
-                            </div>
-                        </div>
+
+                <!-- Limits -->
+                <div>
+                    <div class="detail-section-title">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        Limits
                     </div>
-                    
-                    <!-- Limits -->
-                    <div>
-                        <h4 class="font-semibold mb-3">📊 Limits</h4>
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Max Users</span>
-                                <span x-text="selectedTenant?.limits?.max_users === -1 ? '∞' : selectedTenant?.limits?.max_users"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Max Chains</span>
-                                <span x-text="selectedTenant?.limits?.max_chains === -1 ? '∞' : selectedTenant?.limits?.max_chains"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Max Rules</span>
-                                <span x-text="selectedTenant?.limits?.max_rules === -1 ? '∞' : selectedTenant?.limits?.max_rules"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">API Calls/Day</span>
-                                <span x-text="selectedTenant?.limits?.max_api_calls_per_day === -1 ? '∞' : selectedTenant?.limits?.max_api_calls_per_day?.toLocaleString()"></span>
-                            </div>
-                        </div>
+                    <div class="detail-row">
+                        <span class="label">Max Users</span>
+                        <span class="value" x-text="selectedTenant?.limits?.max_users === -1 ? 'Unlimited' : selectedTenant?.limits?.max_users"></span>
                     </div>
-                    
-                    <!-- Actions -->
-                    <div>
-                        <h4 class="font-semibold mb-3">🔧 Actions</h4>
-                        <div class="space-y-2">
-                            <button class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-left transition">
-                                👥 Manage Members
-                            </button>
-                            <button class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-left transition">
-                                ⚙️ Edit Settings
-                            </button>
-                            <button class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-left transition">
-                                📊 View Usage Stats
-                            </button>
-                            <button 
-                                x-show="selectedTenant?.slug !== 'default'"
-                                class="w-full py-2 px-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-sm text-left transition"
-                            >
-                                🗑️ Delete Organization
-                            </button>
-                        </div>
+                    <div class="detail-row">
+                        <span class="label">Max Chains</span>
+                        <span class="value" x-text="selectedTenant?.limits?.max_chains === -1 ? 'Unlimited' : selectedTenant?.limits?.max_chains"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Max Rules</span>
+                        <span class="value" x-text="selectedTenant?.limits?.max_rules === -1 ? 'Unlimited' : selectedTenant?.limits?.max_rules"></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">API Calls/Day</span>
+                        <span class="value" x-text="selectedTenant?.limits?.max_api_calls_per_day === -1 ? 'Unlimited' : selectedTenant?.limits?.max_api_calls_per_day?.toLocaleString()"></span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div>
+                    <div class="detail-section-title">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                        Actions
+                    </div>
+                    <div class="detail-actions">
+                        <button class="action-btn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                            Manage Members
+                        </button>
+                        <button class="action-btn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            Edit Settings
+                        </button>
+                        <button class="action-btn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            View Usage Stats
+                        </button>
+                        <button
+                            x-show="selectedTenant?.slug !== 'default'"
+                            class="btn-danger"
+                        >
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            Delete Organization
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Pricing Plans -->
-        <div class="mt-8">
-            <h3 class="text-lg font-semibold mb-4">💳 Available Plans</h3>
-            <div class="grid grid-cols-3 gap-4">
+        <div>
+            <div class="section-header" style="margin-bottom: 16px;">
+                <div class="section-title">
+                    <span class="dot"></span>
+                    Available Plans
+                </div>
+            </div>
+
+            <div class="plans-grid">
                 <!-- Free -->
-                <div class="card p-6 plan-free">
-                    <h4 class="text-xl font-bold mb-2">Free</h4>
-                    <div class="text-3xl font-bold mb-4">$0<span class="text-sm text-gray-400">/mo</span></div>
-                    <ul class="space-y-2 text-sm text-gray-400">
-                        <li>✓ 2 chains monitored</li>
-                        <li>✓ 5 team members</li>
-                        <li>✓ 7-day data retention</li>
-                        <li>✓ 100 API calls/day</li>
-                        <li>✗ Custom rules</li>
-                        <li>✗ SSO</li>
+                <div class="plan-card tier-free">
+                    <h4>Free</h4>
+                    <div class="plan-price">$0<span class="period">/mo</span></div>
+                    <ul class="plan-features">
+                        <li><span class="check yes">&#10003;</span> 2 chains monitored</li>
+                        <li><span class="check yes">&#10003;</span> 5 team members</li>
+                        <li><span class="check yes">&#10003;</span> 7-day data retention</li>
+                        <li><span class="check yes">&#10003;</span> 100 API calls/day</li>
+                        <li class="disabled"><span class="check no">&mdash;</span> Custom rules</li>
+                        <li class="disabled"><span class="check no">&mdash;</span> SSO</li>
                     </ul>
                 </div>
-                
+
                 <!-- Pro -->
-                <div class="card p-6 plan-pro">
-                    <div class="absolute -top-3 right-4">
-                        <span class="bg-purple-600 text-xs px-2 py-1 rounded-full">POPULAR</span>
-                    </div>
-                    <h4 class="text-xl font-bold mb-2">Pro</h4>
-                    <div class="text-3xl font-bold mb-4">$299<span class="text-sm text-gray-400">/mo</span></div>
-                    <ul class="space-y-2 text-sm text-gray-400">
-                        <li>✓ 5 chains monitored</li>
-                        <li>✓ 25 team members</li>
-                        <li>✓ 90-day data retention</li>
-                        <li>✓ 10,000 API calls/day</li>
-                        <li>✓ Custom rules</li>
-                        <li>✗ SSO</li>
+                <div class="plan-card tier-pro">
+                    <span class="popular-tag">Popular</span>
+                    <h4>Pro</h4>
+                    <div class="plan-price">$299<span class="period">/mo</span></div>
+                    <ul class="plan-features">
+                        <li><span class="check yes">&#10003;</span> 5 chains monitored</li>
+                        <li><span class="check yes">&#10003;</span> 25 team members</li>
+                        <li><span class="check yes">&#10003;</span> 90-day data retention</li>
+                        <li><span class="check yes">&#10003;</span> 10,000 API calls/day</li>
+                        <li><span class="check yes">&#10003;</span> Custom rules</li>
+                        <li class="disabled"><span class="check no">&mdash;</span> SSO</li>
                     </ul>
                 </div>
-                
+
                 <!-- Enterprise -->
-                <div class="card p-6 plan-enterprise">
-                    <h4 class="text-xl font-bold mb-2">Enterprise</h4>
-                    <div class="text-3xl font-bold mb-4">Custom</div>
-                    <ul class="space-y-2 text-sm text-gray-400">
-                        <li>✓ Unlimited chains</li>
-                        <li>✓ Unlimited members</li>
-                        <li>✓ 365-day data retention</li>
-                        <li>✓ Unlimited API calls</li>
-                        <li>✓ Custom rules</li>
-                        <li>✓ SSO / SAML</li>
-                        <li>✓ Dedicated support</li>
+                <div class="plan-card tier-enterprise">
+                    <h4>Enterprise</h4>
+                    <div class="plan-price">Custom</div>
+                    <ul class="plan-features">
+                        <li><span class="check yes">&#10003;</span> Unlimited chains</li>
+                        <li><span class="check yes">&#10003;</span> Unlimited members</li>
+                        <li><span class="check yes">&#10003;</span> 365-day data retention</li>
+                        <li><span class="check yes">&#10003;</span> Unlimited API calls</li>
+                        <li><span class="check yes">&#10003;</span> Custom rules</li>
+                        <li><span class="check yes">&#10003;</span> SSO / SAML</li>
+                        <li><span class="check yes">&#10003;</span> Dedicated support</li>
                     </ul>
                 </div>
             </div>
         </div>
-    </main>
-    
-    <!-- Create Modal -->
-    <div 
+    </div>
+
+    <!-- Create Organization Modal -->
+    <div
         x-show="showCreateModal"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        class="modal-backdrop"
         @click.self="showCreateModal = false"
     >
-        <div class="card p-6 w-full max-w-md">
-            <h3 class="text-xl font-semibold mb-4">Create Organization</h3>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Organization Name</label>
-                    <input 
-                        type="text" 
-                        x-model="newTenant.name"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2"
-                        placeholder="My DeFi Company"
-                    >
-                </div>
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Slug (URL identifier)</label>
-                    <input 
-                        type="text" 
-                        x-model="newTenant.slug"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 font-mono"
-                        placeholder="my-defi-company"
-                    >
-                </div>
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Plan</label>
-                    <select x-model="newTenant.plan" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
-                        <option value="free">Free</option>
-                        <option value="pro">Pro ($299/mo)</option>
-                        <option value="enterprise">Enterprise</option>
-                    </select>
-                </div>
+        <div class="modal-card">
+            <h3>Create Organization</h3>
+
+            <div class="form-group">
+                <label class="form-label">Organization Name</label>
+                <input
+                    type="text"
+                    x-model="newTenant.name"
+                    class="form-input"
+                    placeholder="My DeFi Company"
+                >
             </div>
-            
-            <div class="flex justify-end space-x-3 mt-6">
-                <button 
+            <div class="form-group">
+                <label class="form-label">Slug (URL identifier)</label>
+                <input
+                    type="text"
+                    x-model="newTenant.slug"
+                    class="form-input mono"
+                    placeholder="my-defi-company"
+                >
+            </div>
+            <div class="form-group">
+                <label class="form-label">Plan</label>
+                <select x-model="newTenant.plan" class="form-select">
+                    <option value="free">Free</option>
+                    <option value="pro">Pro ($299/mo)</option>
+                    <option value="enterprise">Enterprise</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button
                     @click="showCreateModal = false"
-                    class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition"
+                    class="btn-secondary"
                 >
                     Cancel
                 </button>
-                <button 
+                <button
                     @click="createTenant()"
-                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition"
+                    class="btn-primary"
                 >
-                    Create
+                    Create Organization
                 </button>
             </div>
         </div>
     </div>
+
 </div><!-- /app -->
 
     <script>
@@ -323,11 +1070,11 @@
                     plan: 'free'
                 },
                 tenants: [],
-                
+
                 async init() {
                     await this.loadTenants();
                 },
-                
+
                 async loadTenants() {
                     try {
                         const token = localStorage.getItem('xdr_token') || localStorage.getItem('token');
@@ -401,16 +1148,16 @@
                         ];
                     }
                 },
-                
+
                 selectTenant(tenant) {
                     this.selectedTenant = tenant;
                 },
-                
+
                 switchTenant() {
                     localStorage.setItem('currentTenant', this.currentTenant);
                     location.reload();
                 },
-                
+
                 async createTenant() {
                     try {
                         const token = localStorage.getItem('xdr_token') || localStorage.getItem('token');
@@ -422,7 +1169,7 @@
                             },
                             body: JSON.stringify(this.newTenant)
                         });
-                        
+
                         if (response.ok) {
                             await this.loadTenants();
                             this.showCreateModal = false;
@@ -435,6 +1182,7 @@
             }
         }
     </script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
 </body>
 </html>
-

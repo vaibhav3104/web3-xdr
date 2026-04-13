@@ -4,799 +4,879 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Explorer - Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-card: #1a1f2e;
-            --bg-hover: #252b3d;
-            --bg-input: #0f1419;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --accent-cyan: #06b6d4;
-            --border-color: #1e293b;
-        }
+        /* ── Page-Specific Styles (design tokens come from nav.js) ── */
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
             min-height: 100vh;
         }
 
-        /* Main Container */
+        #app {
+            flex: 1;
+            min-width: 0;
+            padding: 0;
+        }
+
+        /* ── Page Header ── */
+        .page-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(3, 3, 5, 0.7);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--s3-border);
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .page-header h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--s3-text);
+            letter-spacing: -0.01em;
+        }
+        .page-header-icon {
+            width: 32px; height: 32px;
+            border-radius: var(--s3-radius-sm);
+            background: var(--s3-accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .page-header-icon svg {
+            width: 16px; height: 16px;
+            stroke: var(--s3-accent-light);
+            fill: none;
+            stroke-width: 1.5;
+        }
+
+        /* ── Main Container ── */
         .container {
             max-width: 1600px;
             margin: 0 auto;
-            padding: 1.5rem;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        /* Search Section */
+        /* ── Glass Card ── */
+        .glass-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            overflow: hidden;
+        }
+
+        /* ── Search Section ── */
         .search-section {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+            padding: 20px 24px;
         }
-
         .search-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: 16px;
         }
-
         .search-header h2 {
-            font-size: 1.25rem;
+            font-size: 0.95rem;
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 10px;
+            color: var(--s3-text);
+        }
+        .search-header h2 svg {
+            width: 18px; height: 18px;
+            stroke: var(--s3-cyan);
+            fill: none;
+            stroke-width: 1.8;
         }
 
+        /* ── Search Row ── */
         .search-row {
             display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
+            gap: 10px;
+            margin-bottom: 12px;
         }
-
         .search-input-wrapper {
             flex: 1;
             position: relative;
         }
-
-        .search-input {
-            width: 100%;
-            padding: 0.875rem 1rem 0.875rem 2.75rem;
-            background: var(--bg-input);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--accent-cyan);
-            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
-        }
-
-        .search-icon {
+        .search-icon-inner {
             position: absolute;
-            left: 1rem;
+            left: 14px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--text-muted);
+            width: 16px; height: 16px;
+            stroke: var(--s3-text-3);
+            fill: none;
+            stroke-width: 2;
+            pointer-events: none;
         }
-
-        .search-input::placeholder {
-            color: var(--text-muted);
-        }
-
-        /* Query Help Button */
-        .query-help-btn {
-            background: var(--bg-hover);
-            border: 1px solid var(--border-color);
-            color: var(--accent-cyan);
-            padding: 0.5rem 0.75rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: all 0.2s;
-        }
-
-        .query-help-btn:hover {
-            background: var(--bg-secondary);
-        }
-
-        /* Query Syntax Help Modal */
-        .query-help-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            overflow-y: auto;
-            padding: 2rem;
-        }
-
-        .query-help-modal.show {
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-        }
-
-        .query-help-content {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            max-width: 900px;
+        .search-input {
             width: 100%;
-            margin: 2rem auto;
-        }
-
-        .query-help-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .query-help-header h2 {
-            font-size: 1.25rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .query-help-close {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0.25rem;
-        }
-
-        .query-help-close:hover {
-            color: var(--text-primary);
-        }
-
-        .query-help-body {
-            padding: 1.5rem;
-        }
-
-        .query-section {
-            margin-bottom: 1.5rem;
-        }
-
-        .query-section h3 {
-            font-size: 1rem;
-            color: var(--accent-cyan);
-            margin-bottom: 0.75rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .query-grid {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 0.5rem;
-        }
-
-        .query-item {
-            display: contents;
-        }
-
-        .query-syntax {
+            padding: 11px 14px 11px 40px;
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text);
+            font-size: 0.88rem;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            color: var(--accent-purple);
-            background: var(--bg-input);
-            padding: 0.5rem 0.75rem;
-            border-radius: 4px;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-
-        .query-desc {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            padding: 0.5rem 0;
+        .search-input::placeholder {
+            color: var(--s3-text-3);
         }
-
-        .query-examples {
-            background: var(--bg-input);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-top: 1rem;
-        }
-
-        .query-example {
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .query-example:last-child {
-            margin-bottom: 0;
-            padding-bottom: 0;
-            border-bottom: none;
-        }
-
-        .query-example-code {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            color: var(--accent-green);
-            background: var(--bg-primary);
-            padding: 0.75rem;
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .query-example-code:hover {
-            background: var(--bg-hover);
-            border-color: var(--accent-cyan);
-        }
-
-        .query-example-desc {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-
-        /* Search Mode Indicator */
-        .search-mode {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: 0.5rem;
-        }
-
-        .search-mode .mode-badge {
-            background: var(--accent-purple);
-            color: white;
-            padding: 0.125rem 0.5rem;
-            border-radius: 4px;
-            font-weight: 600;
-        }
-
-        /* Filters Row */
-        .filters-row {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .filter-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .filter-label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            white-space: nowrap;
-        }
-
-        .filter-select, .filter-input {
-            padding: 0.5rem 0.75rem;
-            background: var(--bg-input);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.85rem;
-        }
-
-        .filter-select:focus, .filter-input:focus {
+        .search-input:focus {
             outline: none;
-            border-color: var(--accent-cyan);
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
         }
 
-        .time-inputs {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .time-input {
-            width: 180px;
-        }
-
+        /* ── Buttons ── */
         .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
+            padding: 9px 18px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 0.82rem;
             font-weight: 600;
             cursor: pointer;
             border: none;
             transition: all 0.2s;
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 6px;
+            white-space: nowrap;
         }
-
         .btn-primary {
-            background: var(--accent-cyan);
-            color: var(--bg-primary);
+            background: var(--s3-accent);
+            color: #fff;
         }
-
         .btn-primary:hover {
-            background: #0891b2;
+            background: var(--s3-accent-light);
+            box-shadow: 0 0 16px var(--s3-accent-dim);
         }
-
         .btn-secondary {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
+            background: var(--s3-bg-3);
+            color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
         }
-
         .btn-secondary:hover {
-            background: var(--bg-secondary);
+            background: var(--s3-bg-4);
+            color: var(--s3-text);
+            border-color: rgba(255,255,255,0.1);
+        }
+        .query-help-btn {
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            color: var(--s3-cyan);
+            padding: 9px 14px;
+            border-radius: var(--s3-radius-sm);
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .query-help-btn:hover {
+            background: rgba(34,211,238,0.08);
+            border-color: rgba(34,211,238,0.2);
         }
 
-        /* Quick Time Buttons */
+        /* ── Search Mode Indicator ── */
+        .search-mode {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.72rem;
+            color: var(--s3-text-3);
+            margin-bottom: 16px;
+        }
+        .search-mode .mode-badge {
+            background: var(--s3-accent);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.68rem;
+            letter-spacing: 0.04em;
+        }
+
+        /* ── Filters Row ── */
+        .filters-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-label {
+            font-size: 0.78rem;
+            color: var(--s3-text-2);
+            white-space: nowrap;
+        }
+        .filter-select,
+        .filter-input {
+            padding: 8px 12px;
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: 8px;
+            color: var(--s3-text);
+            font-size: 0.82rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-select:focus,
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
+        }
+        .filter-select option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
+        }
+        .time-inputs {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .time-input {
+            width: 180px;
+        }
+        .time-divider {
+            color: var(--s3-text-3);
+            font-size: 0.78rem;
+        }
+        /* datetime-local color-scheme fix for dark backgrounds */
+        input[type="datetime-local"] {
+            color-scheme: dark;
+        }
+
+        /* ── Quick Time Buttons ── */
+        .quick-bar {
+            margin-top: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
         .quick-time-btns {
             display: flex;
-            gap: 0.5rem;
+            gap: 6px;
         }
-
         .quick-time-btn {
-            padding: 0.375rem 0.75rem;
-            background: var(--bg-hover);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            color: var(--text-secondary);
-            font-size: 0.75rem;
+            padding: 5px 12px;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: 8px;
+            color: var(--s3-text-3);
+            font-size: 0.72rem;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
         }
-
-        .quick-time-btn:hover, .quick-time-btn.active {
-            background: var(--accent-cyan);
-            color: var(--bg-primary);
-            border-color: var(--accent-cyan);
+        .quick-time-btn:hover {
+            color: var(--s3-text);
+            background: var(--s3-bg-4);
+            border-color: rgba(255,255,255,0.1);
+        }
+        .quick-time-btn.active {
+            background: var(--s3-accent-dim);
+            color: var(--s3-accent-light);
+            border-color: rgba(139,92,246,0.25);
+        }
+        .auto-refresh-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .auto-refresh-controls label {
+            font-size: 0.78rem;
+            color: var(--s3-text-2);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .auto-refresh-controls input[type="checkbox"] {
+            accent-color: var(--s3-accent);
         }
 
-        /* Results Stats */
+        /* ── Results Stats Bar ── */
         .results-stats {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.75rem 1rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin-bottom: 1rem;
+            padding: 12px 20px;
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
         }
-
         .stats-left {
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: 24px;
         }
-
         .stat-item {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 0.85rem;
+            gap: 6px;
+            font-size: 0.82rem;
         }
-
         .stat-value {
-            font-weight: 600;
+            font-weight: 700;
             font-family: 'JetBrains Mono', monospace;
+            font-size: 0.88rem;
         }
-
         .stat-label {
-            color: var(--text-secondary);
+            color: var(--s3-text-3);
+            font-size: 0.75rem;
         }
 
-        /* Log Table */
+        /* ── Live Indicator ── */
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78rem;
+            color: var(--s3-low);
+            font-weight: 500;
+        }
+        .live-dot {
+            width: 7px; height: 7px;
+            background: var(--s3-low);
+            border-radius: 50%;
+            animation: s3-live-pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 8px rgba(16,185,129,0.4);
+        }
+        @keyframes s3-live-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        /* ── Log Table ── */
         .log-table-wrapper {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
             overflow: hidden;
         }
-
         .log-table {
             width: 100%;
             border-collapse: collapse;
         }
-
         .log-table th {
-            background: var(--bg-secondary);
-            padding: 0.75rem 1rem;
+            background: var(--s3-bg-2);
+            padding: 10px 16px;
             text-align: left;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
-            color: var(--text-secondary);
+            color: var(--s3-text-3);
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            border-bottom: 1px solid var(--border-color);
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--s3-border);
             position: sticky;
             top: 0;
             cursor: pointer;
+            user-select: none;
+            transition: color 0.15s;
         }
-
         .log-table th:hover {
-            color: var(--text-primary);
+            color: var(--s3-text-2);
         }
-
         .log-table th .sort-icon {
-            margin-left: 0.25rem;
-            opacity: 0.5;
+            margin-left: 4px;
+            opacity: 0.35;
+            font-size: 0.7rem;
         }
-
         .log-table td {
-            padding: 0.75rem 1rem;
-            font-size: 0.85rem;
-            border-bottom: 1px solid var(--border-color);
+            padding: 10px 16px;
+            font-size: 0.82rem;
+            border-bottom: 1px solid var(--s3-border);
             vertical-align: top;
         }
-
-        .log-table tr:hover {
-            background: var(--bg-hover);
+        .log-table tr.log-row {
+            transition: background 0.15s;
         }
-
+        .log-table tr.log-row:hover {
+            background: rgba(255,255,255,0.02);
+        }
         .log-table tr.expanded {
-            background: var(--bg-secondary);
+            background: var(--s3-bg-2);
         }
 
-        /* Timestamp */
+        /* ── Timestamp ── */
         .timestamp {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            color: var(--text-muted);
+            font-size: 0.76rem;
+            color: var(--s3-text-3);
             white-space: nowrap;
         }
 
-        /* Severity Badges */
+        /* ── Severity Badges ── */
         .severity {
             display: inline-block;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.68rem;
             font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.03em;
         }
-
         .severity.critical {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--accent-red);
+            background: rgba(244, 63, 94, 0.12);
+            color: var(--s3-critical);
+            box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.2);
         }
-
         .severity.high {
-            background: rgba(245, 158, 11, 0.2);
-            color: var(--accent-yellow);
+            background: rgba(249, 115, 22, 0.12);
+            color: var(--s3-high);
+            box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.2);
         }
-
         .severity.medium {
-            background: rgba(59, 130, 246, 0.2);
-            color: var(--accent-blue);
+            background: rgba(234, 179, 8, 0.12);
+            color: var(--s3-medium);
+            box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.2);
         }
-
         .severity.low {
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--s3-low);
+            box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.2);
         }
 
-        /* Chain Badge */
+        /* ── Chain Badge ── */
         .chain-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.5rem;
-            background: var(--bg-hover);
-            border-radius: 4px;
-            font-size: 0.75rem;
+            gap: 5px;
+            padding: 3px 8px;
+            background: var(--s3-bg-3);
+            border-radius: 6px;
+            font-size: 0.72rem;
             font-weight: 500;
+            color: var(--s3-text-2);
+            border-left: 3px solid var(--s3-text-3);
         }
+        .chain-badge.ethereum  { border-left-color: #627eea; }
+        .chain-badge.polygon   { border-left-color: #8247e5; }
+        .chain-badge.arbitrum  { border-left-color: #28a0f0; }
+        .chain-badge.optimism  { border-left-color: #ff0420; }
+        .chain-badge.bsc       { border-left-color: #f0b90b; }
+        .chain-badge.avalanche { border-left-color: #e84142; }
+        .chain-badge.cosmos    { border-left-color: #2e3148; }
+        .chain-badge.osmosis   { border-left-color: #5e12a0; }
+        .chain-badge.aptos     { border-left-color: #4cc9f0; }
+        .chain-badge.sui       { border-left-color: #6fbcf0; }
+        .chain-badge.near      { border-left-color: #00c08b; }
 
-        .chain-badge.ethereum { border-left: 3px solid #627eea; }
-        .chain-badge.polygon { border-left: 3px solid #8247e5; }
-        .chain-badge.arbitrum { border-left: 3px solid #28a0f0; }
-        .chain-badge.cosmos { border-left: 3px solid #2e3148; }
-        .chain-badge.aptos { border-left: 3px solid #4cc9f0; }
-        .chain-badge.near { border-left: 3px solid #00c08b; }
-
-        /* Event Type */
+        /* ── Event Type ── */
         .event-type {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            color: var(--accent-purple);
+            font-size: 0.78rem;
+            color: var(--s3-accent-light);
         }
 
-        /* Address */
+        /* ── Address ── */
         .address {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
+            font-size: 0.72rem;
+            color: var(--s3-text-2);
             max-width: 120px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            transition: color 0.15s;
         }
-
         .address:hover {
-            color: var(--accent-cyan);
+            color: var(--s3-cyan);
             cursor: pointer;
         }
 
-        /* TX Hash */
+        /* ── TX Hash ── */
         .tx-hash {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
-            color: var(--accent-blue);
+            font-size: 0.72rem;
+            color: var(--s3-cyan);
             cursor: pointer;
+            transition: color 0.15s;
         }
-
         .tx-hash:hover {
+            color: var(--s3-accent-light);
             text-decoration: underline;
         }
 
-        /* Expand Button */
+        /* ── Expand Button ── */
         .expand-btn {
             background: none;
             border: none;
-            color: var(--text-muted);
+            color: var(--s3-text-3);
             cursor: pointer;
-            padding: 0.25rem;
+            padding: 4px;
             border-radius: 4px;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            font-size: 0.7rem;
         }
-
         .expand-btn:hover {
-            background: var(--bg-hover);
-            color: var(--text-primary);
+            background: var(--s3-bg-4);
+            color: var(--s3-accent-light);
         }
 
-        /* Expanded Row */
+        /* ── Expanded Row ── */
         .expanded-content {
             display: none;
-            background: var(--bg-input);
-            border-top: 1px solid var(--border-color);
+            background: var(--s3-bg-1);
         }
-
         .expanded-content.show {
             display: table-row;
         }
-
         .expanded-content td {
-            padding: 1rem;
+            padding: 16px 20px;
+        }
+        .expanded-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .expanded-section-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .expanded-section-title svg {
+            width: 15px; height: 15px;
+            stroke: var(--s3-cyan);
+            fill: none;
+            stroke-width: 1.8;
         }
 
-        .raw-data {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
+        /* ── Field Tags ── */
+        .field-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .field-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 10px;
+            background: var(--s3-bg-3);
+            border-radius: 6px;
+            font-size: 0.72rem;
+            border: 1px solid var(--s3-border);
+        }
+        .field-tag .key {
+            color: var(--s3-text-3);
+        }
+        .field-tag .value {
+            color: var(--s3-cyan);
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75rem;
+        }
+
+        /* ── Raw Data JSON Viewer ── */
+        .raw-data {
+            background: var(--s3-bg-0);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
             overflow-x: auto;
             max-height: 300px;
             overflow-y: auto;
+            line-height: 1.6;
         }
-
         .raw-data pre {
             margin: 0;
             white-space: pre-wrap;
             word-break: break-all;
         }
+        .json-key     { color: var(--s3-cyan); }
+        .json-string  { color: var(--s3-low); }
+        .json-number  { color: var(--s3-medium); }
+        .json-boolean { color: var(--s3-accent-light); }
 
-        .json-key {
-            color: var(--accent-cyan);
-        }
-
-        .json-string {
-            color: var(--accent-green);
-        }
-
-        .json-number {
-            color: var(--accent-yellow);
-        }
-
-        .json-boolean {
-            color: var(--accent-purple);
-        }
-
-        /* Pagination */
+        /* ── Pagination ── */
         .pagination {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem;
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border-color);
+            padding: 12px 20px;
+            background: var(--s3-bg-2);
+            border-top: 1px solid var(--s3-border);
         }
-
         .pagination-info {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+            font-size: 0.78rem;
+            color: var(--s3-text-3);
         }
-
         .pagination-btns {
             display: flex;
-            gap: 0.5rem;
+            gap: 6px;
         }
-
         .page-btn {
-            padding: 0.5rem 0.75rem;
-            background: var(--bg-hover);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            color: var(--text-secondary);
+            padding: 7px 14px;
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            border-radius: 8px;
+            color: var(--s3-text-2);
             cursor: pointer;
-            font-size: 0.85rem;
-            transition: all 0.2s;
+            font-size: 0.78rem;
+            transition: all 0.15s;
         }
-
         .page-btn:hover:not(:disabled) {
-            background: var(--bg-card);
-            color: var(--text-primary);
+            background: var(--s3-bg-4);
+            color: var(--s3-text);
+            border-color: rgba(255,255,255,0.1);
         }
-
         .page-btn:disabled {
-            opacity: 0.5;
+            opacity: 0.35;
             cursor: not-allowed;
         }
-
         .page-btn.active {
-            background: var(--accent-cyan);
-            color: var(--bg-primary);
-            border-color: var(--accent-cyan);
+            background: var(--s3-accent-dim);
+            color: var(--s3-accent-light);
+            border-color: rgba(139,92,246,0.25);
         }
 
-        /* Empty State */
+        /* ── Empty State ── */
         .empty-state {
             text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-secondary);
+            padding: 56px 24px;
+            color: var(--s3-text-2);
         }
-
         .empty-state .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.4;
         }
-
         .empty-state h3 {
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
+            margin-bottom: 6px;
+            color: var(--s3-text);
+            font-size: 1rem;
+        }
+        .empty-state p {
+            font-size: 0.82rem;
+            color: var(--s3-text-3);
         }
 
-        /* Loading */
+        /* ── Loading ── */
         .loading {
             text-align: center;
-            padding: 3rem;
-            color: var(--text-secondary);
+            padding: 48px;
+            color: var(--s3-text-2);
         }
-
         .loading-spinner {
             display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 3px solid var(--border-color);
-            border-top-color: var(--accent-cyan);
+            width: 36px;
+            height: 36px;
+            border: 2px solid var(--s3-border);
+            border-top-color: var(--s3-accent);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 1rem;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 12px;
         }
-
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
-        /* Field Tags */
-        .field-tags {
+        /* ── Query Help Modal ── */
+        .query-help-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 32px;
+        }
+        .query-help-modal.show {
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 1rem;
+            justify-content: center;
+            align-items: flex-start;
         }
-
-        .field-tag {
-            display: inline-flex;
+        .query-help-content {
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            max-width: 900px;
+            width: 100%;
+            margin: 40px auto;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+        }
+        .query-help-header {
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.5rem;
-            background: var(--bg-hover);
-            border-radius: 4px;
-            font-size: 0.75rem;
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--s3-border);
         }
-
-        .field-tag .key {
-            color: var(--text-muted);
+        .query-help-header h2 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--s3-text);
         }
-
-        .field-tag .value {
-            color: var(--accent-cyan);
+        .query-help-header h2 svg {
+            width: 18px; height: 18px;
+            stroke: var(--s3-cyan);
+            fill: none;
+            stroke-width: 1.8;
+        }
+        .query-help-close {
+            background: none;
+            border: none;
+            color: var(--s3-text-3);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 4px;
+            transition: color 0.15s;
+        }
+        .query-help-close:hover {
+            color: var(--s3-text);
+        }
+        .query-help-body {
+            padding: 24px;
+        }
+        .query-section {
+            margin-bottom: 24px;
+        }
+        .query-section:last-child {
+            margin-bottom: 0;
+        }
+        .query-section h3 {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--s3-cyan);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .query-section h3 svg {
+            width: 16px; height: 16px;
+            stroke: var(--s3-cyan);
+            fill: none;
+            stroke-width: 1.8;
+        }
+        .query-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 6px;
+        }
+        .query-syntax {
             font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--s3-accent-light);
+            background: var(--s3-bg-1);
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .query-desc {
+            font-size: 0.8rem;
+            color: var(--s3-text-2);
+            padding: 8px 0;
+        }
+        .query-examples {
+            background: var(--s3-bg-1);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px;
+        }
+        .query-example {
+            margin-bottom: 14px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .query-example:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        .query-example-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: var(--s3-low);
+            background: var(--s3-bg-0);
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid transparent;
+        }
+        .query-example-code:hover {
+            background: var(--s3-bg-3);
+            border-color: var(--s3-accent-dim);
+        }
+        .query-example-desc {
+            font-size: 0.75rem;
+            color: var(--s3-text-3);
         }
 
-        /* Live indicator */
-        .live-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.85rem;
-        }
-
-        .live-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--accent-green);
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.9); }
-        }
-
-        /* Responsive */
+        /* ── Responsive ── */
         @media (max-width: 1200px) {
             .filters-row {
                 flex-direction: column;
                 align-items: stretch;
             }
-            
             .filter-group {
                 width: 100%;
             }
-            
             .quick-time-btns {
                 justify-content: flex-start;
                 flex-wrap: wrap;
+            }
+            .expanded-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
     <div id="app" style="flex:1;min-width:0;">
-    <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-        <h1 class="text-lg font-semibold">Log Explorer</h1>
+
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="page-header-icon">
+            <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h1>Log Explorer</h1>
     </header>
 
     <!-- Lucene Query Help Modal -->
     <div class="query-help-modal" id="queryHelpModal" onclick="hideQueryHelp(event)">
         <div class="query-help-content" onclick="event.stopPropagation()">
             <div class="query-help-header">
-                <h2>📖 Lucene Query Syntax</h2>
+                <h2>
+                    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                    Lucene Query Syntax
+                </h2>
                 <button class="query-help-close" onclick="hideQueryHelp()">&times;</button>
             </div>
             <div class="query-help-body">
                 <div class="query-section">
-                    <h3>🔤 Boolean Operators</h3>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Boolean Operators
+                    </h3>
                     <div class="query-grid">
                         <div class="query-syntax">AND / &&</div>
                         <div class="query-desc">Both conditions must match</div>
@@ -808,7 +888,10 @@
                 </div>
 
                 <div class="query-section">
-                    <h3>🎯 Field Queries</h3>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        Field Queries
+                    </h3>
                     <div class="query-grid">
                         <div class="query-syntax">field:value</div>
                         <div class="query-desc">Exact match on field</div>
@@ -822,7 +905,10 @@
                 </div>
 
                 <div class="query-section">
-                    <h3>📊 Range Queries</h3>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        Range Queries
+                    </h3>
                     <div class="query-grid">
                         <div class="query-syntax">[min TO max]</div>
                         <div class="query-desc">Inclusive range (includes min and max)</div>
@@ -836,7 +922,10 @@
                 </div>
 
                 <div class="query-section">
-                    <h3>📋 Field Aliases</h3>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                        Field Aliases
+                    </h3>
                     <div class="query-grid">
                         <div class="query-syntax">chain</div>
                         <div class="query-desc">chain_id (e.g., ethereum, polygon)</div>
@@ -854,7 +943,10 @@
                 </div>
 
                 <div class="query-section">
-                    <h3>✨ Examples (click to use)</h3>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Examples (click to use)
+                    </h3>
                     <div class="query-examples">
                         <div class="query-example">
                             <div class="query-example-code" onclick="useQueryExample('chain:ethereum AND severity:critical')">
@@ -899,33 +991,35 @@
     </div>
 
     <div class="container">
+
         <!-- Search Section -->
-        <div class="search-section">
+        <div class="glass-card search-section">
             <div class="search-header">
-                <h2>🔍 Log Explorer</h2>
+                <h2>
+                    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    Log Explorer
+                </h2>
                 <div class="live-indicator" id="liveIndicator">
                     <span class="live-dot"></span>
                     <span>Live</span>
                 </div>
             </div>
 
-            <!-- Search Bar with Lucene Support -->
+            <!-- Search Bar -->
             <div class="search-row">
                 <div class="search-input-wrapper">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" class="search-input" id="searchQuery" 
+                    <svg class="search-icon-inner" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <input type="text" class="search-input" id="searchQuery"
                            placeholder="Lucene query: chain:ethereum AND severity:critical AND event_type:Transfer">
                 </div>
                 <button class="btn btn-primary" onclick="searchLogs()">
+                    <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     Search
                 </button>
-                <button class="btn btn-secondary" onclick="clearSearch()">
-                    Clear
-                </button>
-                <button class="query-help-btn" onclick="showQueryHelp()">
-                    ? Syntax Help
-                </button>
+                <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
+                <button class="query-help-btn" onclick="showQueryHelp()">? Syntax</button>
             </div>
+
             <div class="search-mode" id="searchMode">
                 <span>Query Mode:</span>
                 <span class="mode-badge" id="queryModeBadge">LUCENE</span>
@@ -977,17 +1071,17 @@
                 </div>
 
                 <div class="filter-group">
-                    <span class="filter-label">Time Range: <span id="timezoneLabel" style="color: var(--accent-cyan); font-size: 0.75rem;"></span></span>
+                    <span class="filter-label">Time Range: <span id="timezoneLabel" style="color: var(--s3-cyan); font-size: 0.72rem;"></span></span>
                     <div class="time-inputs">
                         <input type="datetime-local" class="filter-input time-input" id="startTime">
-                        <span style="color: var(--text-muted);">to</span>
+                        <span class="time-divider">to</span>
                         <input type="datetime-local" class="filter-input time-input" id="endTime">
                     </div>
                 </div>
             </div>
 
             <!-- Quick Time Buttons -->
-            <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+            <div class="quick-bar">
                 <div class="quick-time-btns">
                     <button class="quick-time-btn" onclick="setTimeRange('5m')">Last 5m</button>
                     <button class="quick-time-btn active" onclick="setTimeRange('15m')">Last 15m</button>
@@ -997,11 +1091,11 @@
                     <button class="quick-time-btn" onclick="setTimeRange('7d')">Last 7d</button>
                     <button class="quick-time-btn" onclick="setTimeRange('custom')">Custom</button>
                 </div>
-                <div>
-                    <label style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">
+                <div class="auto-refresh-controls">
+                    <label>
                         <input type="checkbox" id="autoRefresh" checked> Auto-refresh
                     </label>
-                    <select class="filter-select" id="refreshInterval" style="width: 80px;">
+                    <select class="filter-select" id="refreshInterval" style="width: 72px; padding: 5px 8px; font-size: 0.75rem;">
                         <option value="5">5s</option>
                         <option value="10" selected>10s</option>
                         <option value="30">30s</option>
@@ -1015,42 +1109,43 @@
         <div class="results-stats">
             <div class="stats-left">
                 <div class="stat-item">
-                    <span class="stat-value" id="totalEvents">0</span>
+                    <span class="stat-value" id="totalEvents" style="color: var(--s3-text);">0</span>
                     <span class="stat-label">events</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-value" id="criticalCount" style="color: var(--accent-red);">0</span>
+                    <span class="stat-value" id="criticalCount" style="color: var(--s3-critical);">0</span>
                     <span class="stat-label">critical</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-value" id="highCount" style="color: var(--accent-yellow);">0</span>
+                    <span class="stat-value" id="highCount" style="color: var(--s3-high);">0</span>
                     <span class="stat-label">high</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-value" id="queryTime">0</span>
+                    <span class="stat-value" id="queryTime" style="color: var(--s3-text-2);">0</span>
                     <span class="stat-label">ms</span>
                 </div>
             </div>
             <div>
                 <button class="btn btn-secondary" onclick="exportLogs()">
-                    📥 Export CSV
+                    <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Export CSV
                 </button>
             </div>
         </div>
 
         <!-- Log Table -->
-        <div class="log-table-wrapper">
+        <div class="glass-card log-table-wrapper">
             <table class="log-table">
                 <thead>
                     <tr>
                         <th style="width: 30px;"></th>
-                        <th onclick="sortBy('timestamp')">Timestamp <span class="sort-icon">↕</span></th>
-                        <th onclick="sortBy('severity')">Severity <span class="sort-icon">↕</span></th>
-                        <th onclick="sortBy('chain')">Chain <span class="sort-icon">↕</span></th>
-                        <th onclick="sortBy('event_type')">Event Type <span class="sort-icon">↕</span></th>
+                        <th onclick="sortBy('timestamp')">Timestamp <span class="sort-icon">&#8597;</span></th>
+                        <th onclick="sortBy('severity')">Severity <span class="sort-icon">&#8597;</span></th>
+                        <th onclick="sortBy('chain')">Chain <span class="sort-icon">&#8597;</span></th>
+                        <th onclick="sortBy('event_type')">Event Type <span class="sort-icon">&#8597;</span></th>
                         <th>Contract</th>
                         <th>TX Hash</th>
-                        <th onclick="sortBy('block')">Block <span class="sort-icon">↕</span></th>
+                        <th onclick="sortBy('block')">Block <span class="sort-icon">&#8597;</span></th>
                     </tr>
                 </thead>
                 <tbody id="logTableBody">
@@ -1069,22 +1164,25 @@
             <div class="pagination">
                 <div class="pagination-info">
                     Showing <span id="showingStart">0</span>-<span id="showingEnd">0</span> of <span id="totalCount">0</span> events
-                    <span id="loadMoreInfo" style="margin-left: 1rem; color: var(--accent-cyan); font-size: 0.85rem;"></span>
+                    <span id="loadMoreInfo" style="margin-left: 12px; color: var(--s3-cyan); font-size: 0.78rem;"></span>
                 </div>
                 <div class="pagination-btns">
-                    <button class="page-btn" id="prevBtn" onclick="prevPage()" disabled>← Previous</button>
+                    <button class="page-btn" id="prevBtn" onclick="prevPage()" disabled>&larr; Previous</button>
                     <button class="page-btn active">1</button>
-                    <button class="page-btn" id="nextBtn" onclick="nextPage()">Next →</button>
-                    <button class="page-btn" id="loadMoreBtn" onclick="loadMoreEvents()" style="display: none; background: var(--accent-blue);">Load More</button>
+                    <button class="page-btn" id="nextBtn" onclick="nextPage()">Next &rarr;</button>
+                    <button class="page-btn" id="loadMoreBtn" onclick="loadMoreEvents()" style="display: none; background: var(--s3-accent); color: #fff; border-color: var(--s3-accent);">Load More</button>
                 </div>
             </div>
         </div>
+
     </div>
     </div><!-- /app -->
 
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script>
         const API_BASE = window.SENTINEL3_API_BASE || window.location.origin;
-        
+
         let allEvents = [];  // Accumulated events from pagination
         let filteredEvents = [];
         let currentPage = 1;
@@ -1100,7 +1198,7 @@
             // Show timezone
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
             document.getElementById('timezoneLabel').textContent = `(${tz})`;
-            
+
             setDefaultTimeRange();
             loadEvents();
             setupAutoRefresh();
@@ -1120,14 +1218,13 @@
         function setDefaultTimeRange() {
             const now = new Date();
             const start = new Date(now.getTime() - 15 * 60 * 1000);
-            
+
             document.getElementById('endTime').value = formatDateTimeLocal(now);
             document.getElementById('startTime').value = formatDateTimeLocal(start);
         }
 
         function formatDateTimeLocal(date) {
             // Format in LOCAL time for datetime-local input (not UTC!)
-            // datetime-local inputs expect local time, not UTC
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
@@ -1141,7 +1238,6 @@
             document.querySelectorAll('.quick-time-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
 
-            // Calculate time range in local time (user's timezone)
             const now = new Date();
             let startTime;
 
@@ -1152,14 +1248,12 @@
                 case '6h': startTime = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
                 case '24h': startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
                 case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
-                case 'custom': return; // Don't change inputs
+                case 'custom': return;
             }
 
-            // Set datetime-local inputs (they expect local time)
             document.getElementById('endTime').value = formatDateTimeLocal(now);
             document.getElementById('startTime').value = formatDateTimeLocal(startTime);
-            
-            // Reload events with new time range
+
             searchLogs();
         }
 
@@ -1170,7 +1264,7 @@
 
             function updateRefresh() {
                 if (refreshTimer) clearInterval(refreshTimer);
-                
+
                 if (checkbox.checked) {
                     const interval = parseInt(intervalSelect.value) * 1000;
                     refreshTimer = setInterval(loadEvents, interval);
@@ -1187,11 +1281,10 @@
 
         // Load events from API with server-side filtering and cursor pagination
         async function loadEvents(reset = true) {
-            if (isLoadingMore) return;  // Prevent duplicate loads
-            
+            if (isLoadingMore) return;
+
             const startTime = performance.now();
 
-            // Reset events if starting fresh
             if (reset) {
                 allEvents = [];
                 nextCursor = null;
@@ -1200,70 +1293,60 @@
 
             try {
                 isLoadingMore = true;
-                
-                // Build query params
+
                 const params = new URLSearchParams();
-                params.append('limit', '200');  // Smaller page size for better performance
-                
-                // Get filters
+                params.append('limit', '200');
+
                 const luceneQuery = document.getElementById('searchQuery').value.trim();
                 const chainFilter = document.getElementById('chainFilter').value;
                 const severityFilter = document.getElementById('severityFilter').value;
                 const eventTypeFilter = document.getElementById('eventTypeFilter').value;
                 const startTimeVal = document.getElementById('startTime').value;
                 const endTimeVal = document.getElementById('endTime').value;
-                
-                // Add Lucene query if provided
+
                 if (luceneQuery) {
                     params.append('query', luceneQuery);
                     updateQueryMode('LUCENE', 'Server-side Lucene query execution');
                 } else {
                     updateQueryMode('SERVER', 'Server-side filtering active');
                 }
-                
-                // Add server-side filters (always send to API)
+
                     if (chainFilter) params.append('chain_id', chainFilter);
                     if (severityFilter) params.append('severity', severityFilter);
                     if (eventTypeFilter) params.append('event_type', eventTypeFilter);
-                
-                // Send time filters to API (server-side filtering)
+
                 if (startTimeVal && endTimeVal) {
-                    // datetime-local inputs are in local time
-                    // Create Date objects (interprets as local time)
                     const startDate = new Date(startTimeVal);
                     const endDate = new Date(endTimeVal);
-                    
-                    // Convert to UTC ISO strings for API
-                    // toISOString() automatically converts to UTC
+
                     params.append('start_time', startDate.toISOString());
                     params.append('end_time', endDate.toISOString());
                 }
-                
-                // Add cursor for pagination if available
+
                 if (nextCursor && !reset) {
                     params.append('cursor', nextCursor);
                 }
-                
+
                 const fullUrl = `${API_BASE}/api/events?${params.toString()}`;
                 console.log('========== DEBUG: FETCH REQUEST ==========');
                 console.log('Full URL:', fullUrl);
                 console.log('Params:', Object.fromEntries(params));
-                
+
                 const response = await fetch(fullUrl);
-                
+
                 console.log('========== DEBUG: FETCH RESPONSE ==========');
                 console.log('Response status:', response.status, response.statusText);
                 console.log('Response headers:', Object.fromEntries(response.headers));
-                
+
                 if (!response.ok) {
                     console.error('API request failed:', response.status, response.statusText);
                     const errorText = await response.text();
                     console.error('Error details:', errorText);
                     throw new Error(`API request failed: ${response.status} ${response.statusText}`);
                 }
-                
+
                 const data = await response.json();
-                
+
                 console.log('========== DEBUG: API RESPONSE DATA ==========');
                 console.log('Full response object:', data);
                 console.log('Response keys:', Object.keys(data));
@@ -1271,44 +1354,39 @@
                 console.log('Events count:', data.events ? data.events.length : 'NO EVENTS ARRAY');
                 console.log('Returned field:', data.returned);
                 console.log('Next cursor:', data.next_cursor);
-                
+
                 if (data.events && data.events.length > 0) {
                     console.log('========== DEBUG: FIRST EVENT SAMPLE ==========');
                     console.log('First event:', JSON.stringify(data.events[0], null, 2));
                     console.log('First event keys:', Object.keys(data.events[0]));
                 }
 
-                // Accumulate events (for pagination)
                 const newEvents = data.events || [];
                 allEvents = reset ? newEvents : [...allEvents, ...newEvents];
                 nextCursor = data.next_cursor || null;
-                
+
                 const queryTime = Math.round(performance.now() - startTime);
                 document.getElementById('queryTime').textContent = queryTime;
-                
+
                 console.log('========== DEBUG: EVENTS PROCESSED ==========');
                 console.log('New events count:', newEvents.length);
                 console.log('Total allEvents count:', allEvents.length);
                 console.log('Has next cursor:', nextCursor !== null);
-                
-                // Show query used if available
+
                 if (data.query_used) {
                     console.log('Query executed:', data.query_used);
                 }
 
-                // Apply client-side filters (only for display/sorting, not time filtering)
                 applyFilters();
-                
-                // Update "Load more" button visibility
                 updateLoadMoreButton();
-                
+
             } catch (error) {
                 console.error('Failed to load events:', error);
                 document.getElementById('logTableBody').innerHTML = `
                     <tr>
                         <td colspan="8">
                             <div class="empty-state">
-                                <div class="icon">❌</div>
+                                <div class="icon">&#10060;</div>
                                 <h3>Failed to load events</h3>
                                 <p>${error.message}</p>
                             </div>
@@ -1319,30 +1397,30 @@
                 isLoadingMore = false;
             }
         }
-        
+
         // Load more events (pagination)
         async function loadMoreEvents() {
             if (nextCursor && !isLoadingMore) {
-                await loadEvents(false);  // Don't reset, append
+                await loadEvents(false);
             }
         }
-        
+
         // Update "Load more" button
         function updateLoadMoreButton() {
             const loadMoreBtn = document.getElementById('loadMoreBtn');
             const loadMoreInfo = document.getElementById('loadMoreInfo');
-            
+
             if (loadMoreBtn) {
                 loadMoreBtn.style.display = nextCursor ? 'inline-block' : 'none';
                 loadMoreBtn.disabled = isLoadingMore || !nextCursor;
                 loadMoreBtn.textContent = isLoadingMore ? 'Loading...' : 'Load More';
             }
-            
+
             if (loadMoreInfo) {
                 if (nextCursor) {
-                    loadMoreInfo.textContent = '• More available';
+                    loadMoreInfo.textContent = '\u2022 More available';
                 } else if (allEvents.length > 0) {
-                    loadMoreInfo.textContent = '• All loaded';
+                    loadMoreInfo.textContent = '\u2022 All loaded';
                 } else {
                     loadMoreInfo.textContent = '';
                 }
@@ -1353,29 +1431,30 @@
         function updateQueryMode(mode, desc) {
             const badge = document.getElementById('queryModeBadge');
             const descEl = document.getElementById('queryModeDesc');
-            
+
             badge.textContent = mode;
             descEl.textContent = desc;
-            
+
             if (mode === 'LUCENE') {
-                badge.style.background = 'var(--accent-purple)';
+                badge.style.background = 'var(--s3-accent)';
             } else {
-                badge.style.background = 'var(--accent-blue)';
+                badge.style.background = 'var(--s3-cyan)';
+                badge.style.color = 'var(--s3-bg-0)';
             }
         }
 
         // Search logs with Lucene query
         function searchLogs() {
             currentPage = 1;
-            loadEvents(true); // Reset and reload from server
+            loadEvents(true);
         }
-        
+
         // Show query help modal
         function showQueryHelp() {
             document.getElementById('queryHelpModal').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
-        
+
         // Hide query help modal
         function hideQueryHelp(event) {
             if (!event || event.target === event.currentTarget) {
@@ -1383,7 +1462,7 @@
                 document.body.style.overflow = '';
             }
         }
-        
+
         // Use query example
         function useQueryExample(query) {
             document.getElementById('searchQuery').value = query;
@@ -1399,37 +1478,28 @@
             document.getElementById('eventTypeFilter').value = '';
             setDefaultTimeRange();
             currentPage = 1;
-            loadEvents(true);  // Reset and reload
+            loadEvents(true);
         }
 
-        // Apply filters (minimal client-side filtering - most filtering is server-side)
+        // Apply filters
         function applyFilters() {
             console.log('========== DEBUG: APPLY FILTERS CALLED ==========');
             console.log('allEvents before assignment:', allEvents.length);
             console.log('allEvents sample:', allEvents.slice(0, 2));
-            
-            // Since we're using server-side filtering, we mainly just need to:
-            // 1. Use allEvents directly (already filtered by server)
-            // 2. Apply sorting
-            // 3. Handle pagination display
-            
-            // For now, use all events (server has already filtered)
+
             filteredEvents = allEvents;
-            
+
             console.log('filteredEvents after assignment:', filteredEvents.length);
             console.log('Applied filters (server-side):', {
                 total: filteredEvents.length,
                 hasNext: nextCursor !== null
             });
 
-            // Sort
             sortEvents();
             console.log('filteredEvents after sort:', filteredEvents.length);
-            
-            // Update stats
+
             updateStats();
-            
-            // Render
+
             console.log('Calling renderTable...');
             renderTable();
         }
@@ -1469,9 +1539,9 @@
         // Update stats
         function updateStats() {
             document.getElementById('totalEvents').textContent = filteredEvents.length;
-            document.getElementById('criticalCount').textContent = 
+            document.getElementById('criticalCount').textContent =
                 filteredEvents.filter(e => e.severity === 'critical').length;
-            document.getElementById('highCount').textContent = 
+            document.getElementById('highCount').textContent =
                 filteredEvents.filter(e => e.severity === 'high').length;
         }
 
@@ -1482,12 +1552,12 @@
             console.log('allEvents count:', allEvents.length);
             console.log('currentPage:', currentPage);
             console.log('pageSize:', pageSize);
-            
+
             const tbody = document.getElementById('logTableBody');
             const start = (currentPage - 1) * pageSize;
             const end = Math.min(start + pageSize, filteredEvents.length);
             const pageEvents = filteredEvents.slice(start, end);
-            
+
             console.log('Pagination: start=', start, 'end=', end, 'pageEvents=', pageEvents.length);
 
             if (pageEvents.length === 0) {
@@ -1495,15 +1565,15 @@
                 console.log('Reason: pageEvents.length is 0');
                 console.log('filteredEvents:', filteredEvents);
                 console.log('allEvents:', allEvents);
-                
+
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8">
                             <div class="empty-state">
-                                <div class="icon">📭</div>
+                                <div class="icon">&#128237;</div>
                                 <h3>No events found</h3>
                                 <p>Try adjusting your filters or time range</p>
-                                <p style="font-size: 0.8rem; color: #666; margin-top: 1rem;">
+                                <p style="font-size: 0.75rem; color: var(--s3-text-3); margin-top: 12px;">
                                     Debug: allEvents=${allEvents.length}, filteredEvents=${filteredEvents.length}
                                 </p>
                             </div>
@@ -1513,14 +1583,14 @@
                 updatePagination(0, 0, 0);
                 return;
             }
-            
+
             console.log('========== DEBUG: RENDERING EVENTS ==========');
             console.log('First event to render:', pageEvents[0]);
 
             tbody.innerHTML = pageEvents.map((event, idx) => `
                 <tr class="log-row" data-idx="${start + idx}">
                     <td>
-                        <button class="expand-btn" onclick="toggleExpand(${start + idx})">▶</button>
+                        <button class="expand-btn" onclick="toggleExpand(${start + idx})">&#9654;</button>
                     </td>
                     <td>
                         <span class="timestamp">${formatTimestamp(event.timestamp)}</span>
@@ -1545,16 +1615,19 @@
                         </span>
                     </td>
                     <td>
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--s3-text-2);">
                             ${event.block ? event.block.toLocaleString() : '-'}
                         </span>
                     </td>
                 </tr>
                 <tr class="expanded-content" id="expanded-${start + idx}">
                     <td colspan="8">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="expanded-grid">
                             <div>
-                                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem;">📋 Event Details</h4>
+                                <div class="expanded-section-title">
+                                    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                    Event Details
+                                </div>
                                 <div class="field-tags">
                                     <div class="field-tag">
                                         <span class="key">ID:</span>
@@ -1573,7 +1646,10 @@
                                 </div>
                             </div>
                             <div>
-                                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem;">🔧 Raw Data</h4>
+                                <div class="expanded-section-title">
+                                    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                                    Raw Data
+                                </div>
                                 <div class="raw-data">
                                     <pre>${syntaxHighlight(JSON.stringify(event.data || {}, null, 2))}</pre>
                                 </div>
@@ -1590,21 +1666,20 @@
         function toggleExpand(idx) {
             const expandedRow = document.getElementById(`expanded-${idx}`);
             const btn = document.querySelector(`tr[data-idx="${idx}"] .expand-btn`);
-            
+
             if (expandedRow.classList.contains('show')) {
                 expandedRow.classList.remove('show');
-                btn.textContent = '▶';
+                btn.innerHTML = '&#9654;';
             } else {
-                // Close all others
                 document.querySelectorAll('.expanded-content.show').forEach(el => {
                     el.classList.remove('show');
                 });
                 document.querySelectorAll('.expand-btn').forEach(el => {
-                    el.textContent = '▶';
+                    el.innerHTML = '&#9654;';
                 });
-                
+
                 expandedRow.classList.add('show');
-                btn.textContent = '▼';
+                btn.innerHTML = '&#9660;';
             }
         }
 
@@ -1636,7 +1711,6 @@
         // Helper functions
         function formatTimestamp(ts) {
             const date = new Date(ts);
-            // Show in local timezone with timezone indicator
             const localTime = date.toLocaleString('en-US', {
                 month: 'short',
                 day: '2-digit',
@@ -1648,8 +1722,7 @@
             });
             return localTime;
         }
-        
-        // Get timezone name for display
+
         function getTimezone() {
             return Intl.DateTimeFormat().resolvedOptions().timeZone;
         }
@@ -1668,19 +1741,19 @@
 
         function getChainIcon(chain) {
             const icons = {
-                ethereum: '⟠',
-                polygon: '⬡',
-                arbitrum: '🔵',
-                optimism: '🔴',
-                bsc: '🟡',
-                avalanche: '🔺',
-                cosmos: '⚛️',
-                osmosis: '🧪',
-                aptos: '🅰️',
-                sui: '💧',
-                near: '🌈'
+                ethereum: '\u27e0',
+                polygon: '\u2b21',
+                arbitrum: '\ud83d\udfe2',
+                optimism: '\ud83d\udd34',
+                bsc: '\ud83d\udfe1',
+                avalanche: '\ud83d\udd3a',
+                cosmos: '\u269b\ufe0f',
+                osmosis: '\ud83e\uddea',
+                aptos: '\ud83c\udd70\ufe0f',
+                sui: '\ud83d\udca7',
+                near: '\ud83c\udf08'
             };
-            return icons[chain] || '🔗';
+            return icons[chain] || '\ud83d\udd17';
         }
 
         function syntaxHighlight(json) {
@@ -1697,7 +1770,6 @@
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text);
-            // Could show toast notification
         }
 
         function openTxExplorer(chain, hash) {
@@ -1712,7 +1784,7 @@
                 aptos: `https://explorer.aptoslabs.com/txn/${hash}`,
                 sui: `https://suiexplorer.com/txblock/${hash}`
             };
-            
+
             const url = explorers[chain];
             if (url) window.open(url, '_blank');
         }
@@ -1733,7 +1805,7 @@
             const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
-            
+
             const a = document.createElement('a');
             a.href = url;
             a.download = `xdr-logs-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1742,4 +1814,3 @@
     </script>
 </body>
 </html>
-

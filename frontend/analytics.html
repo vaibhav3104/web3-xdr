@@ -3,370 +3,858 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel3 - Analytics & Risk Scoring</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
+    <title>Analytics - Sentinel3</title>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-purple: #8b5cf6;
-            --accent-red: #ff3b3b;
-            --accent-green: #3bff7e;
-            --accent-yellow: #ffd93b;
-            --accent-orange: #ff8a3b;
-            --accent-blue: #3b8aff;
-        }
+        [x-cloak] { display: none !important; }
+        *, *::before, *::after { box-sizing: border-box; }
+
         body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: #ffffff;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
+            margin: 0;
         }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid #2a2a3a;
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* ── Page Layout ──────────────────────────────────────── */
+        .page-content {
+            flex: 1;
+            min-width: 0;
+            overflow-y: auto;
+            height: 100vh;
+        }
+
+        /* ── Sticky Header ────────────────────────────────────── */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+        }
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .header-row {
+            display: flex; align-items: center; justify-content: space-between;
+            max-width: 1400px; margin: 0 auto;
+        }
+        .header-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px; font-weight: 700; color: var(--s3-text);
+            letter-spacing: -0.02em;
+        }
+
+        /* ── Tab Pills ────────────────────────────────────────── */
+        .tab-bar {
+            display: flex; gap: 4px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--s3-border);
             border-radius: 12px;
+            padding: 3px;
         }
-        .risk-score {
-            font-size: 48px;
-            font-weight: bold;
+        .tab-pill {
+            padding: 7px 18px;
+            font-size: 12px; font-weight: 600;
+            border-radius: 9px;
+            border: none; cursor: pointer;
+            color: var(--s3-text-3);
+            background: transparent;
+            transition: all 0.25s;
+            white-space: nowrap;
         }
-        .risk-critical { color: #ff3b3b; }
-        .risk-high { color: #ff8a3b; }
-        .risk-medium { color: #ffd93b; }
-        .risk-low { color: #3bff7e; }
-        .attack-pattern-card {
-            transition: all 0.3s ease;
+        .tab-pill:hover:not(.active) { color: var(--s3-text-2); }
+        .tab-pill.active {
+            background: var(--s3-accent);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(139,92,246,0.3);
         }
-        .attack-pattern-card:hover {
+
+        /* ── Container ────────────────────────────────────────── */
+        .content-area {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 28px;
+        }
+
+        /* ── Glass Card ───────────────────────────────────────── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover {
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        /* ── Stat Mini Cards ──────────────────────────────────── */
+        .stat-mini {
+            position: relative; overflow: hidden;
+            padding: 18px 20px;
+        }
+        .stat-mini::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: var(--s3-radius) var(--s3-radius) 0 0;
+        }
+        .stat-mini.a-critical::before { background: linear-gradient(90deg, var(--s3-critical), transparent); }
+        .stat-mini.a-high::before     { background: linear-gradient(90deg, var(--s3-high), transparent); }
+        .stat-mini.a-low::before      { background: linear-gradient(90deg, var(--s3-low), transparent); }
+        .stat-mini.a-cyan::before     { background: linear-gradient(90deg, var(--s3-cyan), transparent); }
+        .stat-mini.a-accent::before   { background: linear-gradient(90deg, var(--s3-accent), transparent); }
+        .stat-mini.a-medium::before   { background: linear-gradient(90deg, var(--s3-medium), transparent); }
+
+        .stat-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px; font-weight: 700;
+            letter-spacing: -0.03em; line-height: 1;
+        }
+        .stat-lbl {
+            font-size: 11px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        /* ── Grid Layouts ─────────────────────────────────────── */
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .grid-1-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        @media (max-width: 1024px) {
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .grid-3 { grid-template-columns: repeat(2, 1fr); }
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-1-2 { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+            .grid-4 { grid-template-columns: 1fr; }
+            .grid-3 { grid-template-columns: 1fr; }
+        }
+
+        /* ── Panel Heads ──────────────────────────────────────── */
+        .panel-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .panel-title {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: #e2e8f0;
+        }
+        .panel-icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+        }
+
+        /* ── Chart Containers ─────────────────────────────────── */
+        .chart-box { position: relative; height: 220px; padding: 16px 20px 20px; }
+
+        /* ── Section Heading ──────────────────────────────────── */
+        .section-head {
+            margin-bottom: 24px;
+        }
+        .section-head h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 22px; font-weight: 700; color: var(--s3-text);
+            margin: 0 0 6px;
+        }
+        .section-head p {
+            font-size: 13px; color: var(--s3-text-3); margin: 0;
+        }
+
+        /* ── Attack Pattern Cards ─────────────────────────────── */
+        .attack-card {
+            transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+        }
+        .attack-card:hover {
+            border-color: rgba(139,92,246,0.25);
+            box-shadow: 0 4px 24px rgba(139,92,246,0.08);
             transform: translateY(-2px);
-            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.2);
         }
-        .trend-up { color: var(--accent-red); }
-        .trend-down { color: var(--accent-green); }
-        .protocol-bar {
+        .attack-card .card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .attack-card .card-header .icon-name {
+            display: flex; align-items: center; gap: 12px;
+        }
+        .attack-card .card-header .icon-name span.icon-lg { font-size: 28px; }
+        .attack-card .card-header .icon-name .name-block h3 {
+            font-size: 14px; font-weight: 600; color: var(--s3-text); margin: 0;
+        }
+        .attack-card .card-header .icon-name .name-block .cat {
+            font-size: 11px; color: var(--s3-text-3);
+        }
+        .trend-up { color: var(--s3-critical); }
+        .trend-down { color: var(--s3-low); }
+        .attack-desc {
+            font-size: 12px; color: var(--s3-text-2); line-height: 1.5;
+            margin-bottom: 14px;
+        }
+        .attack-metrics {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+        }
+        .metric-cell {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        .metric-cell:hover {
+            border-color: rgba(139,92,246,0.15);
+        }
+        .metric-cell .val {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px; font-weight: 700; color: var(--s3-text);
+        }
+        .metric-cell .lbl {
+            font-size: 10px; color: var(--s3-text-3); text-transform: uppercase;
+            letter-spacing: 0.04em; margin-top: 4px;
+        }
+        .chain-tags {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            padding-top: 14px; margin-top: 14px;
+            border-top: 1px solid rgba(255,255,255,0.04);
+        }
+        .chain-tag {
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 500;
+            background: rgba(139,92,246,0.12); color: var(--s3-accent-light);
+        }
+
+        /* ── Empty State ──────────────────────────────────────── */
+        .empty-state {
+            text-align: center; padding: 48px 24px;
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+        .empty-state h3 {
+            font-size: 18px; font-weight: 600; color: var(--s3-low);
+            margin: 0 0 8px;
+        }
+        .empty-state p { font-size: 13px; color: var(--s3-text-3); margin: 0; }
+        .empty-state .sub { font-size: 11px; color: var(--s3-text-3); margin-top: 6px; opacity: 0.7; }
+
+        /* ── Protocol Table ───────────────────────────────────── */
+        .proto-table {
+            width: 100%; border-collapse: collapse;
+        }
+        .proto-table thead th {
+            padding: 12px 16px;
+            font-size: 11px; font-weight: 600; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            text-align: left;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .proto-table tbody td {
+            padding: 14px 16px;
+            font-size: 13px; color: var(--s3-text-2);
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .proto-table tbody tr {
+            transition: background 0.2s;
+        }
+        .proto-table tbody tr:hover {
+            background: rgba(139,92,246,0.04);
+        }
+        .proto-name {
+            display: flex; align-items: center; gap: 10px;
+            font-weight: 600; color: var(--s3-text);
+        }
+        .proto-name .emoji { font-size: 18px; }
+        .health-bar-track {
+            width: 80px; height: 6px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px; overflow: hidden;
+        }
+        .health-bar-fill {
+            height: 100%; border-radius: 3px;
             transition: width 0.5s ease;
         }
+        .health-bar-fill.good { background: var(--s3-low); }
+        .health-bar-fill.warn { background: var(--s3-medium); }
+        .health-bar-fill.bad  { background: var(--s3-critical); }
+        .health-score-row {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .alert-badge {
+            display: inline-block;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+        }
+        .alert-badge.warn { background: rgba(234,179,8,0.12); color: var(--s3-medium); }
+        .alert-badge.ok   { background: rgba(255,255,255,0.04); color: var(--s3-text-3); }
+        .status-dot {
+            display: inline-block; width: 7px; height: 7px;
+            border-radius: 50%; margin-right: 6px;
+        }
+        .status-dot.healthy  { background: var(--s3-low); }
+        .status-dot.warning  { background: var(--s3-medium); }
+        .status-dot.critical { background: var(--s3-critical); }
+        .status-text {
+            font-size: 12px; text-transform: capitalize; color: var(--s3-text-2);
+        }
+
+        /* ── Risk Scoring ─────────────────────────────────────── */
+        .risk-input-row {
+            display: flex; gap: 12px; margin-bottom: 24px;
+        }
+        .risk-input {
+            flex: 1;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--s3-text);
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .risk-input::placeholder { color: var(--s3-text-3); }
+        .risk-input:focus { border-color: rgba(139,92,246,0.4); }
+        .btn-accent {
+            padding: 12px 24px;
+            background: var(--s3-accent);
+            color: #fff;
+            border: none; border-radius: var(--s3-radius-sm);
+            font-size: 13px; font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+        }
+        .btn-accent:hover { background: var(--s3-accent-light); box-shadow: 0 4px 16px rgba(139,92,246,0.25); }
+        .btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-accent .spinner {
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+
+        .risk-result-box {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 24px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: var(--s3-radius-sm);
+        }
+        .risk-score-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 52px; font-weight: 700;
+            line-height: 1;
+        }
+        .risk-critical { color: var(--s3-critical); }
+        .risk-high     { color: var(--s3-high); }
+        .risk-medium   { color: var(--s3-medium); }
+        .risk-low      { color: var(--s3-low); }
+        .risk-level { font-size: 13px; color: var(--s3-text-2); margin-top: 4px; }
+        .risk-addr { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--s3-text-2); }
+
+        .factor-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.03);
+            border-radius: var(--s3-radius-sm);
+            transition: border-color 0.2s;
+        }
+        .factor-row:hover { border-color: rgba(255,255,255,0.06); }
+        .factor-left {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 13px; color: var(--s3-text);
+        }
+        .factor-right {
+            display: flex; align-items: center; gap: 12px;
+        }
+        .factor-bar-track {
+            width: 100px; height: 5px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px; overflow: hidden;
+        }
+        .factor-bar-fill {
+            height: 100%; border-radius: 3px;
+        }
+        .factor-bar-fill.crit { background: var(--s3-critical); }
+        .factor-bar-fill.high { background: var(--s3-high); }
+        .factor-bar-fill.med  { background: var(--s3-medium); }
+        .factor-bar-fill.low  { background: var(--s3-low); }
+        .factor-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; color: var(--s3-text-2);
+            width: 28px; text-align: right;
+        }
+
+        .rec-list { list-style: none; padding: 0; margin: 0; }
+        .rec-list li {
+            display: flex; align-items: flex-start; gap: 10px;
+            font-size: 13px; color: var(--s3-text-2);
+            padding: 6px 0;
+        }
+        .rec-list li .bullet {
+            color: var(--s3-accent); font-size: 14px; line-height: 1.3;
+            flex-shrink: 0;
+        }
+
+        /* ── Wallet List ──────────────────────────────────────── */
+        .wallet-item {
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: var(--s3-radius-sm);
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .wallet-item:hover {
+            border-color: rgba(139,92,246,0.2);
+            background: rgba(139,92,246,0.04);
+        }
+        .wallet-top {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .wallet-addr {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; color: var(--s3-text-2);
+        }
+        .wallet-score {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px; font-weight: 700;
+        }
+        .wallet-reason { font-size: 11px; color: var(--s3-text-3); }
+
+        /* ── Loading Spinner ──────────────────────────────────── */
+        .loading-state {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 64px 0;
+        }
+        .spinner-ring {
+            width: 40px; height: 40px;
+            border: 3px solid rgba(139,92,246,0.15);
+            border-top-color: var(--s3-accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { font-size: 13px; color: var(--s3-text-3); }
+
+        /* ── Scrollbar ────────────────────────────────────────── */
+        .page-content::-webkit-scrollbar { width: 6px; }
+        .page-content::-webkit-scrollbar-track { background: transparent; }
+        .page-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+        /* ── Utility ──────────────────────────────────────────── */
+        .mb-20 { margin-bottom: 20px; }
+        .mb-24 { margin-bottom: 24px; }
+        .gap-stack > * + * { margin-top: 8px; }
+        .gap-stack-lg > * + * { margin-top: 16px; }
+        .text-center { text-align: center; }
+        .full-span { grid-column: 1 / -1; }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 <div id="app" x-data="analytics()" x-init="init()">
     <!-- Main Content (sidebar injected by nav.js) -->
-    <main>
-        <!-- Top Bar -->
-        <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-            <div class="flex items-center justify-between">
-                <h1 class="text-lg font-semibold">Analytics</h1>
-                <div class="flex space-x-2">
-                    <button @click="tab = 'historical'" :class="tab === 'historical' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+    <main class="page-content">
+        <!-- Sticky Header -->
+        <header class="s3-header">
+            <div class="header-row">
+                <h1 class="header-title">Analytics</h1>
+                <div class="tab-bar">
+                    <button @click="tab = 'historical'" :class="tab === 'historical' ? 'active' : ''" class="tab-pill">
                         Historical
                     </button>
-                    <button @click="tab = 'attacks'" :class="tab === 'attacks' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                    <button @click="tab = 'attacks'" :class="tab === 'attacks' ? 'active' : ''" class="tab-pill">
                         Attack Patterns
                     </button>
-                    <button @click="tab = 'protocols'" :class="tab === 'protocols' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                    <button @click="tab = 'protocols'" :class="tab === 'protocols' ? 'active' : ''" class="tab-pill">
                         Protocols
                     </button>
-                    <button @click="tab = 'risk'" :class="tab === 'risk' ? 'bg-purple-600' : 'bg-gray-800'" class="px-4 py-2 rounded-lg text-sm transition">
+                    <button @click="tab = 'risk'" :class="tab === 'risk' ? 'active' : ''" class="tab-pill">
                         Risk Scoring
                     </button>
                 </div>
             </div>
         </header>
 
-        <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Loading State -->
-        <div x-show="loading" class="text-center py-12">
-            <div class="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p class="text-gray-400">Loading analytics data...</p>
-        </div>
-        
-        <!-- Historical Analysis Tab -->
-        <div x-show="tab === 'historical' && !loading">
-            <div class="grid grid-cols-4 gap-4 mb-6">
-                <div class="card p-4">
-                    <div class="text-gray-400 text-sm mb-1">Total Events (30d)</div>
-                    <div class="text-3xl font-bold text-red-400" x-text="historical.totalEvents">0</div>
-                </div>
-                <div class="card p-4">
-                    <div class="text-gray-400 text-sm mb-1">Value at Risk</div>
-                    <div class="text-3xl font-bold text-orange-400" x-text="formatUSD(historical.valueAtRisk)">$0</div>
-                </div>
-                <div class="card p-4">
-                    <div class="text-gray-400 text-sm mb-1">High Severity Events</div>
-                    <div class="text-3xl font-bold text-green-400" x-text="historical.totalIncidents">0</div>
-                </div>
-                <div class="card p-4">
-                    <div class="text-gray-400 text-sm mb-1">Detection Rate</div>
-                    <div class="text-3xl font-bold text-blue-400" x-text="historical.detectionRate">99.7%</div>
-                </div>
+        <div class="content-area">
+            <!-- Loading State -->
+            <div x-show="loading" class="loading-state">
+                <div class="spinner-ring"></div>
+                <p class="loading-text">Loading analytics data...</p>
             </div>
-            
-            <!-- Charts Row -->
-            <div class="grid grid-cols-2 gap-6 mb-6">
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">📈 Incidents Over Time</h3>
-                    <canvas id="incidentsChart" height="200"></canvas>
-                </div>
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">🔗 Incidents by Chain</h3>
-                    <canvas id="chainsChart" height="200"></canvas>
-                </div>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-6">
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">⚔️ Attack Types Distribution</h3>
-                    <canvas id="attackTypesChart" height="200"></canvas>
-                </div>
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">💰 Value at Risk Over Time</h3>
-                    <canvas id="valueChart" height="200"></canvas>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Attack Patterns Tab -->
-        <div x-show="tab === 'attacks' && !loading">
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold mb-2">Attack Pattern Analysis</h2>
-                <p class="text-gray-400">Visualize and understand common attack patterns detected by Sentinel3</p>
-            </div>
-            
-            <!-- Attack Summary -->
-            <div class="grid grid-cols-4 gap-4 mb-8">
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-red-400" x-text="attackStats.total_attacks">0</div>
-                    <div class="text-sm text-gray-400 mt-1">Total Attacks</div>
-                </div>
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-orange-400" x-text="attackStats.unique_patterns">0</div>
-                    <div class="text-sm text-gray-400 mt-1">Unique Patterns</div>
-                </div>
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-yellow-400" x-text="formatUSD(attackStats.total_value_lost)">$0</div>
-                    <div class="text-sm text-gray-400 mt-1">Total Value Lost</div>
-                </div>
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-green-400" x-text="formatUSD(attackStats.value_protected)">$0</div>
-                    <div class="text-sm text-gray-400 mt-1">Value Protected</div>
-                </div>
-            </div>
-            
-            <!-- Attack Patterns Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                <!-- Empty state when no attacks detected -->
-                <div x-show="attackPatterns.length === 0" class="col-span-full">
-                    <div class="card p-12 text-center">
-                        <div class="text-6xl mb-4">🛡️</div>
-                        <h3 class="text-xl font-semibold text-green-400 mb-2">No Attacks Detected</h3>
-                        <p class="text-gray-400">No attack patterns have been detected in the last 30 days.</p>
-                        <p class="text-gray-500 text-sm mt-2">The system is actively monitoring for threats.</p>
+
+            <!-- ═══════════════════════════════════════════════════
+                 HISTORICAL ANALYSIS TAB
+                 ═══════════════════════════════════════════════════ -->
+            <div x-show="tab === 'historical' && !loading" x-cloak>
+                <!-- KPI Row -->
+                <div class="grid-4 mb-24">
+                    <div class="glass stat-mini a-critical">
+                        <div class="stat-lbl">Total Events (30d)</div>
+                        <div class="stat-num" style="color: var(--s3-critical);" x-text="historical.totalEvents">0</div>
+                    </div>
+                    <div class="glass stat-mini a-high">
+                        <div class="stat-lbl">Value at Risk</div>
+                        <div class="stat-num" style="color: var(--s3-high);" x-text="formatUSD(historical.valueAtRisk)">$0</div>
+                    </div>
+                    <div class="glass stat-mini a-low">
+                        <div class="stat-lbl">High Severity Events</div>
+                        <div class="stat-num" style="color: var(--s3-low);" x-text="historical.totalIncidents">0</div>
+                    </div>
+                    <div class="glass stat-mini a-cyan">
+                        <div class="stat-lbl">Detection Rate</div>
+                        <div class="stat-num" style="color: var(--s3-cyan);" x-text="historical.detectionRate">99.7%</div>
                     </div>
                 </div>
-                
-                <template x-for="pattern in attackPatterns" :key="pattern.id">
-                    <div class="card attack-pattern-card p-6">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex items-center space-x-3">
-                                <span class="text-3xl" x-text="pattern.icon"></span>
-                                <div>
-                                    <h3 class="font-semibold" x-text="pattern.name"></h3>
-                                    <span class="text-xs text-gray-500" x-text="pattern.category"></span>
+
+                <!-- Charts Row 1 -->
+                <div class="grid-2 mb-24">
+                    <div class="glass">
+                        <div class="panel-head">
+                            <div class="panel-title">
+                                <div class="panel-icon" style="background: rgba(139,92,246,0.12);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent)" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                </div>
+                                Incidents Over Time
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <canvas id="incidentsChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="glass">
+                        <div class="panel-head">
+                            <div class="panel-title">
+                                <div class="panel-icon" style="background: rgba(34,211,238,0.12);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-cyan)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                </div>
+                                Incidents by Chain
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <canvas id="chainsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row 2 -->
+                <div class="grid-2">
+                    <div class="glass">
+                        <div class="panel-head">
+                            <div class="panel-title">
+                                <div class="panel-icon" style="background: rgba(244,63,94,0.12);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                </div>
+                                Attack Types Distribution
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <canvas id="attackTypesChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="glass">
+                        <div class="panel-head">
+                            <div class="panel-title">
+                                <div class="panel-icon" style="background: rgba(249,115,22,0.12);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-high)" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                </div>
+                                Value at Risk Over Time
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <canvas id="valueChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════
+                 ATTACK PATTERNS TAB
+                 ═══════════════════════════════════════════════════ -->
+            <div x-show="tab === 'attacks' && !loading" x-cloak>
+                <div class="section-head">
+                    <h2>Attack Pattern Analysis</h2>
+                    <p>Visualize and understand common attack patterns detected by Sentinel3</p>
+                </div>
+
+                <!-- Attack Summary KPIs -->
+                <div class="grid-4 mb-24">
+                    <div class="glass stat-mini a-critical text-center">
+                        <div class="stat-lbl">Total Attacks</div>
+                        <div class="stat-num" style="color: var(--s3-critical);" x-text="attackStats.total_attacks">0</div>
+                    </div>
+                    <div class="glass stat-mini a-high text-center">
+                        <div class="stat-lbl">Unique Patterns</div>
+                        <div class="stat-num" style="color: var(--s3-high);" x-text="attackStats.unique_patterns">0</div>
+                    </div>
+                    <div class="glass stat-mini a-medium text-center">
+                        <div class="stat-lbl">Total Value Lost</div>
+                        <div class="stat-num" style="color: var(--s3-medium);" x-text="formatUSD(attackStats.total_value_lost)">$0</div>
+                    </div>
+                    <div class="glass stat-mini a-low text-center">
+                        <div class="stat-lbl">Value Protected</div>
+                        <div class="stat-num" style="color: var(--s3-low);" x-text="formatUSD(attackStats.value_protected)">$0</div>
+                    </div>
+                </div>
+
+                <!-- Attack Patterns Grid -->
+                <div class="grid-3 mb-24">
+                    <!-- Empty state when no attacks detected -->
+                    <div x-show="attackPatterns.length === 0" class="full-span">
+                        <div class="glass empty-state">
+                            <div class="icon">&#x1f6e1;&#xfe0f;</div>
+                            <h3>No Attacks Detected</h3>
+                            <p>No attack patterns have been detected in the last 30 days.</p>
+                            <p class="sub">The system is actively monitoring for threats.</p>
+                        </div>
+                    </div>
+
+                    <template x-for="pattern in attackPatterns" :key="pattern.id">
+                        <div class="glass attack-card" style="padding: 20px;">
+                            <div class="card-header">
+                                <div class="icon-name">
+                                    <span class="icon-lg" x-text="pattern.icon"></span>
+                                    <div class="name-block">
+                                        <h3 x-text="pattern.name"></h3>
+                                        <span class="cat" x-text="pattern.category"></span>
+                                    </div>
+                                </div>
+                                <div x-show="pattern.trend !== 0" style="text-align: right;">
+                                    <div style="font-size: 16px; font-weight: 700;"
+                                         :class="pattern.trend > 0 ? 'trend-up' : 'trend-down'"
+                                         x-text="(pattern.trend > 0 ? '+' : '') + pattern.trend + '%'"></div>
+                                    <span style="font-size: 10px; color: var(--s3-text-3);">vs last week</span>
                                 </div>
                             </div>
-                            <div class="text-right" x-show="pattern.trend !== 0">
-                                <div class="text-lg font-bold" :class="pattern.trend > 0 ? 'trend-up' : 'trend-down'"
-                                     x-text="(pattern.trend > 0 ? '+' : '') + pattern.trend + '%'"></div>
-                                <span class="text-xs text-gray-500">vs last week</span>
+
+                            <p class="attack-desc" x-text="pattern.description"></p>
+
+                            <div class="attack-metrics">
+                                <div class="metric-cell">
+                                    <div class="val" x-text="pattern.count"></div>
+                                    <div class="lbl">Detected</div>
+                                </div>
+                                <div class="metric-cell">
+                                    <div class="val" style="color: var(--s3-critical);" x-text="formatUSD(pattern.value_lost)"></div>
+                                    <div class="lbl">Value Lost</div>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <p class="text-sm text-gray-400 mb-4" x-text="pattern.description"></p>
-                        
-                        <div class="grid grid-cols-2 gap-4 text-center">
-                            <div class="bg-gray-800 rounded-lg p-3">
-                                <div class="text-xl font-bold" x-text="pattern.count"></div>
-                                <div class="text-xs text-gray-500">Detected</div>
-                            </div>
-                            <div class="bg-gray-800 rounded-lg p-3">
-                                <div class="text-xl font-bold text-red-400" x-text="formatUSD(pattern.value_lost)"></div>
-                                <div class="text-xs text-gray-500">Value Lost</div>
-                            </div>
-                        </div>
-                        
-                        <div class="mt-4 pt-4 border-t border-gray-700" x-show="pattern.affected_chains && pattern.affected_chains.length > 0">
-                            <div class="flex flex-wrap gap-1">
+
+                            <div class="chain-tags" x-show="pattern.affected_chains && pattern.affected_chains.length > 0">
                                 <template x-for="chain in pattern.affected_chains" :key="chain">
-                                    <span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-300" x-text="chain"></span>
+                                    <span class="chain-tag" x-text="chain"></span>
                                 </template>
                             </div>
                         </div>
+                    </template>
+                </div>
+
+                <!-- Attack Timeline -->
+                <div class="glass">
+                    <div class="panel-head">
+                        <div class="panel-title">
+                            <div class="panel-icon" style="background: rgba(244,63,94,0.12);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                            </div>
+                            Attack Timeline (30 days)
+                        </div>
                     </div>
-                </template>
-            </div>
-            
-            <!-- Attack Timeline -->
-            <div class="card p-6">
-                <h3 class="text-lg font-semibold mb-4">📊 Attack Timeline (30 days)</h3>
-                <canvas id="attackTimelineChart" height="150"></canvas>
-            </div>
-        </div>
-        
-        <!-- Protocol Comparison Tab -->
-        <div x-show="tab === 'protocols' && !loading">
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold mb-2">Protocol Comparison</h2>
-                <p class="text-gray-400">Compare security metrics across monitored DeFi protocols</p>
-            </div>
-            
-            <!-- Protocol Stats -->
-            <div class="grid grid-cols-4 gap-4 mb-8">
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-purple-400" x-text="protocolStats.total_protocols">0</div>
-                    <div class="text-sm text-gray-400 mt-1">Protocols Monitored</div>
-                </div>
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-green-400" x-text="protocolStats.healthy_count">0</div>
-                    <div class="text-sm text-gray-400 mt-1">Healthy</div>
-                </div>
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-yellow-400" x-text="protocolStats.warning_count">0</div>
-                    <div class="text-sm text-gray-400 mt-1">Warning</div>
-                </div>
-                <div class="card p-4 text-center">
-                    <div class="text-3xl font-bold text-red-400" x-text="protocolStats.critical_count">0</div>
-                    <div class="text-sm text-gray-400 mt-1">Critical</div>
+                    <div class="chart-box">
+                        <canvas id="attackTimelineChart"></canvas>
+                    </div>
                 </div>
             </div>
-            
-            <!-- Protocol Comparison Table -->
-            <div class="card overflow-hidden mb-8">
-                <div class="p-4 border-b border-gray-700">
-                    <h3 class="text-lg font-semibold">Protocol Security Metrics</h3>
+
+            <!-- ═══════════════════════════════════════════════════
+                 PROTOCOL COMPARISON TAB
+                 ═══════════════════════════════════════════════════ -->
+            <div x-show="tab === 'protocols' && !loading" x-cloak>
+                <div class="section-head">
+                    <h2>Protocol Comparison</h2>
+                    <p>Compare security metrics across monitored DeFi protocols</p>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead class="bg-gray-800">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Protocol</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Type</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Health Score</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Events (24h)</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Alerts (24h)</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Chains</th>
-                                <th class="px-4 py-3 text-left text-sm font-medium text-gray-400">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-700">
-                            <template x-for="protocol in protocols" :key="protocol.protocol_id">
-                                <tr class="hover:bg-gray-800/50">
-                                    <td class="px-4 py-3">
-                                        <div class="flex items-center space-x-3">
-                                            <span class="text-xl" x-text="getProtocolIcon(protocol.protocol_id)"></span>
-                                            <span class="font-medium" x-text="protocol.name"></span>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-400 capitalize" x-text="protocol.type"></td>
-                                    <td class="px-4 py-3">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="w-24 bg-gray-700 rounded-full h-2">
-                                                <div class="h-2 rounded-full protocol-bar"
-                                                     :class="{
-                                                         'bg-green-400': protocol.health_score >= 80,
-                                                         'bg-yellow-400': protocol.health_score >= 50 && protocol.health_score < 80,
-                                                         'bg-red-400': protocol.health_score < 50
-                                                     }"
-                                                     :style="'width: ' + protocol.health_score + '%'"></div>
-                                            </div>
-                                            <span class="text-sm font-mono" x-text="protocol.health_score + '%'"></span>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 font-mono text-sm" x-text="protocol.events_24h"></td>
-                                    <td class="px-4 py-3">
-                                        <span class="px-2 py-1 rounded text-xs font-medium"
-                                              :class="protocol.alerts_24h > 0 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-700 text-gray-400'"
-                                              x-text="protocol.alerts_24h"></span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-400" x-text="protocol.chains.length + ' chains'"></td>
-                                    <td class="px-4 py-3">
-                                        <span class="flex items-center space-x-2">
-                                            <span class="w-2 h-2 rounded-full"
-                                                  :class="{
-                                                      'bg-green-400': protocol.status === 'healthy',
-                                                      'bg-yellow-400': protocol.status === 'warning',
-                                                      'bg-red-400': protocol.status === 'critical'
-                                                  }"></span>
-                                            <span class="text-sm capitalize" x-text="protocol.status"></span>
-                                        </span>
-                                    </td>
+
+                <!-- Protocol Stats -->
+                <div class="grid-4 mb-24">
+                    <div class="glass stat-mini a-accent text-center">
+                        <div class="stat-lbl">Protocols Monitored</div>
+                        <div class="stat-num" style="color: var(--s3-accent-light);" x-text="protocolStats.total_protocols">0</div>
+                    </div>
+                    <div class="glass stat-mini a-low text-center">
+                        <div class="stat-lbl">Healthy</div>
+                        <div class="stat-num" style="color: var(--s3-low);" x-text="protocolStats.healthy_count">0</div>
+                    </div>
+                    <div class="glass stat-mini a-medium text-center">
+                        <div class="stat-lbl">Warning</div>
+                        <div class="stat-num" style="color: var(--s3-medium);" x-text="protocolStats.warning_count">0</div>
+                    </div>
+                    <div class="glass stat-mini a-critical text-center">
+                        <div class="stat-lbl">Critical</div>
+                        <div class="stat-num" style="color: var(--s3-critical);" x-text="protocolStats.critical_count">0</div>
+                    </div>
+                </div>
+
+                <!-- Protocol Comparison Table -->
+                <div class="glass mb-24" style="overflow: hidden;">
+                    <div class="panel-head">
+                        <div class="panel-title">
+                            <div class="panel-icon" style="background: rgba(139,92,246,0.12);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                            </div>
+                            Protocol Security Metrics
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="proto-table">
+                            <thead>
+                                <tr>
+                                    <th>Protocol</th>
+                                    <th>Type</th>
+                                    <th>Health Score</th>
+                                    <th>Events (24h)</th>
+                                    <th>Alerts (24h)</th>
+                                    <th>Chains</th>
+                                    <th>Status</th>
                                 </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <template x-for="protocol in protocols" :key="protocol.protocol_id">
+                                    <tr>
+                                        <td>
+                                            <div class="proto-name">
+                                                <span class="emoji" x-text="getProtocolIcon(protocol.protocol_id)"></span>
+                                                <span x-text="protocol.name"></span>
+                                            </div>
+                                        </td>
+                                        <td style="text-transform: capitalize;" x-text="protocol.type"></td>
+                                        <td>
+                                            <div class="health-score-row">
+                                                <div class="health-bar-track">
+                                                    <div class="health-bar-fill"
+                                                         :class="{
+                                                             'good': protocol.health_score >= 80,
+                                                             'warn': protocol.health_score >= 50 && protocol.health_score < 80,
+                                                             'bad': protocol.health_score < 50
+                                                         }"
+                                                         :style="'width: ' + protocol.health_score + '%'"></div>
+                                                </div>
+                                                <span class="font-mono" style="font-size: 12px;" x-text="protocol.health_score + '%'"></span>
+                                            </div>
+                                        </td>
+                                        <td class="font-mono" style="font-size: 12px;" x-text="protocol.events_24h"></td>
+                                        <td>
+                                            <span class="alert-badge"
+                                                  :class="protocol.alerts_24h > 0 ? 'warn' : 'ok'"
+                                                  x-text="protocol.alerts_24h"></span>
+                                        </td>
+                                        <td style="font-size: 12px;" x-text="protocol.chains.length + ' chains'"></td>
+                                        <td>
+                                            <span style="display: inline-flex; align-items: center;">
+                                                <span class="status-dot"
+                                                      :class="{
+                                                          'healthy': protocol.status === 'healthy',
+                                                          'warning': protocol.status === 'warning',
+                                                          'critical': protocol.status === 'critical'
+                                                      }"></span>
+                                                <span class="status-text" x-text="protocol.status"></span>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Protocol Charts -->
+                <div class="grid-2">
+                    <div class="glass">
+                        <div class="panel-head">
+                            <div class="panel-title">
+                                <div class="panel-icon" style="background: rgba(16,185,129,0.12);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-low)" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                                </div>
+                                Protocol Health Comparison
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <canvas id="protocolHealthChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="glass">
+                        <div class="panel-head">
+                            <div class="panel-title">
+                                <div class="panel-icon" style="background: rgba(139,92,246,0.12);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent)" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                </div>
+                                Events by Protocol (24h)
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <canvas id="protocolEventsChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <!-- Protocol Charts -->
-            <div class="grid grid-cols-2 gap-6">
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">🏆 Protocol Health Comparison</h3>
-                    <canvas id="protocolHealthChart" height="200"></canvas>
-                </div>
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">📈 Events by Protocol (24h)</h3>
-                    <canvas id="protocolEventsChart" height="200"></canvas>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Risk Scoring Tab -->
-        <div x-show="tab === 'risk' && !loading">
-            <div class="grid grid-cols-3 gap-6">
-                <!-- Risk Calculator -->
-                <div class="col-span-2">
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-4">🎯 Wallet Risk Scoring</h3>
-                        
-                        <div class="flex space-x-4 mb-6">
-                            <input 
-                                type="text" 
+
+            <!-- ═══════════════════════════════════════════════════
+                 RISK SCORING TAB
+                 ═══════════════════════════════════════════════════ -->
+            <div x-show="tab === 'risk' && !loading" x-cloak>
+                <div class="grid-1-2">
+                    <!-- Risk Calculator -->
+                    <div class="glass" style="padding: 24px;">
+                        <div class="panel-title" style="margin-bottom: 20px;">
+                            <div class="panel-icon" style="background: rgba(139,92,246,0.12);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            </div>
+                            Wallet Risk Scoring
+                        </div>
+
+                        <div class="risk-input-row">
+                            <input
+                                type="text"
                                 x-model="riskInput"
                                 placeholder="Enter wallet address (0x...)"
-                                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 font-mono text-sm"
+                                class="risk-input"
                                 @keyup.enter="calculateRisk()"
                             >
-                            <button 
+                            <button
                                 @click="calculateRisk()"
                                 :disabled="riskLoading"
-                                class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition disabled:opacity-50"
+                                class="btn-accent"
                             >
                                 <span x-show="!riskLoading">Analyze Risk</span>
-                                <span x-show="riskLoading" class="flex items-center">
-                                    <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                <span x-show="riskLoading" class="spinner">
+                                    <svg style="animation: spin 0.8s linear infinite;" width="18" height="18" viewBox="0 0 24 24">
+                                        <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                        <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
                                     Analyzing...
                                 </span>
                             </button>
                         </div>
-                        
+
                         <!-- Risk Result -->
-                        <div x-show="riskResult" class="space-y-6">
-                            <div class="flex items-center justify-between p-6 rounded-lg bg-gray-800/50">
+                        <div x-show="riskResult" class="gap-stack-lg">
+                            <div class="risk-result-box">
                                 <div>
-                                    <div class="text-sm text-gray-400 mb-1">Overall Risk Score</div>
-                                    <div 
-                                        class="risk-score"
+                                    <div style="font-size: 11px; color: var(--s3-text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Overall Risk Score</div>
+                                    <div
+                                        class="risk-score-num"
                                         :class="{
                                             'risk-critical': riskResult?.score >= 80,
                                             'risk-high': riskResult?.score >= 60 && riskResult?.score < 80,
@@ -375,51 +863,61 @@
                                         }"
                                         x-text="riskResult?.score"
                                     ></div>
-                                    <div class="text-sm mt-1" x-text="riskResult?.level"></div>
+                                    <div class="risk-level" x-text="riskResult?.level"></div>
                                 </div>
-                                <div class="text-right">
-                                    <div class="text-sm text-gray-400 mb-1">Address</div>
-                                    <div class="font-mono text-sm" x-text="riskResult?.address?.slice(0,10) + '...' + riskResult?.address?.slice(-8)"></div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 11px; color: var(--s3-text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Address</div>
+                                    <div class="risk-addr" x-text="riskResult?.address?.slice(0,10) + '...' + riskResult?.address?.slice(-8)"></div>
                                 </div>
                             </div>
-                            
+
                             <!-- Risk Factors -->
                             <div>
-                                <h4 class="font-semibold mb-3">📋 Risk Factors</h4>
-                                <div class="space-y-2">
+                                <div class="panel-title" style="margin-bottom: 14px;">
+                                    <div class="panel-icon" style="background: rgba(234,179,8,0.12);">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--s3-medium)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                    </div>
+                                    Risk Factors
+                                </div>
+                                <div class="gap-stack">
                                     <template x-for="factor in riskResult?.factors" :key="factor.name">
-                                        <div class="flex items-center justify-between p-3 rounded-lg bg-gray-800/30">
-                                            <div class="flex items-center space-x-3">
+                                        <div class="factor-row">
+                                            <div class="factor-left">
                                                 <span x-text="factor.icon"></span>
                                                 <span x-text="factor.name"></span>
                                             </div>
-                                            <div class="flex items-center space-x-4">
-                                                <div class="w-32 bg-gray-700 rounded-full h-2">
-                                                    <div 
-                                                        class="h-2 rounded-full"
+                                            <div class="factor-right">
+                                                <div class="factor-bar-track">
+                                                    <div
+                                                        class="factor-bar-fill"
                                                         :class="{
-                                                            'bg-red-500': factor.score >= 80,
-                                                            'bg-orange-500': factor.score >= 60 && factor.score < 80,
-                                                            'bg-yellow-500': factor.score >= 40 && factor.score < 60,
-                                                            'bg-green-500': factor.score < 40
+                                                            'crit': factor.score >= 80,
+                                                            'high': factor.score >= 60 && factor.score < 80,
+                                                            'med': factor.score >= 40 && factor.score < 60,
+                                                            'low': factor.score < 40
                                                         }"
                                                         :style="'width: ' + factor.score + '%'"
                                                     ></div>
                                                 </div>
-                                                <span class="font-mono text-sm w-8" x-text="factor.score"></span>
+                                                <span class="factor-score" x-text="factor.score"></span>
                                             </div>
                                         </div>
                                     </template>
                                 </div>
                             </div>
-                            
+
                             <!-- Recommendations -->
                             <div>
-                                <h4 class="font-semibold mb-3">💡 Recommendations</h4>
-                                <ul class="space-y-2">
+                                <div class="panel-title" style="margin-bottom: 14px;">
+                                    <div class="panel-icon" style="background: rgba(139,92,246,0.12);">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent)" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                                    </div>
+                                    Recommendations
+                                </div>
+                                <ul class="rec-list">
                                     <template x-for="rec in riskResult?.recommendations" :key="rec">
-                                        <li class="flex items-start space-x-2 text-sm text-gray-300">
-                                            <span class="text-purple-400">•</span>
+                                        <li>
+                                            <span class="bullet">&#x2022;</span>
                                             <span x-text="rec"></span>
                                         </li>
                                     </template>
@@ -427,44 +925,48 @@
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- High Risk Wallets -->
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">🚨 High Risk Wallets</h3>
-                    <div class="space-y-3">
-                        <!-- Empty state -->
-                        <div x-show="highRiskWallets.length === 0" class="text-center py-8 text-gray-500">
-                            <p>No high-risk wallets detected</p>
-                            <p class="text-xs mt-1">Wallets will appear here based on activity</p>
-                        </div>
-                        
-                        <template x-for="wallet in highRiskWallets" :key="wallet.address">
-                            <div 
-                                class="p-3 rounded-lg bg-gray-800/50 cursor-pointer hover:bg-gray-800 transition"
-                                @click="analyzeWallet(wallet.address)"
-                            >
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="font-mono text-xs" x-text="wallet.address.slice(0,8) + '...' + wallet.address.slice(-6)"></span>
-                                    <span 
-                                        class="text-sm font-bold"
-                                        :class="{
-                                            'text-red-400': wallet.score >= 80,
-                                            'text-orange-400': wallet.score >= 60,
-                                            'text-yellow-400': wallet.score >= 40,
-                                            'text-green-400': wallet.score < 40
-                                        }"
-                                        x-text="wallet.score"
-                                    ></span>
-                                </div>
-                                <div class="text-xs text-gray-400" x-text="wallet.reason"></div>
+
+                    <!-- High Risk Wallets -->
+                    <div class="glass" style="padding: 20px;">
+                        <div class="panel-title" style="margin-bottom: 16px;">
+                            <div class="panel-icon" style="background: rgba(244,63,94,0.12);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                             </div>
-                        </template>
+                            High Risk Wallets
+                        </div>
+                        <div class="gap-stack">
+                            <!-- Empty state -->
+                            <div x-show="highRiskWallets.length === 0" class="empty-state" style="padding: 32px 16px;">
+                                <p style="font-size: 13px; color: var(--s3-text-3);">No high-risk wallets detected</p>
+                                <p class="sub">Wallets will appear here based on activity</p>
+                            </div>
+
+                            <template x-for="wallet in highRiskWallets" :key="wallet.address">
+                                <div
+                                    class="wallet-item"
+                                    @click="analyzeWallet(wallet.address)"
+                                >
+                                    <div class="wallet-top">
+                                        <span class="wallet-addr" x-text="wallet.address.slice(0,8) + '...' + wallet.address.slice(-6)"></span>
+                                        <span
+                                            class="wallet-score"
+                                            :class="{
+                                                'risk-critical': wallet.score >= 80,
+                                                'risk-high': wallet.score >= 60,
+                                                'risk-medium': wallet.score >= 40,
+                                                'risk-low': wallet.score < 40
+                                            }"
+                                            x-text="wallet.score"
+                                        ></span>
+                                    </div>
+                                    <div class="wallet-reason" x-text="wallet.reason"></div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        </div>
+        </div><!-- /content-area -->
     </main>
 </div><!-- /app -->
 
@@ -485,7 +987,7 @@
                 riskLoading: false,
                 highRiskWallets: [],
                 charts: {},
-                
+
                 // Attack Patterns Data
                 attackStats: {
                     total_attacks: 0,
@@ -498,7 +1000,7 @@
                     labels: [],
                     data: []
                 },
-                
+
                 // Protocol Data
                 protocolStats: {
                     total_protocols: 0,
@@ -507,10 +1009,10 @@
                     critical_count: 0
                 },
                 protocols: [],
-                
+
                 async init() {
                     this.loading = true;
-                    
+
                     // Load all data in parallel
                     await Promise.all([
                         this.loadHistoricalStats(),
@@ -518,7 +1020,7 @@
                         this.loadAttackPatterns(),
                         this.loadProtocols()
                     ]);
-                    
+
                     this.$nextTick(() => {
                         try { this.initCharts(); } catch(e) { console.warn('Charts unavailable:', e.message); }
                     });
@@ -535,7 +1037,7 @@
                         });
                     });
                 },
-                
+
                 async loadHistoricalStats() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/historical?days=30');
@@ -553,7 +1055,7 @@
                         console.error('Failed to load historical stats:', e);
                     }
                 },
-                
+
                 async loadHighRiskWallets() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/risk/high-risk-wallets?limit=10');
@@ -567,8 +1069,12 @@
                         this.highRiskWallets = [];
                     }
                 },
-                
+
                 async initCharts() {
+                    // Chart.js global defaults for dark theme
+                    Chart.defaults.color = '#475569';
+                    Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+
                     // Load chart data from API
                     const [incidentsData, chainsData, typesData, valueData] = await Promise.all([
                         this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/incidents-over-time?days=30&granularity=day'),
@@ -576,7 +1082,7 @@
                         this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/by-type?days=30'),
                         this.fetchChartData((window.SENTINEL3_API_BASE || '') + '/api/analytics/charts/value-over-time?days=30')
                     ]);
-                    
+
                     // Incidents Over Time
                     const incidentsCtx = document.getElementById('incidentsChart');
                     if (incidentsCtx) {
@@ -588,22 +1094,27 @@
                                     label: 'Events',
                                     data: incidentsData.data || [0],
                                     borderColor: '#8b5cf6',
-                                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                    backgroundColor: 'rgba(139, 92, 246, 0.08)',
                                     fill: true,
-                                    tension: 0.4
+                                    tension: 0.4,
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    pointHoverRadius: 4,
+                                    pointHoverBackgroundColor: '#8b5cf6'
                                 }]
                             },
                             options: {
                                 responsive: true,
+                                maintainAspectRatio: false,
                                 plugins: { legend: { display: false } },
                                 scales: {
-                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
-                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', maxRotation: 45, font: { size: 10 } } },
+                                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', font: { size: 10 } }, beginAtZero: true }
                                 }
                             }
                         });
                     }
-                    
+
                     // Chains Distribution
                     const chainsCtx = document.getElementById('chainsChart');
                     if (chainsCtx) {
@@ -613,16 +1124,21 @@
                                 labels: chainsData.labels || ['No Data'],
                                 datasets: [{
                                     data: chainsData.data || [1],
-                                    backgroundColor: chainsData.colors || ['#888888']
+                                    backgroundColor: chainsData.colors || ['rgba(255,255,255,0.08)'],
+                                    borderWidth: 0,
+                                    hoverBorderWidth: 2,
+                                    hoverBorderColor: 'rgba(255,255,255,0.2)'
                                 }]
                             },
                             options: {
                                 responsive: true,
-                                plugins: { legend: { position: 'right', labels: { color: '#888' } } }
+                                maintainAspectRatio: false,
+                                cutout: '65%',
+                                plugins: { legend: { position: 'right', labels: { color: '#94a3b8', padding: 12, font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8 } } }
                             }
                         });
                     }
-                    
+
                     // Attack Types
                     const typesCtx = document.getElementById('attackTypesChart');
                     if (typesCtx) {
@@ -633,20 +1149,24 @@
                                 datasets: [{
                                     label: 'Count',
                                     data: typesData.data || [0],
-                                    backgroundColor: typesData.colors || ['#8b5cf6']
+                                    backgroundColor: typesData.colors || ['rgba(139,92,246,0.5)'],
+                                    borderRadius: 6,
+                                    borderSkipped: false,
+                                    maxBarThickness: 40
                                 }]
                             },
                             options: {
                                 responsive: true,
+                                maintainAspectRatio: false,
                                 plugins: { legend: { display: false } },
                                 scales: {
-                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } },
-                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', font: { size: 10 } } },
+                                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', font: { size: 10 } }, beginAtZero: true }
                                 }
                             }
                         });
                     }
-                    
+
                     // Value Over Time
                     const valueCtx = document.getElementById('valueChart');
                     if (valueCtx) {
@@ -657,24 +1177,29 @@
                                 datasets: [{
                                     label: 'Value at Risk ($)',
                                     data: valueData.data || [0],
-                                    borderColor: '#ff3b3b',
-                                    backgroundColor: 'rgba(255, 59, 59, 0.1)',
+                                    borderColor: '#f43f5e',
+                                    backgroundColor: 'rgba(244, 63, 94, 0.06)',
                                     fill: true,
-                                    tension: 0.4
+                                    tension: 0.4,
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    pointHoverRadius: 4,
+                                    pointHoverBackgroundColor: '#f43f5e'
                                 }]
                             },
                             options: {
                                 responsive: true,
+                                maintainAspectRatio: false,
                                 plugins: { legend: { display: false } },
                                 scales: {
-                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
-                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, beginAtZero: true }
+                                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', maxRotation: 45, font: { size: 10 } } },
+                                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', font: { size: 10 } }, beginAtZero: true }
                                 }
                             }
                         });
                     }
                 },
-                
+
                 async fetchChartData(url) {
                     try {
                         const res = await fetch(url);
@@ -686,17 +1211,17 @@
                     }
                     return { labels: [], data: [], colors: [] };
                 },
-                
+
                 async calculateRisk() {
                     const address = this.riskInput.trim();
                     if (!address) {
                         alert('Please enter a wallet address');
                         return;
                     }
-                    
+
                     this.riskLoading = true;
                     this.riskResult = null;
-                    
+
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + `/api/analytics/risk/score/${encodeURIComponent(address)}`);
                         if (res.ok) {
@@ -712,12 +1237,12 @@
                         this.riskLoading = false;
                     }
                 },
-                
+
                 analyzeWallet(address) {
                     this.riskInput = address;
                     this.calculateRisk();
                 },
-                
+
                 async loadAttackPatterns() {
                     // Load attack patterns from API - use REAL data only
                     try {
@@ -732,7 +1257,7 @@
                             };
                             this.attackPatterns = data.patterns || [];
                             this.attackTimeline = data.timeline || { labels: [], data: [] };
-                            
+
                             // Log if we got real data
                             if (this.attackStats.total_attacks > 0) {
                                 console.log('Loaded real attack pattern data:', this.attackStats);
@@ -751,7 +1276,7 @@
                         this.attackTimeline = { labels: [], data: [] };
                     }
                 },
-                
+
                 async loadProtocols() {
                     try {
                         const res = await fetch((window.SENTINEL3_API_BASE || '') + '/api/protocols/dashboard');
@@ -763,7 +1288,7 @@
                     } catch (e) {
                         console.error('Failed to load protocols:', e);
                     }
-                    
+
                     // Use defaults if none loaded
                     if (this.protocols.length === 0) {
                         this.protocols = [
@@ -774,19 +1299,19 @@
                         this.protocolStats = { total_protocols: 3, healthy_count: 2, warning_count: 1, critical_count: 0 };
                     }
                 },
-                
+
                 initAttackCharts() {
                     const ctx = document.getElementById('attackTimelineChart');
                     if (!ctx || this.charts.attackTimeline) return;
-                    
+
                     // Use real timeline data from API (or empty if no data)
-                    const labels = this.attackTimeline.labels.length > 0 
-                        ? this.attackTimeline.labels 
+                    const labels = this.attackTimeline.labels.length > 0
+                        ? this.attackTimeline.labels
                         : this.generateEmptyTimelineLabels(30);
-                    const data = this.attackTimeline.data.length > 0 
-                        ? this.attackTimeline.data 
+                    const data = this.attackTimeline.data.length > 0
+                        ? this.attackTimeline.data
                         : new Array(30).fill(0);
-                    
+
                     this.charts.attackTimeline = new Chart(ctx, {
                         type: 'bar',
                         data: {
@@ -794,14 +1319,17 @@
                             datasets: [{
                                 label: 'Attacks',
                                 data: data,
-                                backgroundColor: data.some(v => v > 0) ? 'rgba(255, 59, 59, 0.6)' : 'rgba(59, 255, 126, 0.3)',
-                                borderColor: data.some(v => v > 0) ? '#ff3b3b' : '#3bff7e',
-                                borderWidth: 1
+                                backgroundColor: data.some(v => v > 0) ? 'rgba(244, 63, 94, 0.5)' : 'rgba(16, 185, 129, 0.2)',
+                                borderColor: data.some(v => v > 0) ? '#f43f5e' : '#10b981',
+                                borderWidth: 1,
+                                borderRadius: 4,
+                                maxBarThickness: 20
                             }]
                         },
                         options: {
                             responsive: true,
-                            plugins: { 
+                            maintainAspectRatio: false,
+                            plugins: {
                                 legend: { display: false },
                                 tooltip: {
                                     callbacks: {
@@ -813,16 +1341,17 @@
                                 }
                             },
                             scales: {
-                                x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888', maxRotation: 45 } },
-                                y: { 
-                                    grid: { color: '#2a2a3a' }, 
-                                    ticks: { 
-                                        color: '#888',
+                                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', maxRotation: 45, font: { size: 10 } } },
+                                y: {
+                                    grid: { color: 'rgba(255,255,255,0.03)' },
+                                    ticks: {
+                                        color: '#475569',
                                         stepSize: 1,
+                                        font: { size: 10 },
                                         callback: function(value) {
                                             if (Number.isInteger(value)) return value;
                                         }
-                                    }, 
+                                    },
                                     beginAtZero: true,
                                     suggestedMax: Math.max(...data, 1)
                                 }
@@ -830,7 +1359,7 @@
                         }
                     });
                 },
-                
+
                 generateEmptyTimelineLabels(days) {
                     const labels = [];
                     for (let i = days - 1; i >= 0; i--) {
@@ -840,7 +1369,7 @@
                     }
                     return labels;
                 },
-                
+
                 initProtocolCharts() {
                     // Health Chart
                     const healthCtx = document.getElementById('protocolHealthChart');
@@ -852,25 +1381,28 @@
                                 datasets: [{
                                     label: 'Health Score',
                                     data: this.protocols.map(p => p.health_score),
-                                    backgroundColor: this.protocols.map(p => 
-                                        p.health_score >= 80 ? 'rgba(59, 255, 126, 0.6)' :
-                                        p.health_score >= 50 ? 'rgba(255, 217, 59, 0.6)' : 'rgba(255, 59, 59, 0.6)'
+                                    backgroundColor: this.protocols.map(p =>
+                                        p.health_score >= 80 ? 'rgba(16, 185, 129, 0.5)' :
+                                        p.health_score >= 50 ? 'rgba(234, 179, 8, 0.5)' : 'rgba(244, 63, 94, 0.5)'
                                     ),
-                                    borderWidth: 0
+                                    borderRadius: 6,
+                                    borderSkipped: false,
+                                    maxBarThickness: 28
                                 }]
                             },
                             options: {
                                 indexAxis: 'y',
                                 responsive: true,
+                                maintainAspectRatio: false,
                                 plugins: { legend: { display: false } },
                                 scales: {
-                                    x: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' }, max: 100 },
-                                    y: { grid: { color: '#2a2a3a' }, ticks: { color: '#888' } }
+                                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', font: { size: 10 } }, max: 100 },
+                                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8', font: { size: 11 } } }
                                 }
                             }
                         });
                     }
-                    
+
                     // Events Chart
                     const eventsCtx = document.getElementById('protocolEventsChart');
                     if (eventsCtx && !this.charts.protocolEvents) {
@@ -880,29 +1412,34 @@
                                 labels: this.protocols.map(p => p.name),
                                 datasets: [{
                                     data: this.protocols.map(p => p.events_24h),
-                                    backgroundColor: ['#8b5cf6', '#3b8aff', '#3bff7e', '#ffd93b', '#ff8a3b', '#ff3b3b']
+                                    backgroundColor: ['#8b5cf6', '#22d3ee', '#10b981', '#eab308', '#f97316', '#f43f5e'],
+                                    borderWidth: 0,
+                                    hoverBorderWidth: 2,
+                                    hoverBorderColor: 'rgba(255,255,255,0.2)'
                                 }]
                             },
                             options: {
                                 responsive: true,
-                                plugins: { legend: { position: 'right', labels: { color: '#888' } } }
+                                maintainAspectRatio: false,
+                                cutout: '65%',
+                                plugins: { legend: { position: 'right', labels: { color: '#94a3b8', padding: 12, font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8 } } }
                             }
                         });
                     }
                 },
-                
+
                 getProtocolIcon(protocolId) {
                     const icons = {
-                        'aave_v3': '👻',
-                        'uniswap': '🦄',
-                        'compound': '🏦',
-                        'curve': '🌀',
-                        'lido': '🌊',
-                        'makerdao': '🏛️'
+                        'aave_v3': '\u{1F47B}',
+                        'uniswap': '\u{1F984}',
+                        'compound': '\u{1F3E6}',
+                        'curve': '\u{1F300}',
+                        'lido': '\u{1F30A}',
+                        'makerdao': '\u{1F3DB}\uFE0F'
                     };
-                    return icons[protocolId] || '📊';
+                    return icons[protocolId] || '\u{1F4CA}';
                 },
-                
+
                 formatUSD(amount) {
                     if (!amount) return '$0';
                     if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M';
@@ -912,6 +1449,7 @@
             }
         }
     </script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
 </body>
 </html>
-

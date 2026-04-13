@@ -3,314 +3,883 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cross-chain Monitoring - Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
+    <title>Cross-Chain Monitoring - Sentinel3</title>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-red: #ff3b3b;
-            --accent-orange: #ff8a3b;
-            --accent-yellow: #ffd93b;
-            --accent-green: #3bff7e;
-            --accent-blue: #3b8aff;
-            --accent-purple: #8a3bff;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --border-color: #2a2a3a;
-        }
-        
+        /* ── Page-specific styles (design tokens from nav.js) ── */
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
-        
-        .font-mono {
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* ── Main content area ── */
+        .cc-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* ── Top header bar ── */
+        .cc-header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: rgba(3, 3, 5, 0.7);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--s3-border);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .cc-header-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--s3-text);
+            letter-spacing: -0.01em;
+        }
+        .cc-header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .cc-header-ts {
+            font-size: 11px;
+            color: var(--s3-text-3);
             font-family: 'JetBrains Mono', monospace;
         }
-        
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
+        .cc-refresh-btn {
+            padding: 7px 18px;
+            background: var(--s3-accent);
+            color: #fff;
+            border: none;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .cc-refresh-btn:hover {
+            background: var(--s3-accent-light);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
+        }
+
+        /* ── Content wrapper ── */
+        .cc-content {
+            padding: 28px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ── Page heading ── */
+        .cc-page-heading {
+            margin-bottom: 28px;
+        }
+        .cc-page-heading h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--s3-text);
+            letter-spacing: -0.02em;
+            margin-bottom: 6px;
+        }
+        .cc-page-heading p {
+            font-size: 13px;
+            color: var(--s3-text-2);
+            line-height: 1.5;
+        }
+
+        /* ── Critical alert banner ── */
+        .cc-alert-banner {
+            background: rgba(244, 63, 94, 0.06);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            border-radius: var(--s3-radius);
+            padding: 16px 20px;
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .cc-alert-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .cc-alert-icon {
+            width: 44px;
+            height: 44px;
             border-radius: 12px;
+            background: rgba(244, 63, 94, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            animation: cc-pulse-ring 2.5s ease-in-out infinite;
         }
-        
-        .violation-card {
-            transition: all 0.3s ease;
+        @keyframes cc-pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.3); }
+            50% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
         }
-        
-        .violation-card:hover {
-            transform: translateX(4px);
-            border-left-width: 4px;
+        .cc-alert-text h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-critical);
         }
-        
-        .severity-critical { border-left-color: var(--accent-red); }
-        .severity-high { border-left-color: var(--accent-orange); }
-        .severity-medium { border-left-color: var(--accent-yellow); }
-        .severity-low { border-left-color: var(--accent-green); }
-        
-        .bridge-flow {
-            background: linear-gradient(90deg, transparent, rgba(138, 59, 255, 0.1), transparent);
+        .cc-alert-text p {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            margin-top: 2px;
         }
-        
-        .pulse-ring {
-            animation: pulse-ring 2s infinite;
+        .cc-alert-action {
+            padding: 8px 20px;
+            background: var(--s3-critical);
+            color: #fff;
+            border: none;
+            border-radius: var(--s3-radius-sm);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
         }
-        
-        @keyframes pulse-ring {
-            0% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(255, 59, 59, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
+        .cc-alert-action:hover {
+            background: #e11d48;
+            box-shadow: 0 0 20px rgba(244, 63, 94, 0.3);
+        }
+
+        /* ── Stats grid ── */
+        .cc-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+        @media (max-width: 1200px) {
+            .cc-stats-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 700px) {
+            .cc-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .cc-stat-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 18px 16px;
+            text-align: center;
+            transition: all 0.25s;
+            position: relative;
+            overflow: hidden;
+        }
+        .cc-stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            border-radius: 2px 2px 0 0;
+            opacity: 0.6;
+        }
+        .cc-stat-card:hover {
+            border-color: var(--s3-border-hover, rgba(255,255,255,0.12));
+            transform: translateY(-2px);
+        }
+        .cc-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+        }
+        .cc-stat-label {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+        }
+
+        /* Stat color accents */
+        .cc-stat-card.stat-events::before { background: var(--s3-cyan); }
+        .cc-stat-card.stat-events .cc-stat-value { color: var(--s3-cyan); }
+
+        .cc-stat-card.stat-locks::before { background: var(--s3-low); }
+        .cc-stat-card.stat-locks .cc-stat-value { color: var(--s3-low); }
+
+        .cc-stat-card.stat-mints::before { background: var(--s3-accent); }
+        .cc-stat-card.stat-mints .cc-stat-value { color: var(--s3-accent-light); }
+
+        .cc-stat-card.stat-corr::before { background: #818cf8; }
+        .cc-stat-card.stat-corr .cc-stat-value { color: #818cf8; }
+
+        .cc-stat-card.stat-orphan::before { background: var(--s3-medium); }
+        .cc-stat-card.stat-orphan .cc-stat-value { color: var(--s3-medium); }
+
+        .cc-stat-card.stat-violations::before { background: var(--s3-critical); }
+        .cc-stat-card.stat-violations .cc-stat-value { color: var(--s3-critical); }
+
+        /* ── Main grid layout ── */
+        .cc-main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 1024px) {
+            .cc-main-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Glass card shared ── */
+        .cc-glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            overflow: hidden;
+        }
+        .cc-glass-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .cc-glass-header h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+
+        /* ── Filter pills ── */
+        .cc-filter-pills {
+            display: flex;
+            gap: 6px;
+        }
+        .cc-pill {
+            padding: 5px 14px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid var(--s3-border);
+            background: transparent;
+            color: var(--s3-text-3);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .cc-pill:hover {
+            border-color: var(--s3-border-hover, rgba(255,255,255,0.12));
+            color: var(--s3-text-2);
+        }
+        .cc-pill.active-all {
+            background: var(--s3-accent-dim);
+            border-color: var(--s3-accent);
+            color: var(--s3-accent-light);
+        }
+        .cc-pill.active-critical {
+            background: rgba(244, 63, 94, 0.12);
+            border-color: var(--s3-critical);
+            color: var(--s3-critical);
+        }
+        .cc-pill.active-high {
+            background: rgba(249, 115, 22, 0.12);
+            border-color: var(--s3-high);
+            color: var(--s3-high);
+        }
+
+        /* ── Empty state ── */
+        .cc-empty-state {
+            padding: 48px 20px;
+            text-align: center;
+        }
+        .cc-empty-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: rgba(16, 185, 129, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px;
+            font-size: 24px;
+        }
+        .cc-empty-state h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--s3-low);
+            margin-bottom: 6px;
+        }
+        .cc-empty-state p {
+            font-size: 12px;
+            color: var(--s3-text-3);
+        }
+
+        /* ── Violation rows ── */
+        .cc-violation-row {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--s3-border);
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .cc-violation-row:last-child { border-bottom: none; }
+        .cc-violation-row:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .cc-violation-row.sev-critical {
+            border-left-color: var(--s3-critical);
+        }
+        .cc-violation-row.sev-critical:hover {
+            background: rgba(244, 63, 94, 0.04);
+        }
+        .cc-violation-row.sev-high {
+            border-left-color: var(--s3-high);
+        }
+        .cc-violation-row.sev-high:hover {
+            background: rgba(249, 115, 22, 0.04);
+        }
+        .cc-violation-row.sev-medium {
+            border-left-color: var(--s3-medium);
+        }
+        .cc-violation-row.sev-medium:hover {
+            background: rgba(234, 179, 8, 0.04);
+        }
+
+        .cc-violation-left {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .cc-violation-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: var(--s3-radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .cc-violation-icon.icon-critical { background: rgba(244, 63, 94, 0.1); }
+        .cc-violation-icon.icon-high { background: rgba(249, 115, 22, 0.1); }
+        .cc-violation-icon.icon-medium { background: rgba(234, 179, 8, 0.1); }
+
+        .cc-violation-info h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 3px;
+        }
+        .cc-violation-info .cc-desc {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            line-height: 1.4;
+            margin-bottom: 6px;
+        }
+        .cc-violation-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* ── Chain badges ── */
+        .cc-chain-flow {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cc-chain-badge {
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .cc-chain-src {
+            background: rgba(34, 211, 238, 0.1);
+            color: var(--s3-cyan);
+            border: 1px solid rgba(34, 211, 238, 0.2);
+        }
+        .cc-chain-dst {
+            background: rgba(139, 92, 246, 0.1);
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+        .cc-chain-arrow {
+            color: var(--s3-text-3);
+            font-size: 10px;
+        }
+        .cc-bridge-tag {
+            font-size: 10px;
+            color: var(--s3-text-3);
+            padding: 1px 6px;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cc-violation-right {
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .cc-loss-amount {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cc-loss-amount.loss-critical { color: var(--s3-critical); }
+        .cc-loss-amount.loss-high { color: var(--s3-high); }
+        .cc-loss-amount.loss-medium { color: var(--s3-medium); }
+
+        .cc-violation-time {
+            font-size: 10px;
+            color: var(--s3-text-3);
+            margin-top: 3px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Sidebar panels ── */
+        .cc-sidebar-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ── Bridge health items ── */
+        .cc-bridge-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            transition: all 0.2s;
+        }
+        .cc-bridge-item:hover {
+            border-color: var(--s3-border-hover, rgba(255,255,255,0.12));
+            background: rgba(255, 255, 255, 0.035);
+        }
+        .cc-bridge-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .cc-bridge-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        .cc-bridge-icon.status-healthy {
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .cc-bridge-icon.status-warning {
+            background: rgba(234, 179, 8, 0.1);
+        }
+        .cc-bridge-icon.status-critical {
+            background: rgba(244, 63, 94, 0.1);
+        }
+        .cc-bridge-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--s3-text);
+            text-transform: capitalize;
+        }
+        .cc-bridge-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .cc-bridge-score {
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--s3-text-2);
+        }
+        .cc-bridge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .cc-bridge-dot.dot-healthy { background: var(--s3-low); box-shadow: 0 0 6px rgba(16, 185, 129, 0.4); }
+        .cc-bridge-dot.dot-warning { background: var(--s3-medium); box-shadow: 0 0 6px rgba(234, 179, 8, 0.4); }
+        .cc-bridge-dot.dot-critical { background: var(--s3-critical); box-shadow: 0 0 6px rgba(244, 63, 94, 0.4); animation: cc-pulse-ring 2s infinite; }
+
+        .cc-bridges-list {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* ── Pending correlations ── */
+        .cc-pending-body {
+            padding: 18px 20px;
+        }
+        .cc-pending-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+        .cc-pending-label {
+            font-size: 13px;
+            color: var(--s3-text-2);
+        }
+        .cc-pending-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cc-pending-value.val-locks { color: var(--s3-cyan); }
+        .cc-pending-value.val-mints { color: var(--s3-accent-light); }
+
+        .cc-pending-warning {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--s3-border);
+            font-size: 11px;
+            color: var(--s3-text-3);
+            line-height: 1.5;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .cc-pending-warning svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            color: var(--s3-medium);
+            margin-top: 1px;
+        }
+
+        /* ── Violation types legend ── */
+        .cc-legend-body {
+            padding: 14px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .cc-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .cc-legend-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--s3-radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--s3-border);
+        }
+        .cc-legend-text {
+            flex: 1;
+        }
+        .cc-legend-text .cc-legend-name {
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .cc-legend-text .cc-legend-desc {
+            font-size: 10px;
+            color: var(--s3-text-3);
+            margin-top: 1px;
+        }
+
+        /* Severity dot for section header */
+        .cc-section-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
         }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 <div id="app" x-data="crossChainDashboard()" x-init="init()">
     <!-- Main Content (sidebar injected by nav.js) -->
-    <main>
-        <!-- Top Bar -->
-        <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-            <div class="flex items-center justify-between">
-                <h1 class="text-lg font-semibold">Cross-chain Monitoring</h1>
-                <div class="flex items-center space-x-4">
-                    <span class="text-xs text-zinc-500" x-text="lastUpdated"></span>
-                    <button @click="refresh()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition">
-                        Refresh
-                    </button>
-                </div>
+    <main class="cc-main">
+        <!-- Top Header Bar -->
+        <header class="cc-header">
+            <span class="cc-header-title">Cross-Chain Monitoring</span>
+            <div class="cc-header-right">
+                <span class="cc-header-ts" x-text="lastUpdated"></span>
+                <button @click="refresh()" class="cc-refresh-btn">Refresh</button>
             </div>
         </header>
 
-        <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold mb-2">Cross-chain Monitoring</h1>
-            <p class="text-gray-400">Real-time bridge correlation and attack detection (Wormhole, LayerZero, Stargate, etc.)</p>
-        </div>
+        <div class="cc-content">
+            <!-- Page Heading -->
+            <div class="cc-page-heading">
+                <h1>Cross-Chain Monitoring</h1>
+                <p>Real-time bridge correlation and attack detection across Wormhole, LayerZero, Stargate, and more</p>
+            </div>
 
-        <!-- Alert Banner for Critical Violations -->
-        <div x-show="stats.critical_violations > 0" 
-             class="bg-red-500/10 border border-red-500/50 rounded-xl p-4 mb-8 flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center pulse-ring">
-                    <span class="text-2xl">🚨</span>
+            <!-- Critical Alert Banner -->
+            <div x-show="stats.critical_violations > 0" class="cc-alert-banner">
+                <div class="cc-alert-left">
+                    <div class="cc-alert-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--s3-critical);">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    </div>
+                    <div class="cc-alert-text">
+                        <h3>Critical Violations Detected</h3>
+                        <p x-text="stats.critical_violations + ' potential attack(s) require immediate attention'"></p>
+                    </div>
                 </div>
-                <div>
-                    <h3 class="font-semibold text-red-400">Critical Violations Detected!</h3>
-                    <p class="text-sm text-gray-400" x-text="stats.critical_violations + ' potential attack(s) require immediate attention'"></p>
+                <button @click="showViolations('critical')" class="cc-alert-action">View Details</button>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="cc-stats-grid">
+                <div class="cc-stat-card stat-events">
+                    <div class="cc-stat-value" x-text="formatNumber(stats.events_processed)"></div>
+                    <div class="cc-stat-label">Events Processed</div>
+                </div>
+                <div class="cc-stat-card stat-locks">
+                    <div class="cc-stat-value" x-text="stats.locks_received"></div>
+                    <div class="cc-stat-label">Locks Received</div>
+                </div>
+                <div class="cc-stat-card stat-mints">
+                    <div class="cc-stat-value" x-text="stats.mints_received"></div>
+                    <div class="cc-stat-label">Mints Received</div>
+                </div>
+                <div class="cc-stat-card stat-corr">
+                    <div class="cc-stat-value" x-text="stats.correlations_matched"></div>
+                    <div class="cc-stat-label">Correlations</div>
+                </div>
+                <div class="cc-stat-card stat-orphan">
+                    <div class="cc-stat-value" x-text="stats.orphan_mints"></div>
+                    <div class="cc-stat-label">Orphan Mints</div>
+                </div>
+                <div class="cc-stat-card stat-violations">
+                    <div class="cc-stat-value" x-text="stats.violations_detected"></div>
+                    <div class="cc-stat-label">Violations</div>
                 </div>
             </div>
-            <button @click="showViolations('critical')" class="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-medium transition">
-                View Details
-            </button>
-        </div>
 
-        <!-- Stats Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
-            <div class="card p-4 text-center">
-                <div class="text-2xl font-bold text-blue-400" x-text="formatNumber(stats.events_processed)"></div>
-                <div class="text-xs text-gray-400 mt-1">Events Processed</div>
-            </div>
-            <div class="card p-4 text-center">
-                <div class="text-2xl font-bold text-green-400" x-text="stats.locks_received"></div>
-                <div class="text-xs text-gray-400 mt-1">Locks Received</div>
-            </div>
-            <div class="card p-4 text-center">
-                <div class="text-2xl font-bold text-purple-400" x-text="stats.mints_received"></div>
-                <div class="text-xs text-gray-400 mt-1">Mints Received</div>
-            </div>
-            <div class="card p-4 text-center">
-                <div class="text-2xl font-bold text-cyan-400" x-text="stats.correlations_matched"></div>
-                <div class="text-xs text-gray-400 mt-1">Correlations</div>
-            </div>
-            <div class="card p-4 text-center">
-                <div class="text-2xl font-bold text-yellow-400" x-text="stats.orphan_mints"></div>
-                <div class="text-xs text-gray-400 mt-1">Orphan Mints ⚠️</div>
-            </div>
-            <div class="card p-4 text-center">
-                <div class="text-2xl font-bold text-red-400" x-text="stats.violations_detected"></div>
-                <div class="text-xs text-gray-400 mt-1">Violations</div>
-            </div>
-        </div>
-
-        <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Violations List -->
-            <div class="lg:col-span-2">
-                <div class="card">
-                    <div class="p-4 border-b border-gray-700 flex items-center justify-between">
-                        <h2 class="text-lg font-semibold">Detected Violations</h2>
-                        <div class="flex space-x-2">
-                            <button @click="severityFilter = null" 
-                                    :class="severityFilter === null ? 'bg-purple-600' : 'bg-gray-700'"
-                                    class="px-3 py-1 rounded text-xs font-medium transition">All</button>
-                            <button @click="severityFilter = 'critical'" 
-                                    :class="severityFilter === 'critical' ? 'bg-red-600' : 'bg-gray-700'"
-                                    class="px-3 py-1 rounded text-xs font-medium transition">Critical</button>
-                            <button @click="severityFilter = 'high'" 
-                                    :class="severityFilter === 'high' ? 'bg-orange-600' : 'bg-gray-700'"
-                                    class="px-3 py-1 rounded text-xs font-medium transition">High</button>
+            <!-- Main Content Grid -->
+            <div class="cc-main-grid">
+                <!-- Violations List -->
+                <div class="cc-glass">
+                    <div class="cc-glass-header">
+                        <h2>Detected Violations</h2>
+                        <div class="cc-filter-pills">
+                            <button @click="severityFilter = null"
+                                    :class="severityFilter === null ? 'active-all' : ''"
+                                    class="cc-pill">All</button>
+                            <button @click="severityFilter = 'critical'"
+                                    :class="severityFilter === 'critical' ? 'active-critical' : ''"
+                                    class="cc-pill">Critical</button>
+                            <button @click="severityFilter = 'high'"
+                                    :class="severityFilter === 'high' ? 'active-high' : ''"
+                                    class="cc-pill">High</button>
                         </div>
                     </div>
-                    
-                    <div class="divide-y divide-gray-700">
-                        <template x-if="filteredViolations.length === 0">
-                            <div class="p-8 text-center">
-                                <div class="text-4xl mb-4">✅</div>
-                                <h3 class="text-lg font-semibold text-green-400 mb-2">No Violations Detected</h3>
-                                <p class="text-gray-400 text-sm">All cross-chain transfers are correlating correctly</p>
+
+                    <!-- Empty State -->
+                    <template x-if="filteredViolations.length === 0">
+                        <div class="cc-empty-state">
+                            <div class="cc-empty-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--s3-low);">
+                                    <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
                             </div>
-                        </template>
-                        
+                            <h3>No Violations Detected</h3>
+                            <p>All cross-chain transfers are correlating correctly</p>
+                        </div>
+                    </template>
+
+                    <!-- Violation Rows -->
+                    <div>
                         <template x-for="violation in filteredViolations" :key="violation.id">
-                            <div class="p-4 violation-card border-l-2"
-                                 :class="'severity-' + violation.severity"
+                            <div class="cc-violation-row"
+                                 :class="'sev-' + violation.severity"
                                  @click="showViolationDetails(violation)">
-                                <div class="flex items-start justify-between">
-                                    <div class="flex items-start space-x-3">
-                                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
-                                             :class="{
-                                                 'bg-red-500/20': violation.severity === 'critical',
-                                                 'bg-orange-500/20': violation.severity === 'high',
-                                                 'bg-yellow-500/20': violation.severity === 'medium'
-                                             }">
-                                            <span x-text="getViolationIcon(violation.violation_type)"></span>
-                                        </div>
-                                        <div>
-                                            <h4 class="font-medium" x-text="getViolationTitle(violation.violation_type)"></h4>
-                                            <p class="text-sm text-gray-400 mt-1" x-text="violation.description"></p>
-                                            <div class="flex items-center space-x-4 mt-2 text-xs">
-                                                <span class="text-gray-500">
-                                                    <span class="text-blue-400" x-text="violation.source_chain"></span>
-                                                    →
-                                                    <span class="text-purple-400" x-text="violation.dest_chain"></span>
-                                                </span>
-                                                <span class="text-gray-500" x-text="violation.bridge_id"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="text-right">
-                                        <div class="text-sm font-mono"
-                                             :class="{
-                                                 'text-red-400': violation.severity === 'critical',
-                                                 'text-orange-400': violation.severity === 'high',
-                                                 'text-yellow-400': violation.severity === 'medium'
-                                             }"
-                                             x-text="'$' + formatNumber(violation.estimated_loss_usd)"></div>
-                                        <div class="text-xs text-gray-500 mt-1" x-text="formatTime(violation.timestamp)"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sidebar -->
-            <div class="space-y-6">
-                <!-- Bridge Health -->
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">Bridge Health</h3>
-                    <div class="space-y-3">
-                        <template x-for="bridge in bridges" :key="bridge.bridge_id">
-                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                                <div class="flex items-center space-x-3">
-                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                                <div class="cc-violation-left">
+                                    <div class="cc-violation-icon"
                                          :class="{
-                                             'bg-green-500/20 text-green-400': bridge.status === 'healthy',
-                                             'bg-yellow-500/20 text-yellow-400': bridge.status === 'warning',
-                                             'bg-red-500/20 text-red-400': bridge.status === 'critical'
+                                             'icon-critical': violation.severity === 'critical',
+                                             'icon-high': violation.severity === 'high',
+                                             'icon-medium': violation.severity === 'medium'
                                          }">
-                                        <span x-text="getBridgeIcon(bridge.bridge_id)"></span>
+                                        <span x-text="getViolationIcon(violation.violation_type)"></span>
                                     </div>
-                                    <span class="font-medium capitalize" x-text="bridge.bridge_id"></span>
+                                    <div class="cc-violation-info">
+                                        <h4 x-text="getViolationTitle(violation.violation_type)"></h4>
+                                        <div class="cc-desc" x-text="violation.description"></div>
+                                        <div class="cc-violation-meta">
+                                            <span class="cc-chain-flow">
+                                                <span class="cc-chain-badge cc-chain-src" x-text="violation.source_chain"></span>
+                                                <span class="cc-chain-arrow">&#8594;</span>
+                                                <span class="cc-chain-badge cc-chain-dst" x-text="violation.dest_chain"></span>
+                                            </span>
+                                            <span class="cc-bridge-tag" x-text="violation.bridge_id"></span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-sm font-mono" x-text="bridge.health_score + '%'"></span>
-                                    <span class="w-2 h-2 rounded-full"
-                                          :class="{
-                                              'bg-green-400': bridge.status === 'healthy',
-                                              'bg-yellow-400': bridge.status === 'warning',
-                                              'bg-red-400': bridge.status === 'critical'
-                                          }"></span>
+                                <div class="cc-violation-right">
+                                    <div class="cc-loss-amount"
+                                         :class="{
+                                             'loss-critical': violation.severity === 'critical',
+                                             'loss-high': violation.severity === 'high',
+                                             'loss-medium': violation.severity === 'medium'
+                                         }"
+                                         x-text="'$' + formatNumber(violation.estimated_loss_usd)"></div>
+                                    <div class="cc-violation-time" x-text="formatTime(violation.timestamp)"></div>
                                 </div>
                             </div>
                         </template>
                     </div>
                 </div>
 
-                <!-- Pending Correlations -->
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">Pending Correlations</h3>
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Pending Locks</span>
-                            <span class="text-xl font-bold text-blue-400" x-text="stats.pending_locks"></span>
+                <!-- Sidebar -->
+                <div class="cc-sidebar-stack">
+                    <!-- Bridge Health -->
+                    <div class="cc-glass">
+                        <div class="cc-glass-header">
+                            <h2>Bridge Health</h2>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Pending Mints</span>
-                            <span class="text-xl font-bold text-purple-400" x-text="stats.pending_mints"></span>
-                        </div>
-                        <div class="pt-4 border-t border-gray-700">
-                            <p class="text-xs text-gray-500">
-                                ⚠️ High pending mints without locks may indicate an attack in progress
-                            </p>
+                        <div class="cc-bridges-list">
+                            <template x-for="bridge in bridges" :key="bridge.bridge_id">
+                                <div class="cc-bridge-item">
+                                    <div class="cc-bridge-left">
+                                        <div class="cc-bridge-icon"
+                                             :class="{
+                                                 'status-healthy': bridge.status === 'healthy',
+                                                 'status-warning': bridge.status === 'warning',
+                                                 'status-critical': bridge.status === 'critical'
+                                             }">
+                                            <span x-text="getBridgeIcon(bridge.bridge_id)"></span>
+                                        </div>
+                                        <span class="cc-bridge-name" x-text="bridge.bridge_id"></span>
+                                    </div>
+                                    <div class="cc-bridge-right">
+                                        <span class="cc-bridge-score" x-text="bridge.health_score + '%'"></span>
+                                        <span class="cc-bridge-dot"
+                                              :class="{
+                                                  'dot-healthy': bridge.status === 'healthy',
+                                                  'dot-warning': bridge.status === 'warning',
+                                                  'dot-critical': bridge.status === 'critical'
+                                              }"></span>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                     </div>
-                </div>
 
-                <!-- Attack Types Legend -->
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">Violation Types</h3>
-                    <div class="space-y-3 text-sm">
-                        <div class="flex items-center space-x-3">
-                            <span class="text-xl">💀</span>
-                            <div>
-                                <div class="font-medium text-red-400">Mint without Lock</div>
-                                <div class="text-xs text-gray-500">Wormhole-style attack</div>
+                    <!-- Pending Correlations -->
+                    <div class="cc-glass">
+                        <div class="cc-glass-header">
+                            <h2>Pending Correlations</h2>
+                        </div>
+                        <div class="cc-pending-body">
+                            <div class="cc-pending-row">
+                                <span class="cc-pending-label">Pending Locks</span>
+                                <span class="cc-pending-value val-locks" x-text="stats.pending_locks"></span>
+                            </div>
+                            <div class="cc-pending-row">
+                                <span class="cc-pending-label">Pending Mints</span>
+                                <span class="cc-pending-value val-mints" x-text="stats.pending_mints"></span>
+                            </div>
+                            <div class="cc-pending-warning">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                                <span>High pending mints without corresponding locks may indicate an active attack</span>
                             </div>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <span class="text-xl">🔄</span>
-                            <div>
-                                <div class="font-medium text-red-400">Replay Attack</div>
-                                <div class="text-xs text-gray-500">Message processed twice</div>
-                            </div>
+                    </div>
+
+                    <!-- Violation Types Legend -->
+                    <div class="cc-glass">
+                        <div class="cc-glass-header">
+                            <h2>Violation Types</h2>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <span class="text-xl">⏰</span>
-                            <div>
-                                <div class="font-medium text-red-400">Time Anomaly</div>
-                                <div class="text-xs text-gray-500">Mint before lock</div>
+                        <div class="cc-legend-body">
+                            <div class="cc-legend-item">
+                                <div class="cc-legend-icon">&#x1F480;</div>
+                                <div class="cc-legend-text">
+                                    <div class="cc-legend-name" style="color: var(--s3-critical);">Mint without Lock</div>
+                                    <div class="cc-legend-desc">Wormhole-style attack vector</div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <span class="text-xl">📊</span>
-                            <div>
-                                <div class="font-medium text-orange-400">Amount Mismatch</div>
-                                <div class="text-xs text-gray-500">Different lock/mint amounts</div>
+                            <div class="cc-legend-item">
+                                <div class="cc-legend-icon">&#x1F504;</div>
+                                <div class="cc-legend-text">
+                                    <div class="cc-legend-name" style="color: var(--s3-critical);">Replay Attack</div>
+                                    <div class="cc-legend-desc">Message processed multiple times</div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <span class="text-xl">🔒</span>
-                            <div>
-                                <div class="font-medium text-yellow-400">Lock without Mint</div>
-                                <div class="text-xs text-gray-500">Funds stuck in bridge</div>
+                            <div class="cc-legend-item">
+                                <div class="cc-legend-icon">&#x23F0;</div>
+                                <div class="cc-legend-text">
+                                    <div class="cc-legend-name" style="color: var(--s3-critical);">Time Anomaly</div>
+                                    <div class="cc-legend-desc">Mint event precedes lock event</div>
+                                </div>
+                            </div>
+                            <div class="cc-legend-item">
+                                <div class="cc-legend-icon">&#x1F4CA;</div>
+                                <div class="cc-legend-text">
+                                    <div class="cc-legend-name" style="color: var(--s3-high);">Amount Mismatch</div>
+                                    <div class="cc-legend-desc">Lock and mint amounts differ</div>
+                                </div>
+                            </div>
+                            <div class="cc-legend-item">
+                                <div class="cc-legend-icon">&#x1F512;</div>
+                                <div class="cc-legend-text">
+                                    <div class="cc-legend-name" style="color: var(--s3-medium);">Lock without Mint</div>
+                                    <div class="cc-legend-desc">Funds stuck in bridge contract</div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
         </div>
     </main>
 </div><!-- /app -->
@@ -334,17 +903,17 @@
                 bridges: [],
                 severityFilter: null,
                 lastUpdated: '',
-                
+
                 get filteredViolations() {
                     if (!this.severityFilter) return this.violations;
                     return this.violations.filter(v => v.severity === this.severityFilter);
                 },
-                
+
                 async init() {
                     await this.loadData();
                     setInterval(() => this.loadData(), 15000);
                 },
-                
+
                 async loadData() {
                     try {
                         const base = window.SENTINEL3_API_BASE || '';
@@ -365,32 +934,32 @@
                         console.error('Failed to load data:', error);
                     }
                 },
-                
+
                 async refresh() {
                     await this.loadData();
                 },
-                
+
                 showViolations(severity) {
                     this.severityFilter = severity;
                 },
-                
+
                 showViolationDetails(violation) {
                     // Could open a modal with more details
                     console.log('Violation details:', violation);
                 },
-                
+
                 getViolationIcon(type) {
                     const icons = {
-                        'mint_without_lock': '💀',
-                        'replay_attack': '🔄',
-                        'time_anomaly': '⏰',
-                        'amount_mismatch': '📊',
-                        'lock_without_mint': '🔒',
-                        'sequence_violation': '🔢'
+                        'mint_without_lock': '\u{1F480}',
+                        'replay_attack': '\u{1F504}',
+                        'time_anomaly': '\u23F0',
+                        'amount_mismatch': '\u{1F4CA}',
+                        'lock_without_mint': '\u{1F512}',
+                        'sequence_violation': '\u{1F522}'
                     };
-                    return icons[type] || '⚠️';
+                    return icons[type] || '\u26A0\uFE0F';
                 },
-                
+
                 getViolationTitle(type) {
                     const titles = {
                         'mint_without_lock': 'Mint without Lock (CRITICAL)',
@@ -402,26 +971,26 @@
                     };
                     return titles[type] || type;
                 },
-                
+
                 getBridgeIcon(bridgeId) {
                     const icons = {
-                        'wormhole': '🌀',
-                        'layerzero': '0️⃣',
-                        'stargate': '⭐',
-                        'across': '🌉',
-                        'hop': '🐰',
-                        'synapse': '🧬',
-                        'celer': '🔗'
+                        'wormhole': '\u{1F300}',
+                        'layerzero': '0\uFE0F\u20E3',
+                        'stargate': '\u2B50',
+                        'across': '\u{1F309}',
+                        'hop': '\u{1F430}',
+                        'synapse': '\u{1F9EC}',
+                        'celer': '\u{1F517}'
                     };
-                    return icons[bridgeId] || '🔗';
+                    return icons[bridgeId] || '\u{1F517}';
                 },
-                
+
                 formatNumber(num) {
                     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
                     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
                     return num?.toString() || '0';
                 },
-                
+
                 formatTime(timestamp) {
                     if (!timestamp) return '';
                     const date = new Date(timestamp);
@@ -430,5 +999,7 @@
             };
         }
     </script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
 </body>
 </html>

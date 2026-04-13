@@ -4,325 +4,730 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Security Graph - Sentinel3</title>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
-    <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
+            margin: 0;
+        }
         .mono { font-family: 'JetBrains Mono', monospace; }
-        
-        /* Graph styles */
-        .node-hacker { fill: #ef4444; }
-        .node-mixer { fill: #f59e0b; }
-        .node-exchange { fill: #22c55e; }
-        .node-protocol { fill: #3b82f6; }
-        .node-bridge { fill: #8b5cf6; }
-        .node-oracle { fill: #06b6d4; }
-        .node-sanctioned { fill: #dc2626; stroke: #fef2f2; stroke-width: 3px; }
-        .node-wallet { fill: #6b7280; }
-        .node-contract { fill: #64748b; }
-        .node-flashloan { fill: #f97316; }
-        .node-attackvector { fill: #ec4899; }
-        
-        .link { stroke: #4b5563; stroke-opacity: 0.6; }
-        .link-exploited { stroke: #ef4444; stroke-width: 2px; }
-        .link-attack { stroke: #f59e0b; stroke-width: 2px; stroke-dasharray: 5,5; }
-        .link-laundered { stroke: #8b5cf6; stroke-width: 2px; }
-        
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+        [x-cloak] { display: none !important; }
+
+        /* ── Page header ──────────────────────────────────── */
+        .sg-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .sg-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .sg-header h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 17px; font-weight: 700; margin: 0;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--s3-text) 60%, var(--s3-accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .sg-live-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 14px; border-radius: 99px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            color: var(--s3-low); font-size: 12px; font-weight: 500;
+        }
+        .sg-live-badge::before {
+            content: '';
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--s3-low);
+            animation: sg-pulse 2s ease-in-out infinite;
+        }
+        @keyframes sg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* ── Glass card base ──────────────────────────────── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover {
+            border-color: rgba(255,255,255,0.09);
+        }
+
+        /* ── Stat cards row ───────────────────────────────── */
+        .sg-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 14px;
+            padding: 24px 28px 0;
+        }
+        .sg-stat {
+            position: relative; overflow: hidden;
+            padding: 18px 20px;
+        }
+        .sg-stat::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: var(--s3-radius) var(--s3-radius) 0 0;
+        }
+        .sg-stat.a-text::before   { background: linear-gradient(90deg, var(--s3-text), transparent); }
+        .sg-stat.a-cyan::before   { background: linear-gradient(90deg, var(--s3-cyan), transparent); }
+        .sg-stat.a-red::before    { background: linear-gradient(90deg, var(--s3-critical), transparent); }
+        .sg-stat.a-amber::before  { background: linear-gradient(90deg, var(--s3-high), transparent); }
+        .sg-stat.a-purple::before { background: linear-gradient(90deg, var(--s3-accent), transparent); }
+
+        .sg-stat-label {
+            font-size: 11px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+            margin-bottom: 10px;
+        }
+        .sg-stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 26px; font-weight: 700;
+            letter-spacing: -0.03em; line-height: 1;
+        }
+
+        /* ── Main layout ──────────────────────────────────── */
+        .sg-body {
+            display: grid;
+            grid-template-columns: 280px 1fr 280px;
+            gap: 16px;
+            padding: 20px 28px 28px;
+        }
+
+        /* ── Side panel cards ─────────────────────────────── */
+        .sg-panel {
+            padding: 16px;
+        }
+        .sg-panel-title {
+            font-size: 11px; font-weight: 600;
+            color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin: 0 0 14px;
+        }
+
+        /* ── Search input ─────────────────────────────────── */
+        .sg-search {
+            width: 100%;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 9px 12px;
+            font-size: 13px;
+            color: var(--s3-text);
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .sg-search::placeholder { color: var(--s3-text-3); }
+        .sg-search:focus {
+            border-color: rgba(139,92,246,0.4);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
+        }
+
+        /* ── Entity type filters ──────────────────────────── */
+        .sg-entity-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 0; cursor: pointer;
+        }
+        .sg-entity-row input[type="checkbox"] {
+            appearance: none; -webkit-appearance: none;
+            width: 16px; height: 16px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.03);
+            cursor: pointer; position: relative;
+            transition: background 0.15s, border-color 0.15s;
+            flex-shrink: 0;
+        }
+        .sg-entity-row input[type="checkbox"]:checked {
+            background: var(--s3-accent);
+            border-color: var(--s3-accent);
+        }
+        .sg-entity-row input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute; top: 2px; left: 5px;
+            width: 4px; height: 8px;
+            border: solid #fff; border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        .sg-entity-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .sg-entity-label { font-size: 13px; color: var(--s3-text-2); }
+        .sg-entity-count {
+            margin-left: auto; font-size: 11px; color: var(--s3-text-3);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Risk entity item / attack vector ─────────────── */
+        .sg-risk-item {
+            padding: 10px 12px;
+            border-radius: var(--s3-radius-sm);
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            border: 1px solid transparent;
+        }
+        .sg-risk-item.critical {
+            background: rgba(244, 63, 94, 0.06);
+            border-color: rgba(244, 63, 94, 0.15);
+        }
+        .sg-risk-item.critical:hover { background: rgba(244, 63, 94, 0.12); }
+        .sg-risk-item.high {
+            background: rgba(249, 115, 22, 0.06);
+            border-color: rgba(249, 115, 22, 0.15);
+        }
+        .sg-risk-item.high:hover { background: rgba(249, 115, 22, 0.12); }
+        .sg-risk-item.medium {
+            background: rgba(234, 179, 8, 0.06);
+            border-color: rgba(234, 179, 8, 0.15);
+        }
+        .sg-risk-item.medium:hover { background: rgba(234, 179, 8, 0.12); }
+
+        .sg-risk-item-header {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .sg-risk-item-name { font-size: 13px; font-weight: 500; }
+        .sg-risk-item-name.critical { color: var(--s3-critical); }
+        .sg-risk-item-name.high { color: var(--s3-high); }
+        .sg-risk-item-name.medium { color: var(--s3-medium); }
+
+        .sg-badge {
+            display: inline-block;
+            padding: 2px 8px; border-radius: 99px;
+            font-size: 10px; font-weight: 600;
+            letter-spacing: 0.04em;
+        }
+        .sg-badge.critical { background: rgba(244, 63, 94, 0.15); color: var(--s3-critical); }
+        .sg-badge.high { background: rgba(249, 115, 22, 0.15); color: var(--s3-high); }
+        .sg-badge.medium { background: rgba(234, 179, 8, 0.15); color: var(--s3-medium); }
+        .sg-badge.low { background: rgba(16, 185, 129, 0.15); color: var(--s3-low); }
+
+        .sg-risk-item-sub {
+            font-size: 11px; color: var(--s3-text-3);
+            margin-top: 4px;
+        }
+
+        /* ── Graph container ──────────────────────────────── */
+        .sg-graph-wrap {
+            display: flex; flex-direction: column;
+            min-height: 0;
+        }
+        .sg-graph-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .sg-graph-title {
+            font-size: 14px; font-weight: 600; color: var(--s3-text);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .sg-graph-title-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            background: var(--s3-accent-dim);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .sg-graph-title-icon svg { width: 14px; height: 14px; color: var(--s3-accent-light); }
+
+        .sg-graph-actions { display: flex; gap: 8px; }
+        .sg-btn-sm {
+            padding: 6px 14px; border-radius: 8px;
+            font-size: 12px; font-weight: 500;
+            border: none; cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .sg-btn-ghost {
+            background: rgba(255,255,255,0.04);
+            color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
+        }
+        .sg-btn-ghost:hover {
+            background: rgba(255,255,255,0.07);
+            color: var(--s3-text);
+        }
+        .sg-btn-accent {
+            background: var(--s3-accent);
+            color: #fff;
+        }
+        .sg-btn-accent:hover {
+            background: var(--s3-accent-light);
+            box-shadow: 0 0 20px rgba(139,92,246,0.25);
+        }
+
+        #graph-container {
+            height: 600px; position: relative;
+            background:
+                radial-gradient(ellipse at 30% 50%, rgba(139,92,246,0.03) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 30%, rgba(34,211,238,0.02) 0%, transparent 50%),
+                var(--s3-bg-1);
+        }
+        #graph-svg { width: 100%; height: 100%; display: block; }
+
+        /* ── Graph legend ─────────────────────────────────── */
+        .sg-legend {
+            position: absolute; bottom: 16px; left: 16px;
+            background: rgba(10, 11, 16, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 16px;
+        }
+        .sg-legend-title {
+            font-size: 10px; font-weight: 600;
+            color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+        .sg-legend-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 6px 20px;
+        }
+        .sg-legend-item {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11px; color: var(--s3-text-2);
+        }
+        .sg-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        /* ── D3 graph node & link styles ──────────────────── */
+        .node-hacker      { fill: var(--s3-critical); }
+        .node-mixer        { fill: var(--s3-high); }
+        .node-exchange     { fill: var(--s3-low); }
+        .node-protocol     { fill: #3b82f6; }
+        .node-bridge       { fill: var(--s3-accent); }
+        .node-oracle       { fill: var(--s3-cyan); }
+        .node-sanctioned   { fill: #dc2626; stroke: rgba(254,242,242,0.7); stroke-width: 3px; }
+        .node-wallet       { fill: var(--s3-text-3); }
+        .node-contract     { fill: #64748b; }
+        .node-flashloan    { fill: var(--s3-high); }
+        .node-attackvector  { fill: #ec4899; }
+
+        .link              { stroke: rgba(255,255,255,0.08); stroke-opacity: 0.6; }
+        .link-exploited    { stroke: var(--s3-critical); stroke-width: 2px; }
+        .link-attack       { stroke: var(--s3-high); stroke-width: 2px; stroke-dasharray: 5,5; }
+        .link-laundered    { stroke: var(--s3-accent); stroke-width: 2px; }
+
         .node-label {
-            font-size: 10px;
-            fill: #e5e7eb;
+            font-size: 10px; fill: var(--s3-text-2);
             pointer-events: none;
+            font-family: 'Inter', sans-serif;
         }
-        
-        /* Glow effects */
-        .glow-red { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.5)); }
-        .glow-yellow { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5)); }
-        .glow-blue { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); }
-        
-        /* Risk heatmap */
-        .risk-critical { background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%); }
-        .risk-high { background: linear-gradient(135deg, #78350f 0%, #f59e0b 100%); }
-        .risk-medium { background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 100%); }
-        .risk-low { background: linear-gradient(135deg, #14532d 0%, #22c55e 100%); }
-        
-        /* Animations */
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 1; }
-            100% { transform: scale(1.5); opacity: 0; }
+
+        /* ── Entity details (right panel) ─────────────────── */
+        .sg-detail-label {
+            font-size: 11px; color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500;
+            margin-bottom: 4px;
         }
-        .pulse-ring { animation: pulse-ring 2s infinite; }
-        
-        @keyframes flow {
+        .sg-detail-value {
+            font-size: 13px; font-weight: 500; color: var(--s3-text);
+        }
+        .sg-tag {
+            display: inline-block;
+            padding: 3px 10px; border-radius: 99px;
+            font-size: 11px; font-weight: 500;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.06);
+            color: var(--s3-text-2);
+        }
+
+        /* Risk bar */
+        .sg-risk-bar-track {
+            width: 100%; height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 99px; overflow: hidden;
+        }
+        .sg-risk-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.5s ease;
+        }
+        .sg-risk-bar-fill.critical { background: linear-gradient(90deg, var(--s3-critical), #fb7185); }
+        .sg-risk-bar-fill.high     { background: linear-gradient(90deg, var(--s3-high), #fdba74); }
+        .sg-risk-bar-fill.medium   { background: linear-gradient(90deg, #3b82f6, #93c5fd); }
+        .sg-risk-bar-fill.low      { background: linear-gradient(90deg, var(--s3-low), #6ee7b7); }
+
+        .sg-btn-full {
+            width: 100%; padding: 10px 0; border: none; border-radius: var(--s3-radius-sm);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background 0.2s, box-shadow 0.2s;
+            background: var(--s3-accent);
+            color: #fff;
+        }
+        .sg-btn-full:hover {
+            background: var(--s3-accent-light);
+            box-shadow: 0 0 24px rgba(139,92,246,0.2);
+        }
+
+        /* ── Risk heatmap ─────────────────────────────────── */
+        .sg-heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 4px;
+        }
+        .sg-heat-cell {
+            aspect-ratio: 1;
+            border-radius: 6px; cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .sg-heat-cell:hover { transform: scale(1.15); }
+        .risk-critical { background: linear-gradient(135deg, rgba(127,29,29,0.8), rgba(244,63,94,0.8)); box-shadow: 0 0 8px rgba(244,63,94,0.15); }
+        .risk-high     { background: linear-gradient(135deg, rgba(120,53,15,0.8), rgba(249,115,22,0.8)); }
+        .risk-medium   { background: linear-gradient(135deg, rgba(30,58,95,0.8), rgba(59,130,246,0.8)); }
+        .risk-low      { background: linear-gradient(135deg, rgba(20,83,45,0.8), rgba(16,185,129,0.8)); }
+        .sg-heatmap-labels {
+            display: flex; justify-content: space-between;
+            margin-top: 8px; font-size: 10px; color: var(--s3-text-3);
+        }
+
+        /* ── Activity feed ────────────────────────────────── */
+        .sg-activity-item {
+            display: flex; align-items: flex-start; gap: 8px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 8px;
+        }
+        .sg-activity-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            margin-top: 5px; flex-shrink: 0;
+        }
+        .sg-activity-dot.threat  { background: var(--s3-critical); box-shadow: 0 0 6px rgba(244,63,94,0.4); }
+        .sg-activity-dot.warning { background: var(--s3-medium); }
+        .sg-activity-dot.info    { background: #3b82f6; }
+        .sg-activity-msg  { font-size: 12px; color: var(--s3-text-2); line-height: 1.4; }
+        .sg-activity-time { font-size: 10px; color: var(--s3-text-3); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+        /* ── Quick action buttons ─────────────────────────── */
+        .sg-action-btn {
+            width: 100%; padding: 10px 14px;
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid transparent;
+            font-size: 13px; font-weight: 500;
+            cursor: pointer; text-align: left;
+            display: flex; align-items: center; gap: 8px;
+            transition: background 0.2s, border-color 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .sg-action-btn.act-red {
+            background: rgba(244, 63, 94, 0.06);
+            border-color: rgba(244, 63, 94, 0.12);
+            color: var(--s3-critical);
+        }
+        .sg-action-btn.act-red:hover { background: rgba(244, 63, 94, 0.12); }
+        .sg-action-btn.act-amber {
+            background: rgba(249, 115, 22, 0.06);
+            border-color: rgba(249, 115, 22, 0.12);
+            color: var(--s3-high);
+        }
+        .sg-action-btn.act-amber:hover { background: rgba(249, 115, 22, 0.12); }
+        .sg-action-btn.act-purple {
+            background: rgba(139, 92, 246, 0.06);
+            border-color: rgba(139, 92, 246, 0.12);
+            color: var(--s3-accent-light);
+        }
+        .sg-action-btn.act-purple:hover { background: rgba(139, 92, 246, 0.12); }
+        .sg-action-btn.act-neutral {
+            background: rgba(255,255,255,0.03);
+            border-color: var(--s3-border);
+            color: var(--s3-text-2);
+        }
+        .sg-action-btn.act-neutral:hover { background: rgba(255,255,255,0.06); }
+
+        /* ── Scrollbar ────────────────────────────────────── */
+        .sg-scroll { overflow-y: auto; }
+        .sg-scroll::-webkit-scrollbar { width: 4px; }
+        .sg-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sg-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+        /* ── Flow animation for links ─────────────────────── */
+        @keyframes sg-flow {
             0% { stroke-dashoffset: 20; }
             100% { stroke-dashoffset: 0; }
         }
-        .flow-animation { animation: flow 1s linear infinite; }
+        .flow-animation { animation: sg-flow 1s linear infinite; }
+
+        /* ── Spacer helper ────────────────────────────────── */
+        .sg-space-y > * + * { margin-top: 12px; }
+
+        /* ── Responsive: collapse to 1-col on smaller views ── */
+        @media (max-width: 1200px) {
+            .sg-stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .sg-body { grid-template-columns: 1fr; }
+            #graph-container { height: 450px; }
+        }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body>
 <div id="app" x-data="securityGraph()">
-    <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-        <div class="flex items-center justify-between">
-            <h1 class="text-lg font-semibold">Security Graph</h1>
-            <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm" x-show="connected">
-                ● Live
-            </span>
-        </div>
+
+    <!-- ── Page Header ──────────────────────────────────── -->
+    <header class="sg-header">
+        <h1>Security Graph</h1>
+        <span class="sg-live-badge" x-show="connected">Live</span>
     </header>
 
-    <div class="max-w-7xl mx-auto px-4 py-6">
-        <!-- Header Stats -->
-        <div class="grid grid-cols-5 gap-4 mb-6">
-            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                <div class="text-gray-400 text-sm">Total Nodes</div>
-                <div class="text-2xl font-bold text-white" x-text="stats.totalNodes.toLocaleString()">0</div>
+    <!-- ── Stat Cards ───────────────────────────────────── -->
+    <div class="sg-stats-grid">
+        <div class="glass sg-stat a-text">
+            <div class="sg-stat-label">Total Nodes</div>
+            <div class="sg-stat-value" style="color:var(--s3-text)" x-text="stats.totalNodes.toLocaleString()">0</div>
+        </div>
+        <div class="glass sg-stat a-cyan">
+            <div class="sg-stat-label">Relationships</div>
+            <div class="sg-stat-value" style="color:var(--s3-cyan)" x-text="stats.totalRelationships.toLocaleString()">0</div>
+        </div>
+        <div class="glass sg-stat a-red">
+            <div class="sg-stat-label">High Risk Entities</div>
+            <div class="sg-stat-value" style="color:var(--s3-critical)" x-text="stats.highRiskCount">0</div>
+        </div>
+        <div class="glass sg-stat a-amber">
+            <div class="sg-stat-label">Attack Vectors</div>
+            <div class="sg-stat-value" style="color:var(--s3-high)" x-text="stats.attackVectors">0</div>
+        </div>
+        <div class="glass sg-stat a-purple">
+            <div class="sg-stat-label">Active Paths</div>
+            <div class="sg-stat-value" style="color:var(--s3-accent-light)" x-text="stats.activePaths">0</div>
+        </div>
+    </div>
+
+    <!-- ── Main 3-Column Layout ─────────────────────────── -->
+    <div class="sg-body">
+
+        <!-- ── LEFT PANEL ─────────────────────────────────── -->
+        <div class="sg-space-y">
+
+            <!-- Search -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">Search Entity</div>
+                <input type="text"
+                       x-model="searchQuery"
+                       @input.debounce.300ms="searchEntity()"
+                       placeholder="Address or name..."
+                       class="sg-search">
             </div>
-            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                <div class="text-gray-400 text-sm">Relationships</div>
-                <div class="text-2xl font-bold text-cyan-400" x-text="stats.totalRelationships.toLocaleString()">0</div>
+
+            <!-- Entity Type Filters -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">Entity Types</div>
+                <div class="sg-space-y" style="--space:4px">
+                    <template x-for="type in entityTypes" :key="type.id">
+                        <label class="sg-entity-row">
+                            <input type="checkbox"
+                                   :checked="type.visible"
+                                   @change="toggleEntityType(type.id)">
+                            <span class="sg-entity-dot" :class="type.colorClass"></span>
+                            <span class="sg-entity-label" x-text="type.label"></span>
+                            <span class="sg-entity-count" x-text="type.count"></span>
+                        </label>
+                    </template>
+                </div>
             </div>
-            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                <div class="text-gray-400 text-sm">High Risk Entities</div>
-                <div class="text-2xl font-bold text-red-400" x-text="stats.highRiskCount">0</div>
+
+            <!-- High Risk Entities -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">High Risk Entities</div>
+                <div class="sg-scroll sg-space-y" style="max-height:260px">
+                    <template x-for="entity in highRiskEntities" :key="entity.address">
+                        <div class="sg-risk-item critical"
+                             @click="focusEntity(entity.address)">
+                            <div class="sg-risk-item-header">
+                                <span class="sg-risk-item-name critical" x-text="entity.name || entity.address.slice(0,10) + '...'"></span>
+                                <span class="sg-badge critical" x-text="entity.risk_level"></span>
+                            </div>
+                            <div class="sg-risk-item-sub" x-text="entity.labels?.join(', ')"></div>
+                        </div>
+                    </template>
+                </div>
             </div>
-            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                <div class="text-gray-400 text-sm">Attack Vectors</div>
-                <div class="text-2xl font-bold text-yellow-400" x-text="stats.attackVectors">0</div>
-            </div>
-            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                <div class="text-gray-400 text-sm">Active Paths</div>
-                <div class="text-2xl font-bold text-purple-400" x-text="stats.activePaths">0</div>
+
+            <!-- Attack Vectors -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">Attack Vectors</div>
+                <div class="sg-space-y">
+                    <template x-for="vector in attackVectors" :key="vector.name">
+                        <div class="sg-risk-item"
+                             :class="vector.severity === 'CRITICAL' ? 'critical' :
+                                     vector.severity === 'HIGH' ? 'high' : 'medium'"
+                             @click="showAttackVector(vector)">
+                            <div class="sg-risk-item-header">
+                                <span class="sg-risk-item-name"
+                                      :class="vector.severity === 'CRITICAL' ? 'critical' :
+                                              vector.severity === 'HIGH' ? 'high' : 'medium'"
+                                      x-text="vector.name"></span>
+                                <span class="sg-badge"
+                                      :class="vector.severity === 'CRITICAL' ? 'critical' :
+                                              vector.severity === 'HIGH' ? 'high' : 'medium'"
+                                      x-text="vector.severity"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
             </div>
         </div>
 
-        <div class="grid grid-cols-4 gap-6">
-            <!-- Left Panel - Controls & Entity List -->
-            <div class="col-span-1 space-y-4">
-                <!-- Search -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Search Entity</h3>
-                    <input type="text" 
-                           x-model="searchQuery"
-                           @input.debounce.300ms="searchEntity()"
-                           placeholder="Address or name..."
-                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500">
+        <!-- ── CENTER: Graph Visualization ────────────────── -->
+        <div class="glass sg-graph-wrap">
+            <div class="sg-graph-header">
+                <div class="sg-graph-title">
+                    <span class="sg-graph-title-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                    </span>
+                    Security Graph
                 </div>
-
-                <!-- Filters -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Entity Types</h3>
-                    <div class="space-y-2">
-                        <template x-for="type in entityTypes" :key="type.id">
-                            <label class="flex items-center space-x-2 cursor-pointer">
-                                <input type="checkbox" 
-                                       :checked="type.visible"
-                                       @change="toggleEntityType(type.id)"
-                                       class="rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-500">
-                                <span class="w-3 h-3 rounded-full" :class="type.colorClass"></span>
-                                <span class="text-sm text-gray-300" x-text="type.label"></span>
-                                <span class="text-xs text-gray-500 ml-auto" x-text="type.count"></span>
-                            </label>
-                        </template>
-                    </div>
-                </div>
-
-                <!-- High Risk Entities -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">🚨 High Risk Entities</h3>
-                    <div class="space-y-2 max-h-64 overflow-y-auto">
-                        <template x-for="entity in highRiskEntities" :key="entity.address">
-                            <div class="p-2 bg-red-500/10 rounded-lg border border-red-500/30 cursor-pointer hover:bg-red-500/20 transition"
-                                 @click="focusEntity(entity.address)">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm font-medium text-red-400" x-text="entity.name || entity.address.slice(0,10) + '...'"></span>
-                                    <span class="text-xs px-2 py-0.5 bg-red-500/30 rounded-full" x-text="entity.risk_level"></span>
-                                </div>
-                                <div class="text-xs text-gray-500 mt-1" x-text="entity.labels?.join(', ')"></div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-
-                <!-- Attack Vectors -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">⚡ Attack Vectors</h3>
-                    <div class="space-y-2">
-                        <template x-for="vector in attackVectors" :key="vector.name">
-                            <div class="p-2 rounded-lg border cursor-pointer transition"
-                                 :class="vector.severity === 'CRITICAL' ? 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20' : 
-                                         vector.severity === 'HIGH' ? 'bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20' :
-                                         'bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20'"
-                                 @click="showAttackVector(vector)">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm font-medium" x-text="vector.name"></span>
-                                    <span class="text-xs px-2 py-0.5 rounded-full"
-                                          :class="vector.severity === 'CRITICAL' ? 'bg-red-500/30 text-red-400' : 
-                                                  vector.severity === 'HIGH' ? 'bg-yellow-500/30 text-yellow-400' :
-                                                  'bg-blue-500/30 text-blue-400'"
-                                          x-text="vector.severity"></span>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
+                <div class="sg-graph-actions">
+                    <button @click="resetZoom()" class="sg-btn-sm sg-btn-ghost">Reset View</button>
+                    <button @click="refreshGraph()" class="sg-btn-sm sg-btn-accent">Refresh</button>
                 </div>
             </div>
+            <div id="graph-container">
+                <svg id="graph-svg"></svg>
 
-            <!-- Center - Graph Visualization -->
-            <div class="col-span-2">
-                <div class="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden">
-                    <div class="p-3 border-b border-gray-800 flex items-center justify-between">
-                        <h3 class="font-semibold">Security Graph</h3>
-                        <div class="flex items-center space-x-2">
-                            <button @click="resetZoom()" class="px-2 py-1 text-xs bg-gray-700 rounded hover:bg-gray-600 transition">
-                                Reset View
-                            </button>
-                            <button @click="refreshGraph()" class="px-2 py-1 text-xs bg-cyan-600 rounded hover:bg-cyan-500 transition">
-                                Refresh
-                            </button>
+                <!-- Legend -->
+                <div class="sg-legend">
+                    <div class="sg-legend-title">Legend</div>
+                    <div class="sg-legend-grid">
+                        <div class="sg-legend-item">
+                            <span class="sg-legend-dot" style="background:var(--s3-critical)"></span>
+                            <span>Hacker</span>
                         </div>
-                    </div>
-                    <div id="graph-container" class="h-[600px] relative">
-                        <svg id="graph-svg" class="w-full h-full"></svg>
-                        
-                        <!-- Legend -->
-                        <div class="absolute bottom-4 left-4 bg-gray-900/90 rounded-lg p-3 text-xs">
-                            <div class="font-semibold mb-2">Legend</div>
-                            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-3 h-3 rounded-full bg-red-500"></span>
-                                    <span>Hacker</span>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
-                                    <span>Mixer</span>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                                    <span>Exchange</span>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-                                    <span>Protocol</span>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-3 h-3 rounded-full bg-purple-500"></span>
-                                    <span>Bridge</span>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-3 h-3 rounded-full bg-cyan-500"></span>
-                                    <span>Oracle</span>
-                                </div>
-                            </div>
+                        <div class="sg-legend-item">
+                            <span class="sg-legend-dot" style="background:var(--s3-high)"></span>
+                            <span>Mixer</span>
+                        </div>
+                        <div class="sg-legend-item">
+                            <span class="sg-legend-dot" style="background:var(--s3-low)"></span>
+                            <span>Exchange</span>
+                        </div>
+                        <div class="sg-legend-item">
+                            <span class="sg-legend-dot" style="background:#3b82f6"></span>
+                            <span>Protocol</span>
+                        </div>
+                        <div class="sg-legend-item">
+                            <span class="sg-legend-dot" style="background:var(--s3-accent)"></span>
+                            <span>Bridge</span>
+                        </div>
+                        <div class="sg-legend-item">
+                            <span class="sg-legend-dot" style="background:var(--s3-cyan)"></span>
+                            <span>Oracle</span>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Right Panel - Details & Risk Analysis -->
-            <div class="col-span-1 space-y-4">
-                <!-- Selected Entity Details -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800" x-show="selectedEntity">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Entity Details</h3>
-                    <div class="space-y-3">
-                        <div>
-                            <div class="text-xs text-gray-500">Name</div>
-                            <div class="text-sm font-medium" x-text="selectedEntity?.name || 'Unknown'"></div>
-                        </div>
-                        <div>
-                            <div class="text-xs text-gray-500">Address</div>
-                            <div class="text-xs mono text-cyan-400" x-text="selectedEntity?.address"></div>
-                        </div>
-                        <div>
-                            <div class="text-xs text-gray-500">Type</div>
-                            <div class="flex flex-wrap gap-1 mt-1">
-                                <template x-for="label in selectedEntity?.labels || []" :key="label">
-                                    <span class="px-2 py-0.5 text-xs rounded-full bg-gray-700" x-text="label"></span>
-                                </template>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="text-xs text-gray-500">Risk Score</div>
-                            <div class="flex items-center space-x-2 mt-1">
-                                <div class="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                                    <div class="h-full transition-all duration-500"
-                                         :class="selectedEntity?.risk_score >= 80 ? 'bg-red-500' : 
-                                                 selectedEntity?.risk_score >= 60 ? 'bg-yellow-500' : 
-                                                 selectedEntity?.risk_score >= 40 ? 'bg-blue-500' : 'bg-green-500'"
-                                         :style="'width: ' + (selectedEntity?.risk_score || 0) + '%'"></div>
-                                </div>
-                                <span class="text-sm font-bold" x-text="selectedEntity?.risk_score || 0"></span>
-                            </div>
-                        </div>
-                        <button @click="analyzeEntity(selectedEntity?.address)"
-                                class="w-full mt-2 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm transition">
-                            Analyze Risk
-                        </button>
+        <!-- ── RIGHT PANEL ────────────────────────────────── -->
+        <div class="sg-space-y">
+
+            <!-- Selected Entity Details -->
+            <div class="glass sg-panel" x-show="selectedEntity">
+                <div class="sg-panel-title">Entity Details</div>
+                <div class="sg-space-y">
+                    <div>
+                        <div class="sg-detail-label">Name</div>
+                        <div class="sg-detail-value" x-text="selectedEntity?.name || 'Unknown'"></div>
                     </div>
+                    <div>
+                        <div class="sg-detail-label">Address</div>
+                        <div class="mono" style="font-size:12px;color:var(--s3-cyan);word-break:break-all" x-text="selectedEntity?.address"></div>
+                    </div>
+                    <div>
+                        <div class="sg-detail-label">Type</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+                            <template x-for="label in selectedEntity?.labels || []" :key="label">
+                                <span class="sg-tag" x-text="label"></span>
+                            </template>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="sg-detail-label">Risk Score</div>
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                            <div class="sg-risk-bar-track" style="flex:1">
+                                <div class="sg-risk-bar-fill"
+                                     :class="selectedEntity?.risk_score >= 80 ? 'critical' :
+                                             selectedEntity?.risk_score >= 60 ? 'high' :
+                                             selectedEntity?.risk_score >= 40 ? 'medium' : 'low'"
+                                     :style="'width:' + (selectedEntity?.risk_score || 0) + '%'"></div>
+                            </div>
+                            <span class="font-display" style="font-size:16px;font-weight:700" x-text="selectedEntity?.risk_score || 0"></span>
+                        </div>
+                    </div>
+                    <button @click="analyzeEntity(selectedEntity?.address)" class="sg-btn-full" style="margin-top:8px">
+                        Analyze Risk
+                    </button>
                 </div>
+            </div>
 
-                <!-- Risk Heatmap -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Risk Heatmap</h3>
-                    <div class="grid grid-cols-5 gap-1">
-                        <template x-for="cell in riskHeatmap" :key="cell.id">
-                            <div class="aspect-square rounded cursor-pointer transition-transform hover:scale-110"
-                                 :class="cell.level"
-                                 :title="cell.label"
-                                 @click="filterByRisk(cell.minRisk, cell.maxRisk)">
-                            </div>
-                        </template>
-                    </div>
-                    <div class="flex justify-between mt-2 text-xs text-gray-500">
-                        <span>Low Risk</span>
-                        <span>High Risk</span>
-                    </div>
+            <!-- Risk Heatmap -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">Risk Heatmap</div>
+                <div class="sg-heatmap-grid">
+                    <template x-for="cell in riskHeatmap" :key="cell.id">
+                        <div class="sg-heat-cell"
+                             :class="cell.level"
+                             :title="cell.label"
+                             @click="filterByRisk(cell.minRisk, cell.maxRisk)">
+                        </div>
+                    </template>
                 </div>
-
-                <!-- Recent Activity -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Recent Activity</h3>
-                    <div class="space-y-2 max-h-48 overflow-y-auto">
-                        <template x-for="activity in recentActivity" :key="activity.id">
-                            <div class="p-2 bg-gray-800/50 rounded-lg">
-                                <div class="flex items-center space-x-2">
-                                    <span class="w-2 h-2 rounded-full"
-                                          :class="activity.type === 'threat' ? 'bg-red-500' : 
-                                                  activity.type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'"></span>
-                                    <span class="text-xs text-gray-300" x-text="activity.message"></span>
-                                </div>
-                                <div class="text-xs text-gray-500 mt-1" x-text="activity.time"></div>
-                            </div>
-                        </template>
-                    </div>
+                <div class="sg-heatmap-labels">
+                    <span>Low Risk</span>
+                    <span>High Risk</span>
                 </div>
+            </div>
 
-                <!-- Quick Actions -->
-                <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-3">Quick Actions</h3>
-                    <div class="space-y-2">
-                        <button @click="showAllHackers()" 
-                                class="w-full px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition">
-                            🏴‍☠️ Show All Hackers
-                        </button>
-                        <button @click="showAttackPaths()"
-                                class="w-full px-3 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-sm transition">
-                            ⚡ Show Attack Paths
-                        </button>
-                        <button @click="showMixerConnections()"
-                                class="w-full px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm transition">
-                            🌀 Mixer Connections
-                        </button>
-                        <button @click="exportGraph()"
-                                class="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">
-                            📥 Export Graph
-                        </button>
-                    </div>
+            <!-- Recent Activity -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">Recent Activity</div>
+                <div class="sg-scroll sg-space-y" style="max-height:200px">
+                    <template x-for="activity in recentActivity" :key="activity.id">
+                        <div class="sg-activity-item">
+                            <span class="sg-activity-dot" :class="activity.type"></span>
+                            <div>
+                                <div class="sg-activity-msg" x-text="activity.message"></div>
+                                <div class="sg-activity-time" x-text="activity.time"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="glass sg-panel">
+                <div class="sg-panel-title">Quick Actions</div>
+                <div class="sg-space-y">
+                    <button @click="showAllHackers()" class="sg-action-btn act-red">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.732-3L13.732 4a2 2 0 00-3.464 0L3.268 16A2 2 0 005 19z"/></svg>
+                        Show All Hackers
+                    </button>
+                    <button @click="showAttackPaths()" class="sg-action-btn act-amber">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Show Attack Paths
+                    </button>
+                    <button @click="showMixerConnections()" class="sg-action-btn act-purple">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Mixer Connections
+                    </button>
+                    <button @click="exportGraph()" class="sg-action-btn act-neutral">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Export Graph
+                    </button>
                 </div>
             </div>
         </div>
@@ -337,7 +742,7 @@
                 connected: true,
                 searchQuery: '',
                 selectedEntity: null,
-                
+
                 stats: {
                     totalNodes: 0,
                     totalRelationships: 0,
@@ -345,28 +750,28 @@
                     attackVectors: 0,
                     activePaths: 0
                 },
-                
+
                 entityTypes: [
-                    { id: 'Hacker', label: 'Hackers', colorClass: 'bg-red-500', visible: true, count: 0 },
-                    { id: 'Mixer', label: 'Mixers', colorClass: 'bg-yellow-500', visible: true, count: 0 },
-                    { id: 'Exchange', label: 'Exchanges', colorClass: 'bg-green-500', visible: true, count: 0 },
-                    { id: 'Protocol', label: 'Protocols', colorClass: 'bg-blue-500', visible: true, count: 0 },
-                    { id: 'Bridge', label: 'Bridges', colorClass: 'bg-purple-500', visible: true, count: 0 },
-                    { id: 'Oracle', label: 'Oracles', colorClass: 'bg-cyan-500', visible: true, count: 0 },
-                    { id: 'FlashLoanProvider', label: 'Flash Loans', colorClass: 'bg-orange-500', visible: true, count: 0 },
-                    { id: 'Sanctioned', label: 'Sanctioned', colorClass: 'bg-red-700', visible: true, count: 0 },
+                    { id: 'Hacker', label: 'Hackers', colorClass: 'node-hacker', visible: true, count: 0 },
+                    { id: 'Mixer', label: 'Mixers', colorClass: 'node-mixer', visible: true, count: 0 },
+                    { id: 'Exchange', label: 'Exchanges', colorClass: 'node-exchange', visible: true, count: 0 },
+                    { id: 'Protocol', label: 'Protocols', colorClass: 'node-protocol', visible: true, count: 0 },
+                    { id: 'Bridge', label: 'Bridges', colorClass: 'node-bridge', visible: true, count: 0 },
+                    { id: 'Oracle', label: 'Oracles', colorClass: 'node-oracle', visible: true, count: 0 },
+                    { id: 'FlashLoanProvider', label: 'Flash Loans', colorClass: 'node-flashloan', visible: true, count: 0 },
+                    { id: 'Sanctioned', label: 'Sanctioned', colorClass: 'node-sanctioned', visible: true, count: 0 },
                 ],
-                
+
                 highRiskEntities: [],
                 attackVectors: [],
                 recentActivity: [],
-                
+
                 riskHeatmap: [],
-                
+
                 graphData: { nodes: [], links: [] },
                 simulation: null,
                 svg: null,
-                
+
                 async init() {
                     await this.loadGraphHealth();
                     await this.loadHighRiskEntities();
@@ -374,23 +779,23 @@
                     this.generateRiskHeatmap();
                     try { this.initGraph(); } catch(e) { console.warn('Graph init failed:', e.message); }
                     await this.loadGraphData();
-                    
+
                     // Refresh every 30 seconds
                     setInterval(() => this.refreshGraph(), 30000);
                 },
-                
+
                 async loadGraphHealth() {
                     try {
                         const res = await fetch(`${API_BASE}/api/graph/health`);
                         const data = await res.json();
-                        
+
                         const nodeCounts = data.node_counts || {};
                         const relCounts = data.relationship_counts || {};
-                        
+
                         this.stats.totalNodes = Object.values(nodeCounts).reduce((a, b) => a + b, 0);
                         this.stats.totalRelationships = Object.values(relCounts).reduce((a, b) => a + b, 0);
                         this.stats.attackVectors = nodeCounts['AttackVector'] || 0;
-                        
+
                         // Update entity type counts
                         this.entityTypes.forEach(type => {
                             type.count = nodeCounts[type.id] || 0;
@@ -399,7 +804,7 @@
                         console.error('Failed to load graph health:', e);
                     }
                 },
-                
+
                 async loadHighRiskEntities() {
                     try {
                         const res = await fetch(`${API_BASE}/api/graph/risk/high-risk-entities?limit=10`);
@@ -410,7 +815,7 @@
                         console.error('Failed to load high risk entities:', e);
                     }
                 },
-                
+
                 async loadAttackVectors() {
                     // Hardcoded for now since we created these
                     this.attackVectors = [
@@ -424,9 +829,9 @@
                         { name: 'Sandwich Attack', severity: 'MEDIUM', steps: 3 },
                     ];
                 },
-                
+
                 generateRiskHeatmap() {
-                    const levels = ['risk-low', 'risk-low', 'risk-medium', 'risk-medium', 'risk-high', 
+                    const levels = ['risk-low', 'risk-low', 'risk-medium', 'risk-medium', 'risk-high',
                                    'risk-high', 'risk-critical', 'risk-critical', 'risk-critical', 'risk-critical'];
                     this.riskHeatmap = levels.map((level, i) => ({
                         id: i,
@@ -436,22 +841,22 @@
                         maxRisk: (i + 1) * 10
                     }));
                 },
-                
+
                 initGraph() {
                     const container = document.getElementById('graph-container');
                     const width = container.clientWidth;
                     const height = container.clientHeight;
-                    
+
                     this.svg = d3.select('#graph-svg')
                         .attr('viewBox', [0, 0, width, height]);
-                    
+
                     // Create a container group for all graph elements (for zoom)
                     this.graphContainer = this.svg.append('g').attr('class', 'graph-container');
-                    
+
                     // Create groups for links and nodes inside the container
                     this.graphContainer.append('g').attr('class', 'links');
                     this.graphContainer.append('g').attr('class', 'nodes');
-                    
+
                     // Add zoom behavior - apply to container only
                     const self = this;
                     this.zoom = d3.zoom()
@@ -459,14 +864,14 @@
                         .on('zoom', (event) => {
                             self.graphContainer.attr('transform', event.transform);
                         });
-                    
+
                     this.svg.call(this.zoom);
                 },
-                
+
                 async loadGraphData(filter = null) {
                     // Build query based on filter
                     let endpoint = `${API_BASE}/api/graph/risk/high-risk-entities?limit=50`;
-                    
+
                     if (filter === 'hackers') {
                         endpoint = `${API_BASE}/api/graph/entities?label=Hacker&limit=30`;
                     } else if (filter === 'mixers') {
@@ -474,12 +879,12 @@
                     } else if (filter === 'exchanges') {
                         endpoint = `${API_BASE}/api/graph/entities?label=Exchange&limit=20`;
                     }
-                    
+
                     try {
                         const res = await fetch(endpoint);
                         const data = await res.json();
                         const entities = data.entities || this.highRiskEntities;
-                        
+
                         // Load high-risk entities as nodes
                         const nodes = entities.map(e => ({
                             id: e.address,
@@ -488,31 +893,31 @@
                             risk_score: e.risk_score || 0,
                             type: this.getNodeType(e.labels || [])
                         }));
-                        
+
                         // Add some sample links based on relationships
                         const links = [];
-                        
+
                         // Hackers -> Mixers
                         const hackers = nodes.filter(n => n.labels.includes('Hacker'));
                         const mixers = nodes.filter(n => n.labels.includes('Mixer'));
                         const exchanges = nodes.filter(n => n.labels.includes('Exchange'));
-                        
+
                         // Create links: Hacker -> Mixer -> Exchange
                         hackers.forEach(h => {
                             mixers.slice(0, 3).forEach(m => {
                                 links.push({ source: h.id, target: m.id, type: 'LIKELY_USES' });
                             });
                         });
-                        
+
                         mixers.forEach(m => {
                             exchanges.slice(0, 3).forEach(e => {
                                 links.push({ source: m.id, target: e.id, type: 'EXITS_TO' });
                             });
                         });
-                        
+
                         this.graphData = { nodes, links };
                         this.renderGraph();
-                        
+
                         // Add activity
                         this.recentActivity.unshift({
                             id: Date.now(),
@@ -521,7 +926,7 @@
                             time: new Date().toLocaleTimeString()
                         });
                         if (this.recentActivity.length > 10) this.recentActivity.pop();
-                        
+
                     } catch (e) {
                         console.error('Failed to load graph data:', e);
                         // Fallback to high-risk entities
@@ -536,7 +941,7 @@
                         this.renderGraph();
                     }
                 },
-                
+
                 getNodeType(labels) {
                     if (labels.includes('Hacker')) return 'hacker';
                     if (labels.includes('Mixer')) return 'mixer';
@@ -549,23 +954,23 @@
                     if (labels.includes('AttackVector')) return 'attackvector';
                     return 'wallet';
                 },
-                
+
                 renderGraph() {
                     const container = document.getElementById('graph-container');
                     const width = container.clientWidth;
                     const height = container.clientHeight;
-                    
+
                     // Clear existing
                     this.graphContainer.select('.links').selectAll('*').remove();
                     this.graphContainer.select('.nodes').selectAll('*').remove();
-                    
+
                     // Create simulation
                     this.simulation = d3.forceSimulation(this.graphData.nodes)
                         .force('link', d3.forceLink(this.graphData.links).id(d => d.id).distance(100))
                         .force('charge', d3.forceManyBody().strength(-200))
                         .force('center', d3.forceCenter(width / 2, height / 2))
                         .force('collision', d3.forceCollide().radius(30));
-                    
+
                     // Draw links
                     const link = this.graphContainer.select('.links')
                         .selectAll('line')
@@ -573,7 +978,7 @@
                         .join('line')
                         .attr('class', d => `link link-${d.type?.toLowerCase() || 'default'}`)
                         .attr('stroke-width', 1.5);
-                    
+
                     // Draw nodes
                     const node = this.graphContainer.select('.nodes')
                         .selectAll('g')
@@ -598,21 +1003,21 @@
                         .on('click', (event, d) => {
                             this.selectedEntity = d;
                         });
-                    
+
                     // Add circles
                     node.append('circle')
                         .attr('r', d => 8 + (d.risk_score / 20))
                         .attr('class', d => `node-${d.type}`)
                         .attr('stroke', '#1f2937')
                         .attr('stroke-width', 2);
-                    
+
                     // Add labels
                     node.append('text')
                         .attr('class', 'node-label')
                         .attr('dy', 20)
                         .attr('text-anchor', 'middle')
                         .text(d => d.name);
-                    
+
                     // Update positions on tick
                     this.simulation.on('tick', () => {
                         link
@@ -620,24 +1025,24 @@
                             .attr('y1', d => d.source.y)
                             .attr('x2', d => d.target.x)
                             .attr('y2', d => d.target.y);
-                        
+
                         node.attr('transform', d => `translate(${d.x},${d.y})`);
                     });
                 },
-                
+
                 async refreshGraph() {
                     await this.loadGraphHealth();
                     await this.loadHighRiskEntities();
                     await this.loadGraphData();
                 },
-                
+
                 resetZoom() {
                     this.svg.transition().duration(750).call(
                         this.zoom.transform,
                         d3.zoomIdentity
                     );
                 },
-                
+
                 toggleEntityType(typeId) {
                     const type = this.entityTypes.find(t => t.id === typeId);
                     if (type) {
@@ -645,17 +1050,17 @@
                         this.renderGraph();
                     }
                 },
-                
+
                 focusEntity(address) {
                     const node = this.graphData.nodes.find(n => n.id === address);
                     if (node) {
                         this.selectedEntity = node;
                     }
                 },
-                
+
                 async analyzeEntity(address) {
                     if (!address) return;
-                    
+
                     try {
                         const res = await fetch(`${API_BASE}/api/graph/risk/score`, {
                             method: 'POST',
@@ -663,14 +1068,14 @@
                             body: JSON.stringify({ address, chain_id: 'ethereum' })
                         });
                         const data = await res.json();
-                        
+
                         this.selectedEntity = {
                             ...this.selectedEntity,
                             risk_score: data.total_score,
                             risk_level: data.risk_level,
                             factors: data.factors
                         };
-                        
+
                         this.recentActivity.unshift({
                             id: Date.now(),
                             type: data.total_score >= 80 ? 'threat' : data.total_score >= 50 ? 'warning' : 'info',
@@ -681,7 +1086,7 @@
                         console.error('Failed to analyze entity:', e);
                     }
                 },
-                
+
                 async showAllHackers() {
                     // Load and show all hackers
                     this.recentActivity.unshift({
@@ -690,11 +1095,11 @@
                         message: 'Loading all known hackers...',
                         time: new Date().toLocaleTimeString()
                     });
-                    
+
                     try {
                         const res = await fetch(`${API_BASE}/api/graph/entities?label=Hacker&limit=30`);
                         const data = await res.json();
-                        
+
                         if (data.entities && data.entities.length > 0) {
                             const nodes = data.entities.map(e => ({
                                 id: e.address,
@@ -703,10 +1108,10 @@
                                 risk_score: e.risk_score || 100,
                                 type: 'hacker'
                             }));
-                            
+
                             this.graphData = { nodes, links: [] };
                             this.renderGraph();
-                            
+
                             this.recentActivity.unshift({
                                 id: Date.now(),
                                 type: 'threat',
@@ -724,10 +1129,10 @@
                                     risk_score: e.risk_score || 100,
                                     type: 'hacker'
                                 }));
-                            
+
                             this.graphData = { nodes: hackerNodes, links: [] };
                             this.renderGraph();
-                            
+
                             this.recentActivity.unshift({
                                 id: Date.now(),
                                 type: 'threat',
@@ -745,7 +1150,7 @@
                         });
                     }
                 },
-                
+
                 async showAttackPaths() {
                     // Show flash loan attack paths
                     this.recentActivity.unshift({
@@ -754,17 +1159,17 @@
                         message: 'Loading attack paths...',
                         time: new Date().toLocaleTimeString()
                     });
-                    
+
                     try {
                         // Load flash loan providers and protocols
                         const [flashRes, protocolRes] = await Promise.all([
                             fetch(`${API_BASE}/api/graph/entities?label=FlashLoanProvider&limit=10`),
                             fetch(`${API_BASE}/api/graph/entities?label=Protocol&limit=15`)
                         ]);
-                        
+
                         const flashData = await flashRes.json();
                         const protocolData = await protocolRes.json();
-                        
+
                         const flashNodes = (flashData.entities || []).map(e => ({
                             id: e.address,
                             name: e.name || e.entity_name || 'Flash Loan',
@@ -772,7 +1177,7 @@
                             risk_score: 40,
                             type: 'flashloan'
                         }));
-                        
+
                         const protocolNodes = (protocolData.entities || []).map(e => ({
                             id: e.address,
                             name: e.name || e.entity_name || 'Protocol',
@@ -780,20 +1185,20 @@
                             risk_score: 20,
                             type: 'protocol'
                         }));
-                        
+
                         const nodes = [...flashNodes, ...protocolNodes];
                         const links = [];
-                        
+
                         // Create attack path links
                         flashNodes.forEach(f => {
                             protocolNodes.slice(0, 5).forEach(p => {
                                 links.push({ source: f.id, target: p.id, type: 'CAN_FUND_ATTACK_ON' });
                             });
                         });
-                        
+
                         this.graphData = { nodes, links };
                         this.renderGraph();
-                        
+
                         this.recentActivity.unshift({
                             id: Date.now(),
                             type: 'warning',
@@ -804,7 +1209,7 @@
                         console.error('Failed to load attack paths:', e);
                     }
                 },
-                
+
                 async showMixerConnections() {
                     // Show hacker -> mixer -> exchange flow
                     this.recentActivity.unshift({
@@ -813,18 +1218,18 @@
                         message: 'Loading mixer connections...',
                         time: new Date().toLocaleTimeString()
                     });
-                    
+
                     try {
                         const [hackerRes, mixerRes, exchangeRes] = await Promise.all([
                             fetch(`${API_BASE}/api/graph/entities?label=Hacker&limit=10`),
                             fetch(`${API_BASE}/api/graph/entities?label=Mixer&limit=10`),
                             fetch(`${API_BASE}/api/graph/entities?label=Exchange&limit=10`)
                         ]);
-                        
+
                         const hackerData = await hackerRes.json();
                         const mixerData = await mixerRes.json();
                         const exchangeData = await exchangeRes.json();
-                        
+
                         const hackerNodes = (hackerData.entities || []).map(e => ({
                             id: e.address,
                             name: e.entity_name || e.name || e.address.slice(0, 10),
@@ -832,7 +1237,7 @@
                             risk_score: 100,
                             type: 'hacker'
                         }));
-                        
+
                         const mixerNodes = (mixerData.entities || []).map(e => ({
                             id: e.address,
                             name: e.entity_name || e.name || 'Mixer',
@@ -840,7 +1245,7 @@
                             risk_score: 80,
                             type: 'mixer'
                         }));
-                        
+
                         const exchangeNodes = (exchangeData.entities || []).map(e => ({
                             id: e.address,
                             name: e.entity_name || e.name || 'Exchange',
@@ -848,27 +1253,27 @@
                             risk_score: 10,
                             type: 'exchange'
                         }));
-                        
+
                         const nodes = [...hackerNodes, ...mixerNodes, ...exchangeNodes];
                         const links = [];
-                        
+
                         // Hacker -> Mixer
                         hackerNodes.forEach(h => {
                             mixerNodes.slice(0, 3).forEach(m => {
                                 links.push({ source: h.id, target: m.id, type: 'LIKELY_USES' });
                             });
                         });
-                        
+
                         // Mixer -> Exchange
                         mixerNodes.forEach(m => {
                             exchangeNodes.slice(0, 3).forEach(e => {
                                 links.push({ source: m.id, target: e.id, type: 'EXITS_TO' });
                             });
                         });
-                        
+
                         this.graphData = { nodes, links };
                         this.renderGraph();
-                        
+
                         this.recentActivity.unshift({
                             id: Date.now(),
                             type: 'info',
@@ -879,7 +1284,7 @@
                         console.error('Failed to load mixer connections:', e);
                     }
                 },
-                
+
                 showAttackVector(vector) {
                     // Show attack vector details
                     this.selectedEntity = {
@@ -889,7 +1294,7 @@
                         risk_score: vector.severity === 'CRITICAL' ? 100 : vector.severity === 'HIGH' ? 75 : 50,
                         type: 'attackvector'
                     };
-                    
+
                     this.recentActivity.unshift({
                         id: Date.now(),
                         type: vector.severity === 'CRITICAL' ? 'threat' : 'warning',
@@ -897,17 +1302,17 @@
                         time: new Date().toLocaleTimeString()
                     });
                 },
-                
+
                 filterByRisk(min, max) {
                     // Filter nodes by risk range
-                    const filtered = this.graphData.nodes.filter(n => 
+                    const filtered = this.graphData.nodes.filter(n =>
                         n.risk_score >= min && n.risk_score < max
                     );
-                    
+
                     if (filtered.length > 0) {
                         this.graphData = { nodes: filtered, links: [] };
                         this.renderGraph();
-                        
+
                         this.recentActivity.unshift({
                             id: Date.now(),
                             type: min >= 80 ? 'threat' : min >= 50 ? 'warning' : 'info',
@@ -916,21 +1321,21 @@
                         });
                     }
                 },
-                
+
                 searchEntity() {
                     if (!this.searchQuery) return;
-                    
+
                     const query = this.searchQuery.toLowerCase();
-                    const found = this.graphData.nodes.find(n => 
-                        n.id.toLowerCase().includes(query) || 
+                    const found = this.graphData.nodes.find(n =>
+                        n.id.toLowerCase().includes(query) ||
                         n.name.toLowerCase().includes(query)
                     );
-                    
+
                     if (found) {
                         this.selectedEntity = found;
                     }
                 },
-                
+
                 exportGraph() {
                     const data = JSON.stringify(this.graphData, null, 2);
                     const blob = new Blob([data], { type: 'application/json' });
@@ -943,5 +1348,7 @@
             };
         }
     </script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
 </body>
 </html>

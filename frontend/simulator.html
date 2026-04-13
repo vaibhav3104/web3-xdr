@@ -3,144 +3,638 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel3 - Attack Simulator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
+    <title>Attack Simulator | Sentinel3</title>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-red: #ff3b3b;
-            --accent-orange: #ff8a3b;
-            --accent-green: #3bff7e;
-            --accent-purple: #8b5cf6;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-        }
+        /* ── Page-specific styles (design tokens from nav.js) ────────── */
+        [x-cloak] { display: none !important; }
+
         body {
             font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            margin: 0;
         }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid #2a2a3a;
-            border-radius: 12px;
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* ── Layout ──────────────────────────────────────────────────── */
+        .sim-page {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
-        .attack-card {
-            transition: all 0.3s ease;
+
+        /* ── Page header ─────────────────────────────────────────────── */
+        .sim-header {
+            padding: 20px 28px;
+            border-bottom: 1px solid var(--s3-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--s3-glass);
+            backdrop-filter: blur(16px);
+        }
+        .sim-header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .sim-header-icon {
+            width: 38px; height: 38px;
+            border-radius: var(--s3-radius-sm);
+            background: linear-gradient(135deg, var(--s3-critical), var(--s3-accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 0 20px rgba(244,63,94,0.2);
+        }
+        .sim-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+        .sim-header-sub {
+            font-size: 12px;
+            color: var(--s3-text-3);
+        }
+        .sim-status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(234,179,8,0.08);
+            border: 1px solid rgba(234,179,8,0.18);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--s3-medium);
+        }
+        .sim-status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--s3-medium);
+            animation: s3-pulse 2s ease-in-out infinite;
+        }
+
+        /* ── Main content area ───────────────────────────────────────── */
+        .sim-content {
+            flex: 1;
+            padding: 24px 28px;
+            overflow-y: auto;
+        }
+
+        /* ── Banner ──────────────────────────────────────────────────── */
+        .sim-banner {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(139,92,246,0.15);
+            border-radius: var(--s3-radius);
+            padding: 18px 22px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .sim-banner-icon {
+            width: 44px; height: 44px;
+            border-radius: var(--s3-radius-sm);
+            background: var(--s3-accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+        .sim-banner h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--s3-accent-light);
+            margin: 0 0 4px 0;
+        }
+        .sim-banner p {
+            font-size: 13px;
+            color: var(--s3-text-2);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        /* ── Grid layout ─────────────────────────────────────────────── */
+        .sim-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 24px;
+        }
+        @media (max-width: 1100px) {
+            .sim-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Section titles ──────────────────────────────────────────── */
+        .sim-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .sim-section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--s3-border), transparent);
+        }
+
+        /* ── Attack cards grid ───────────────────────────────────────── */
+        .sim-attacks-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+        }
+        @media (max-width: 800px) {
+            .sim-attacks-grid { grid-template-columns: 1fr; }
+        }
+
+        .sim-attack-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 18px;
             cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+            position: relative;
+            overflow: hidden;
         }
-        .attack-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 40px -10px rgba(139, 92, 246, 0.3);
+        .sim-attack-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            border-radius: 3px 0 0 3px;
+            transition: background 0.25s;
         }
-        .attack-card.critical { border-left: 4px solid var(--accent-red); }
-        .attack-card.high { border-left: 4px solid var(--accent-orange); }
-        .attack-card.medium { border-left: 4px solid #ffd93b; }
-        
-        .pulse-animation {
-            animation: pulse 2s infinite;
+        .sim-attack-card.sev-critical::before { background: var(--s3-critical); }
+        .sim-attack-card.sev-high::before { background: var(--s3-high); }
+        .sim-attack-card.sev-medium::before { background: var(--s3-medium); }
+
+        .sim-attack-card:hover {
+            border-color: var(--s3-border-hover);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px -12px rgba(139,92,246,0.2);
         }
-        @keyframes pulse {
+        .sim-attack-card.selected {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 1px var(--s3-accent), 0 8px 32px -8px rgba(139,92,246,0.25);
+        }
+
+        .sim-attack-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .sim-attack-icon {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            background: var(--s3-bg-3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .sim-severity-tag {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+        .sim-severity-tag.critical {
+            background: rgba(244,63,94,0.12);
+            color: var(--s3-critical);
+        }
+        .sim-severity-tag.high {
+            background: rgba(249,115,22,0.12);
+            color: var(--s3-high);
+        }
+        .sim-severity-tag.medium {
+            background: rgba(234,179,8,0.12);
+            color: var(--s3-medium);
+        }
+        .sim-attack-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 6px;
+        }
+        .sim-attack-desc {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            line-height: 1.55;
+            margin-bottom: 14px;
+        }
+        .sim-attack-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            padding-top: 12px;
+            border-top: 1px solid var(--s3-border);
+        }
+        .sim-attack-loss {
+            color: var(--s3-text-3);
+        }
+        .sim-attack-chains {
+            color: var(--s3-accent-light);
+            font-weight: 500;
+        }
+
+        /* ── Right sidebar panels ────────────────────────────────────── */
+        .sim-panel {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 20px;
+        }
+        .sim-panel + .sim-panel {
+            margin-top: 16px;
+        }
+        .sim-panel-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .sim-panel-title svg {
+            width: 16px; height: 16px;
+            color: var(--s3-accent-light);
+        }
+
+        /* ── Empty state ─────────────────────────────────────────────── */
+        .sim-empty-state {
+            text-align: center;
+            padding: 36px 16px;
+            color: var(--s3-text-3);
+            font-size: 13px;
+        }
+        .sim-empty-state svg {
+            width: 32px; height: 32px;
+            margin: 0 auto 12px;
+            opacity: 0.3;
+        }
+
+        /* ── Form controls ───────────────────────────────────────────── */
+        .sim-field {
+            margin-bottom: 14px;
+        }
+        .sim-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+        .sim-value-display {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .sim-select,
+        .sim-input {
+            width: 100%;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--s3-text);
+            transition: border-color 0.2s;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .sim-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+        .sim-select:focus,
+        .sim-input:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 2px var(--s3-accent-dim);
+        }
+        .sim-select option {
+            background: var(--s3-bg-2);
+            color: var(--s3-text);
+        }
+
+        /* ── Launch button ───────────────────────────────────────────── */
+        .sim-launch-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: var(--s3-radius-sm);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: linear-gradient(135deg, var(--s3-critical), var(--s3-accent));
+            box-shadow: 0 4px 20px -4px rgba(244,63,94,0.3);
+            margin-top: 6px;
+            position: relative;
+            overflow: hidden;
+        }
+        .sim-launch-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+        .sim-launch-btn:hover::before {
+            opacity: 1;
+        }
+        .sim-launch-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 28px -6px rgba(244,63,94,0.4);
+        }
+        .sim-launch-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .sim-launch-btn:disabled::before { display: none; }
+
+        /* Spinner */
+        .sim-spinner {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: sim-spin 0.7s linear infinite;
+        }
+        @keyframes sim-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Stats ───────────────────────────────────────────────────── */
+        .sim-stat-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .sim-stat-row:last-child {
+            border-bottom: none;
+        }
+        .sim-stat-label {
+            font-size: 12px;
+            color: var(--s3-text-3);
+        }
+        .sim-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .sim-stat-value.detected { color: var(--s3-low); }
+        .sim-stat-value.risk { color: var(--s3-critical); }
+
+        /* ── Terminal log ─────────────────────────────────────────────── */
+        .sim-log-section {
+            margin-top: 24px;
+        }
+        .sim-terminal {
+            background: var(--s3-bg-1);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            overflow: hidden;
+        }
+        .sim-terminal-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: var(--s3-bg-2);
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .sim-terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+        .sim-terminal-dots span {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+        }
+        .sim-terminal-dots span:nth-child(1) { background: var(--s3-critical); }
+        .sim-terminal-dots span:nth-child(2) { background: var(--s3-medium); }
+        .sim-terminal-dots span:nth-child(3) { background: var(--s3-low); }
+        .sim-terminal-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-left: 8px;
+        }
+
+        .sim-terminal-body {
+            padding: 14px 16px;
+            height: 260px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+        }
+        .sim-log-line {
+            animation: sim-log-slide 0.3s ease;
+            display: flex;
+            gap: 8px;
+            padding: 2px 0;
+        }
+        @keyframes sim-log-slide {
+            from { opacity: 0; transform: translateX(-12px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        .sim-log-time {
+            color: var(--s3-text-3);
+            flex-shrink: 0;
+        }
+        .sim-log-tag {
+            font-weight: 600;
+            flex-shrink: 0;
+            min-width: 80px;
+        }
+        .sim-log-tag.attack  { color: var(--s3-critical); }
+        .sim-log-tag.detected { color: var(--s3-low); }
+        .sim-log-tag.warning { color: var(--s3-medium); }
+        .sim-log-tag.info    { color: var(--s3-cyan); }
+        .sim-log-msg {
+            color: var(--s3-text-2);
+        }
+        .sim-log-msg.attack  { color: rgba(244,63,94,0.85); }
+        .sim-log-msg.detected { color: rgba(16,185,129,0.9); }
+        .sim-log-msg.warning { color: rgba(234,179,8,0.85); }
+
+        .sim-terminal-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--s3-text-3);
+            font-size: 12px;
+            gap: 8px;
+        }
+        .sim-terminal-empty .blink {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: var(--s3-accent);
+            animation: sim-blink 1s step-end infinite;
+            border-radius: 1px;
+            vertical-align: middle;
+        }
+        @keyframes sim-blink {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .log-entry {
-            animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
+            50%      { opacity: 0; }
         }
     </style>
 </head>
-<body class="min-h-screen">
-<div id="app" x-data="simulator()">
+<body>
+<div id="app" class="sim-page" x-data="simulator()" x-cloak>
     <!-- Header -->
-    <header class="border-b border-gray-800 px-6 py-4">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <h1 class="text-purple-400 font-semibold text-lg">🎭 Attack Simulator</h1>
+    <header class="sim-header">
+        <div class="sim-header-left">
+            <div class="sim-header-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:20px;height:20px;color:#fff;">
+                    <path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
             </div>
-            <div class="flex items-center space-x-4">
-                <span class="text-sm text-gray-400">Test Mode</span>
-                <div class="w-3 h-3 rounded-full bg-yellow-500 pulse-animation"></div>
+            <div>
+                <h1>Attack Simulator</h1>
+                <div class="sim-header-sub">Cyber Operations Center</div>
             </div>
+        </div>
+        <div class="sim-status-badge">
+            <div class="sim-status-dot"></div>
+            Test Mode Active
         </div>
     </header>
-    
-    <main class="p-6">
-        <!-- Status Banner -->
-        <div class="mb-6 p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
-            <div class="flex items-center space-x-3">
-                <span class="text-2xl">🎭</span>
-                <div>
-                    <h2 class="font-semibold text-purple-400">Attack Simulation Mode</h2>
-                    <p class="text-sm text-gray-400">Trigger test attacks to see how Sentinel3 detects and responds to threats. All attacks are simulated - no real transactions.</p>
-                </div>
+
+    <div class="sim-content">
+        <!-- Banner -->
+        <div class="sim-banner">
+            <div class="sim-banner-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:24px;height:24px;color:var(--s3-accent-light);">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                </svg>
+            </div>
+            <div>
+                <h2>Simulation Environment</h2>
+                <p>Trigger test attacks to validate Sentinel3 detection and response capabilities. All attacks are simulated -- no real transactions are executed.</p>
             </div>
         </div>
-        
-        <div class="grid grid-cols-3 gap-6">
-            <!-- Attack Types -->
-            <div class="col-span-2">
-                <h3 class="text-lg font-semibold mb-4">🎯 Select Attack Type</h3>
-                <div class="grid grid-cols-2 gap-4">
+
+        <!-- Main grid -->
+        <div class="sim-grid">
+            <!-- Left: Attack Types -->
+            <div>
+                <div class="sim-section-title">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--s3-accent-light);">
+                        <path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                    </svg>
+                    Select Attack Vector
+                </div>
+                <div class="sim-attacks-grid">
                     <template x-for="attack in attacks" :key="attack.id">
-                        <div 
-                            class="card attack-card p-4"
-                            :class="attack.severity"
+                        <div
+                            class="sim-attack-card"
+                            :class="[
+                                'sev-' + attack.severity,
+                                selectedAttack?.id === attack.id ? 'selected' : ''
+                            ]"
                             @click="selectAttack(attack)"
                         >
-                            <div class="flex items-start justify-between mb-3">
-                                <span class="text-2xl" x-text="attack.icon"></span>
-                                <span 
-                                    class="text-xs px-2 py-1 rounded-full font-semibold"
-                                    :class="{
-                                        'bg-red-500/20 text-red-400': attack.severity === 'critical',
-                                        'bg-orange-500/20 text-orange-400': attack.severity === 'high',
-                                        'bg-yellow-500/20 text-yellow-400': attack.severity === 'medium'
-                                    }"
+                            <div class="sim-attack-top">
+                                <div class="sim-attack-icon" x-text="attack.icon"></div>
+                                <span
+                                    class="sim-severity-tag"
+                                    :class="attack.severity"
                                     x-text="attack.severity.toUpperCase()"
                                 ></span>
                             </div>
-                            <h4 class="font-semibold mb-1" x-text="attack.name"></h4>
-                            <p class="text-sm text-gray-400 mb-3" x-text="attack.description"></p>
-                            <div class="flex items-center justify-between text-xs">
-                                <span class="text-gray-500" x-text="'Est. Loss: ' + attack.estimatedLoss"></span>
-                                <span class="text-purple-400" x-text="attack.chains.join(', ')"></span>
+                            <div class="sim-attack-name" x-text="attack.name"></div>
+                            <div class="sim-attack-desc" x-text="attack.description"></div>
+                            <div class="sim-attack-meta">
+                                <span class="sim-attack-loss" x-text="'Est. Loss: ' + attack.estimatedLoss"></span>
+                                <span class="sim-attack-chains" x-text="attack.chains.join(', ')"></span>
                             </div>
                         </div>
                     </template>
                 </div>
             </div>
-            
-            <!-- Control Panel -->
-            <div class="space-y-4">
-                <!-- Selected Attack -->
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">⚙️ Attack Configuration</h3>
-                    
-                    <div x-show="!selectedAttack" class="text-center py-8 text-gray-500">
-                        <p>Select an attack type to configure</p>
+
+            <!-- Right: Control Panel + Stats -->
+            <div>
+                <!-- Attack Configuration -->
+                <div class="sim-panel">
+                    <div class="sim-panel-title">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Attack Configuration
                     </div>
-                    
-                    <div x-show="selectedAttack" class="space-y-4">
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">Attack Type</label>
-                            <div class="font-semibold" x-text="selectedAttack?.name"></div>
+
+                    <div x-show="!selectedAttack" class="sim-empty-state">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+                        </svg>
+                        Select an attack vector to configure
+                    </div>
+
+                    <div x-show="selectedAttack">
+                        <div class="sim-field">
+                            <div class="sim-label">Attack Type</div>
+                            <div class="sim-value-display" x-text="selectedAttack?.name"></div>
                         </div>
-                        
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">Target Chain</label>
-                            <select x-model="config.chain" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+
+                        <div class="sim-field">
+                            <label class="sim-label">Target Chain</label>
+                            <select x-model="config.chain" class="sim-select">
                                 <option value="ethereum">Ethereum</option>
                                 <option value="polygon">Polygon</option>
                                 <option value="arbitrum">Arbitrum</option>
@@ -148,95 +642,113 @@
                                 <option value="bsc">BSC</option>
                             </select>
                         </div>
-                        
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">Attack Value (USD)</label>
-                            <input 
-                                type="number" 
-                                x-model="config.value" 
-                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2"
+
+                        <div class="sim-field">
+                            <label class="sim-label">Attack Value (USD)</label>
+                            <input
+                                type="number"
+                                x-model="config.value"
+                                class="sim-input"
                                 placeholder="1000000"
                             >
                         </div>
-                        
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">Speed</label>
-                            <select x-model="config.speed" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+
+                        <div class="sim-field">
+                            <label class="sim-label">Execution Speed</label>
+                            <select x-model="config.speed" class="sim-select">
                                 <option value="instant">Instant</option>
                                 <option value="realistic">Realistic (5-10s)</option>
                                 <option value="slow">Slow Motion (30s)</option>
                             </select>
                         </div>
-                        
-                        <button 
+
+                        <button
                             @click="executeAttack()"
                             :disabled="isRunning"
-                            class="w-full py-3 bg-gradient-to-r from-red-600 to-purple-600 hover:from-red-700 hover:to-purple-700 disabled:opacity-50 rounded-lg font-semibold transition"
+                            class="sim-launch-btn"
                         >
-                            <span x-show="!isRunning">🚀 Launch Attack</span>
-                            <span x-show="isRunning" class="flex items-center justify-center space-x-2">
-                                <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <span>Attack in Progress...</span>
-                            </span>
+                            <template x-if="!isRunning">
+                                <span style="display:flex;align-items:center;gap:8px;">
+                                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;">
+                                        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    Launch Attack
+                                </span>
+                            </template>
+                            <template x-if="isRunning">
+                                <span style="display:flex;align-items:center;gap:10px;">
+                                    <span class="sim-spinner"></span>
+                                    Attack in Progress...
+                                </span>
+                            </template>
                         </button>
                     </div>
                 </div>
-                
-                <!-- Stats -->
-                <div class="card p-4">
-                    <h3 class="text-lg font-semibold mb-4">📊 Session Stats</h3>
-                    <div class="space-y-3">
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Attacks Launched</span>
-                            <span class="font-mono" x-text="stats.launched"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Detected</span>
-                            <span class="font-mono text-green-400" x-text="stats.detected"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Avg Detection Time</span>
-                            <span class="font-mono" x-text="stats.avgDetectionTime + 'ms'"></span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">Total Value at Risk</span>
-                            <span class="font-mono text-red-400" x-text="'$' + stats.totalValue.toLocaleString()"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Live Log -->
-        <div class="mt-6">
-            <h3 class="text-lg font-semibold mb-4">📜 Attack Log</h3>
-            <div class="card p-4 h-64 overflow-y-auto font-mono text-sm" id="log-container">
-                <template x-for="(log, index) in logs" :key="index">
-                    <div 
-                        class="log-entry py-1 border-b border-gray-800 last:border-0"
-                        :class="{
-                            'text-red-400': log.type === 'attack',
-                            'text-green-400': log.type === 'detected',
-                            'text-yellow-400': log.type === 'warning',
-                            'text-gray-400': log.type === 'info'
-                        }"
-                    >
-                        <span class="text-gray-600" x-text="log.time"></span>
-                        <span x-text="' [' + log.type.toUpperCase() + '] '"></span>
-                        <span x-text="log.message"></span>
-                    </div>
-                </template>
-                <div x-show="logs.length === 0" class="text-center py-8 text-gray-500">
-                    Attack logs will appear here...
-                </div>
-            </div>
-        </div>
-    </main>
-</div><!-- /app -->
 
+                <!-- Session Stats -->
+                <div class="sim-panel">
+                    <div class="sim-panel-title">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                        Session Metrics
+                    </div>
+                    <div>
+                        <div class="sim-stat-row">
+                            <span class="sim-stat-label">Attacks Launched</span>
+                            <span class="sim-stat-value mono" x-text="stats.launched"></span>
+                        </div>
+                        <div class="sim-stat-row">
+                            <span class="sim-stat-label">Threats Detected</span>
+                            <span class="sim-stat-value detected mono" x-text="stats.detected"></span>
+                        </div>
+                        <div class="sim-stat-row">
+                            <span class="sim-stat-label">Avg Detection Time</span>
+                            <span class="sim-stat-value mono" x-text="stats.avgDetectionTime + 'ms'"></span>
+                        </div>
+                        <div class="sim-stat-row">
+                            <span class="sim-stat-label">Total Value at Risk</span>
+                            <span class="sim-stat-value risk mono" x-text="'$' + stats.totalValue.toLocaleString()"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Log -->
+        <div class="sim-log-section">
+            <div class="sim-section-title">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--s3-cyan);">
+                    <path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                Attack Log
+            </div>
+            <div class="sim-terminal">
+                <div class="sim-terminal-bar">
+                    <div class="sim-terminal-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <div class="sim-terminal-title">sentinel3://attack-log</div>
+                </div>
+                <div class="sim-terminal-body" id="log-container">
+                    <template x-for="(log, index) in logs" :key="index">
+                        <div class="sim-log-line">
+                            <span class="sim-log-time" x-text="log.time"></span>
+                            <span class="sim-log-tag" :class="log.type" x-text="'[' + log.type.toUpperCase() + ']'"></span>
+                            <span class="sim-log-msg" :class="log.type" x-text="log.message"></span>
+                        </div>
+                    </template>
+                    <div x-show="logs.length === 0" class="sim-terminal-empty">
+                        <span>Awaiting attack simulation<span class="blink"></span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script>
         function simulator() {
             return {
@@ -245,7 +757,7 @@
                         id: 'unbacked_mint',
                         name: 'Unbacked Mint Attack',
                         description: 'Mint tokens on destination chain without locking on source chain (Wormhole-style)',
-                        icon: '💰',
+                        icon: '\u{1F4B0}',
                         severity: 'critical',
                         estimatedLoss: '$50M-500M',
                         chains: ['ETH', 'Solana']
@@ -254,7 +766,7 @@
                         id: 'flash_loan',
                         name: 'Flash Loan Exploit',
                         description: 'Use flash loans to manipulate prices and drain liquidity pools',
-                        icon: '⚡',
+                        icon: '\u26A1',
                         severity: 'critical',
                         estimatedLoss: '$10M-100M',
                         chains: ['ETH', 'Polygon']
@@ -263,7 +775,7 @@
                         id: 'liquidity_drain',
                         name: 'Liquidity Drain',
                         description: 'Slowly drain liquidity from bridge pools over time',
-                        icon: '🌊',
+                        icon: '\u{1F30A}',
                         severity: 'high',
                         estimatedLoss: '$5M-50M',
                         chains: ['Arbitrum', 'BSC']
@@ -272,7 +784,7 @@
                         id: 'message_forgery',
                         name: 'Message Forgery',
                         description: 'Forge cross-chain messages to execute unauthorized transactions',
-                        icon: '📝',
+                        icon: '\u{1F4DD}',
                         severity: 'critical',
                         estimatedLoss: '$20M-200M',
                         chains: ['LayerZero']
@@ -281,7 +793,7 @@
                         id: 'validator_compromise',
                         name: 'Validator Compromise',
                         description: 'Simulate compromised bridge validators approving malicious transactions',
-                        icon: '🔓',
+                        icon: '\u{1F513}',
                         severity: 'critical',
                         estimatedLoss: '$100M+',
                         chains: ['Wormhole']
@@ -290,7 +802,7 @@
                         id: 'money_laundering',
                         name: 'Cross-chain Laundering',
                         description: 'Move funds across multiple chains to obscure origin',
-                        icon: '🧹',
+                        icon: '\u{1F9F9}',
                         severity: 'high',
                         estimatedLoss: 'Varies',
                         chains: ['Multi-chain']
@@ -310,48 +822,48 @@
                     avgDetectionTime: 0,
                     totalValue: 0
                 },
-                
+
                 selectAttack(attack) {
                     this.selectedAttack = attack;
                 },
-                
+
                 addLog(type, message) {
                     const now = new Date();
                     const time = now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
                     this.logs.unshift({ time, type, message });
                     if (this.logs.length > 100) this.logs.pop();
                 },
-                
+
                 async executeAttack() {
                     if (!this.selectedAttack || this.isRunning) return;
-                    
+
                     this.isRunning = true;
                     const startTime = Date.now();
-                    
+
                     // Log attack start
                     this.addLog('attack', `Initiating ${this.selectedAttack.name} on ${this.config.chain}`);
                     this.addLog('info', `Target value: $${this.config.value.toLocaleString()}`);
-                    
+
                     // Simulate attack phases
                     await this.sleep(500);
                     this.addLog('attack', 'Phase 1: Preparing malicious transaction...');
-                    
+
                     await this.sleep(300);
                     this.addLog('attack', 'Phase 2: Submitting to blockchain...');
-                    
+
                     await this.sleep(200);
                     this.addLog('warning', 'Sentinel3: Anomaly detected in transaction pattern');
-                    
+
                     await this.sleep(100);
                     this.addLog('warning', 'Sentinel3: Checking economic invariants...');
-                    
+
                     await this.sleep(150);
-                    this.addLog('detected', `🚨 ALERT: ${this.selectedAttack.name} DETECTED!`);
-                    
+                    this.addLog('detected', `ALERT: ${this.selectedAttack.name} DETECTED!`);
+
                     const detectionTime = Date.now() - startTime;
                     this.addLog('detected', `Detection time: ${detectionTime}ms`);
                     this.addLog('info', 'Incident created and alert sent');
-                    
+
                     // Send to API
                     try {
                         await fetch((window.SENTINEL3_API_BASE || '') + '/api/simulator/attack', {
@@ -368,7 +880,7 @@
                     } catch (e) {
                         this.addLog('info', 'Demo mode: Incident simulated locally');
                     }
-                    
+
                     // Update stats
                     this.stats.launched++;
                     this.stats.detected++;
@@ -376,10 +888,10 @@
                     this.stats.avgDetectionTime = Math.round(
                         (this.stats.avgDetectionTime * (this.stats.launched - 1) + detectionTime) / this.stats.launched
                     );
-                    
+
                     this.isRunning = false;
                 },
-                
+
                 sleep(ms) {
                     return new Promise(resolve => setTimeout(resolve, ms));
                 }
@@ -388,4 +900,3 @@
     </script>
 </body>
 </html>
-

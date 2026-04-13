@@ -3,120 +3,672 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wallet Risk Checker - Sentinel3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/frontend/config.js"></script>
-    <script src="/frontend/nav.js" defer></script>
+    <title>Risk Checker - Sentinel3</title>
     <!-- DOMPurify for XSS Protection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-tertiary: #1a1a24;
-            --accent-red: #ff3b3b;
-            --accent-orange: #ff8a3b;
-            --accent-yellow: #ffd93b;
-            --accent-green: #3bff7e;
-            --accent-blue: #3b8aff;
-            --accent-purple: #8a3bff;
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --border-color: #2a2a3a;
-        }
-        
+        /* ── Page-Specific Styles ─────────────────────────────────────── */
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
         body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
+            min-height: 100vh;
         }
-        
-        .font-mono {
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* ── Main Content Area ────────────────────────────────────────── */
+        .rc-main {
+            flex: 1;
+            min-width: 0;
+            overflow-y: auto;
+            height: 100vh;
+        }
+
+        /* ── Top Bar ──────────────────────────────────────────────────── */
+        .rc-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(3, 3, 5, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--s3-border);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .rc-topbar h1 {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--s3-text);
+        }
+
+        .rc-topbar .breadcrumb {
+            font-size: 13px;
+            color: var(--s3-text-3);
+        }
+        .rc-topbar .breadcrumb span { color: var(--s3-text-2); }
+
+        /* ── Page Container ───────────────────────────────────────────── */
+        .rc-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 28px 64px;
+        }
+
+        /* ── Hero Header ──────────────────────────────────────────────── */
+        .rc-hero {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .rc-hero-title {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--s3-text), var(--s3-accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .rc-hero-sub {
+            font-size: 14px;
+            color: var(--s3-text-2);
+            max-width: 560px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* ── Glass Card ───────────────────────────────────────────────── */
+        .rc-card {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+        }
+
+        /* ── Search Card ──────────────────────────────────────────────── */
+        .rc-search-card {
+            padding: 24px;
+            max-width: 820px;
+            margin: 0 auto 40px;
+        }
+
+        .rc-search-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        @media (max-width: 700px) {
+            .rc-search-row { flex-direction: column; align-items: stretch; }
+        }
+
+        .rc-field { flex: 1; display: flex; flex-direction: column; }
+        .rc-field-chain { width: 160px; flex-shrink: 0; }
+        .rc-field-btn { width: 110px; flex-shrink: 0; }
+
+        @media (max-width: 700px) {
+            .rc-field-chain, .rc-field-btn { width: 100%; }
+        }
+
+        .rc-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--s3-text-2);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .rc-input, .rc-select {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            color: var(--s3-text);
+            font-size: 13px;
             font-family: 'JetBrains Mono', monospace;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+
+        .rc-input::placeholder { color: var(--s3-text-3); }
+
+        .rc-input:focus, .rc-select:focus {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 3px var(--s3-accent-dim);
         }
-        
-        .risk-gauge {
+
+        .rc-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 34px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .rc-btn-analyze {
+            width: 100%;
+            padding: 10px 20px;
+            background: var(--s3-accent);
+            color: #fff;
+            border: none;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 40px;
+        }
+
+        .rc-btn-analyze:hover { background: var(--s3-accent-light); }
+        .rc-btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .rc-spinner {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: rc-spin 0.6s linear infinite;
+        }
+        @keyframes rc-spin { to { transform: rotate(360deg); } }
+
+        /* ── Quick Examples ────────────────────────────────────────────── */
+        .rc-examples {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .rc-examples-label {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .rc-example-btn {
+            background: var(--s3-accent-dim);
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139, 92, 246, 0.15);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .rc-example-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        /* ── Risk Score Card ──────────────────────────────────────────── */
+        .rc-result-hero {
+            padding: 32px;
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 900px) {
+            .rc-result-hero { flex-direction: column; text-align: center; }
+        }
+
+        /* ── Risk Gauge ───────────────────────────────────────────────── */
+        .rc-gauge-wrap { position: relative; flex-shrink: 0; }
+
+        .rc-gauge {
+            width: 170px; height: 170px;
+            border-radius: 50%;
             background: conic-gradient(
-                var(--accent-green) 0deg,
-                var(--accent-yellow) 120deg,
-                var(--accent-orange) 200deg,
-                var(--accent-red) 280deg,
-                var(--accent-red) 360deg
+                var(--s3-low) 0deg,
+                var(--s3-medium) 120deg,
+                var(--s3-high) 200deg,
+                var(--s3-critical) 280deg,
+                var(--s3-critical) 360deg
             );
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        
-        .search-input:focus {
-            box-shadow: 0 0 0 2px rgba(138, 59, 255, 0.5);
+
+        .rc-gauge-inner {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: var(--s3-bg-1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-        
-        .risk-low { color: var(--accent-green); }
-        .risk-medium { color: var(--accent-yellow); }
-        .risk-high { color: var(--accent-orange); }
-        .risk-critical { color: var(--accent-red); }
-        
-        .bg-risk-low { background: rgba(59, 255, 126, 0.1); border-color: var(--accent-green); }
-        .bg-risk-medium { background: rgba(255, 217, 59, 0.1); border-color: var(--accent-yellow); }
-        .bg-risk-high { background: rgba(255, 138, 59, 0.1); border-color: var(--accent-orange); }
-        .bg-risk-critical { background: rgba(255, 59, 59, 0.1); border-color: var(--accent-red); }
-        
-        .factor-bar {
+
+        .rc-gauge-score {
+            font-size: 40px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+
+        .rc-gauge-label {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .rc-risk-badge {
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 3px 16px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border: 1px solid;
+        }
+
+        /* ── Risk-level color classes ─────────────────────────────────── */
+        .rc-color-critical { color: var(--s3-critical); }
+        .rc-color-high     { color: var(--s3-high); }
+        .rc-color-medium   { color: var(--s3-medium); }
+        .rc-color-low      { color: var(--s3-low); }
+
+        .rc-badge-critical { background: rgba(244, 63, 94, 0.12); border-color: rgba(244, 63, 94, 0.35); color: var(--s3-critical); }
+        .rc-badge-high     { background: rgba(249, 115, 22, 0.12); border-color: rgba(249, 115, 22, 0.35); color: var(--s3-high); }
+        .rc-badge-medium   { background: rgba(234, 179, 8, 0.12);  border-color: rgba(234, 179, 8, 0.35);  color: var(--s3-medium); }
+        .rc-badge-low      { background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.35); color: var(--s3-low); }
+
+        /* ── Address Info ─────────────────────────────────────────────── */
+        .rc-addr-info { flex: 1; min-width: 0; }
+
+        .rc-addr-type {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            justify-content: flex-start;
+        }
+
+        @media (max-width: 900px) {
+            .rc-addr-type { justify-content: center; }
+        }
+
+        .rc-addr-type-icon { font-size: 22px; }
+
+        .rc-addr-type-name {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .rc-addr-hash {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--s3-text-3);
+            word-break: break-all;
+            margin-bottom: 12px;
+        }
+
+        /* ── Labels / Tags ────────────────────────────────────────────── */
+        .rc-labels {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        @media (max-width: 900px) {
+            .rc-labels { justify-content: center; }
+        }
+
+        .rc-label-tag {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+            border: 1px solid;
+            animation: rc-fadeIn 0.3s ease;
+        }
+
+        @keyframes rc-fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .rc-tag-danger  { background: rgba(244, 63, 94, 0.1);  border-color: rgba(244, 63, 94, 0.25);  color: var(--s3-critical); }
+        .rc-tag-warning { background: rgba(234, 179, 8, 0.1);   border-color: rgba(234, 179, 8, 0.25);  color: var(--s3-medium); }
+        .rc-tag-info    { background: rgba(34, 211, 238, 0.1);  border-color: rgba(34, 211, 238, 0.25);  color: var(--s3-cyan); }
+        .rc-tag-success { background: rgba(16, 185, 129, 0.1);  border-color: rgba(16, 185, 129, 0.25);  color: var(--s3-low); }
+        .rc-tag-default { background: var(--s3-accent-dim);      border-color: rgba(139, 92, 246, 0.2);  color: var(--s3-accent-light); }
+
+        /* ── Quick Stats Grid ─────────────────────────────────────────── */
+        .rc-quick-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .rc-stat-box {
+            text-align: center;
+            padding: 14px 16px;
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid var(--s3-border);
+        }
+
+        .rc-stat-val {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .rc-stat-lbl {
+            font-size: 10px;
+            color: var(--s3-text-3);
+            margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        /* ── Two-Column Layout ────────────────────────────────────────── */
+        .rc-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 800px) {
+            .rc-grid-2 { grid-template-columns: 1fr; }
+        }
+
+        /* ── Section Spacing ──────────────────────────────────────────── */
+        .rc-sections { display: flex; flex-direction: column; gap: 20px; }
+
+        /* ── Card Header ──────────────────────────────────────────────── */
+        .rc-card-hdr {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-bottom: 18px;
+            color: var(--s3-text);
+        }
+
+        .rc-card-body { padding: 24px; }
+
+        /* ── Risk Factor Bars ─────────────────────────────────────────── */
+        .rc-factor-row { margin-bottom: 14px; }
+        .rc-factor-row:last-child { margin-bottom: 0; }
+
+        .rc-factor-hdr {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .rc-factor-name {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            text-transform: capitalize;
+        }
+
+        .rc-factor-pct {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--s3-text-3);
+        }
+
+        .rc-factor-track {
+            height: 6px;
+            background: var(--s3-bg-3);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .rc-factor-fill {
+            height: 100%;
+            border-radius: 3px;
             transition: width 0.5s ease;
         }
-        
-        .label-tag {
-            animation: fadeIn 0.3s ease;
+
+        .rc-fill-critical { background: var(--s3-critical); }
+        .rc-fill-high     { background: var(--s3-high); }
+        .rc-fill-medium   { background: var(--s3-medium); }
+        .rc-fill-low      { background: var(--s3-cyan); }
+
+        /* ── No Factors / Empty ────────────────────────────────────────── */
+        .rc-empty {
+            text-align: center;
+            padding: 32px 16px;
+            color: var(--s3-text-3);
         }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-5px); }
-            to { opacity: 1; transform: translateY(0); }
+
+        .rc-empty-icon { font-size: 32px; margin-bottom: 8px; }
+        .rc-empty-text { font-size: 13px; }
+
+        /* ── Activity Summary Rows ────────────────────────────────────── */
+        .rc-activity-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--s3-bg-2);
+            border-radius: var(--s3-radius-sm);
+            margin-bottom: 8px;
+        }
+        .rc-activity-row:last-child { margin-bottom: 0; }
+
+        .rc-activity-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .rc-activity-icon { font-size: 16px; }
+
+        .rc-activity-label {
+            font-size: 13px;
+            color: var(--s3-text-2);
+        }
+
+        .rc-activity-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--s3-text);
+        }
+
+        /* ── Explorer Button ──────────────────────────────────────────── */
+        .rc-explorer-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            padding: 10px;
+            background: var(--s3-accent);
+            color: #fff;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .rc-explorer-btn:hover { background: var(--s3-accent-light); }
+
+        /* ── Recommendations ──────────────────────────────────────────── */
+        .rc-recs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .rc-rec {
+            padding: 16px;
+            border-radius: var(--s3-radius-sm);
+            border: 1px solid;
+        }
+
+        .rc-rec-danger  { background: rgba(244, 63, 94, 0.06);  border-color: rgba(244, 63, 94, 0.2); }
+        .rc-rec-warning { background: rgba(234, 179, 8, 0.06);  border-color: rgba(234, 179, 8, 0.2); }
+        .rc-rec-info    { background: rgba(34, 211, 238, 0.06); border-color: rgba(34, 211, 238, 0.2); }
+
+        .rc-rec-hdr {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .rc-rec-icon { font-size: 16px; }
+
+        .rc-rec-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+
+        .rc-rec-desc {
+            font-size: 12px;
+            color: var(--s3-text-2);
+            line-height: 1.5;
+        }
+
+        /* ── High Risk Wallets Table ──────────────────────────────────── */
+        .rc-flagged-title {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.015em;
+            margin-bottom: 16px;
+            margin-top: 40px;
+        }
+
+        .rc-wallet-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--s3-border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .rc-wallet-row:last-child { border-bottom: none; }
+        .rc-wallet-row:hover { background: rgba(139, 92, 246, 0.04); }
+
+        .rc-wallet-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .rc-wallet-score-badge {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid;
+        }
+
+        .rc-wallet-addr {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--s3-text);
+        }
+
+        .rc-wallet-meta {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            margin-top: 2px;
+        }
+
+        .rc-wallet-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .rc-wallet-level {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: capitalize;
+            text-align: right;
+        }
+
+        .rc-wallet-sev {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            margin-top: 1px;
+            text-align: right;
+        }
+
+        .rc-wallet-arrow {
+            color: var(--s3-text-3);
+            font-size: 14px;
         }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 <div id="app" x-data="riskChecker()" x-init="init()">
     <!-- Main Content (sidebar injected by nav.js) -->
-    <main>
+    <main class="rc-main">
         <!-- Top Bar -->
-        <header class="sticky top-0 z-10 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-800 px-6 py-3">
-            <div class="flex items-center justify-between">
-                <h1 class="text-lg font-semibold">Wallet Risk Checker</h1>
-            </div>
+        <header class="rc-topbar">
+            <h1>Risk Checker</h1>
+            <div class="breadcrumb">Defend <span>/ Risk Checker</span></div>
         </header>
 
-        <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="text-center mb-12">
-            <h1 class="text-4xl font-bold mb-4">Wallet Risk Checker</h1>
-            <p class="text-gray-400 text-lg max-w-2xl mx-auto">
-                Analyze any wallet or contract address for potential risks, suspicious activity, and threat indicators
-            </p>
-        </div>
+        <div class="rc-container">
+            <!-- Hero Header -->
+            <div class="rc-hero">
+                <h2 class="rc-hero-title">Wallet Risk Checker</h2>
+                <p class="rc-hero-sub">
+                    Analyze any wallet or contract address for potential risks, suspicious activity, and threat indicators
+                </p>
+            </div>
 
-        <!-- Search Section -->
-        <div class="max-w-3xl mx-auto mb-12">
-            <div class="card p-6">
-                <div class="flex flex-col md:flex-row gap-4">
-                    <div class="flex-1">
-                        <label class="block text-sm text-gray-400 mb-2">Address</label>
-                        <input type="text" 
+            <!-- Search Section -->
+            <div class="rc-card rc-search-card">
+                <div class="rc-search-row">
+                    <div class="rc-field">
+                        <label class="rc-label">Address</label>
+                        <input type="text"
                                x-model="searchAddress"
                                @keyup.enter="analyzeAddress()"
                                placeholder="0x... or ENS name"
-                               class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg search-input focus:outline-none font-mono text-sm">
+                               class="rc-input">
                     </div>
-                    <div class="md:w-48">
-                        <label class="block text-sm text-gray-400 mb-2">Chain</label>
-                        <select x-model="selectedChain" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none">
+                    <div class="rc-field rc-field-chain">
+                        <label class="rc-label">Chain</label>
+                        <select x-model="selectedChain" class="rc-select">
                             <option value="ethereum">Ethereum</option>
                             <option value="polygon">Polygon</option>
                             <option value="arbitrum">Arbitrum</option>
@@ -126,242 +678,262 @@
                             <option value="avalanche">Avalanche</option>
                         </select>
                     </div>
-                    <div class="md:w-32 flex items-end">
-                        <button @click="analyzeAddress()" 
+                    <div class="rc-field rc-field-btn">
+                        <label class="rc-label">&nbsp;</label>
+                        <button @click="analyzeAddress()"
                                 :disabled="loading"
-                                class="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition">
+                                class="rc-btn-analyze">
                             <span x-show="!loading">Analyze</span>
-                            <span x-show="loading" class="flex items-center justify-center">
-                                <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                            </span>
+                            <span x-show="loading" class="rc-spinner"></span>
                         </button>
                     </div>
                 </div>
-                
+
                 <!-- Quick Examples -->
-                <div class="mt-4 flex flex-wrap gap-2">
-                    <span class="text-xs text-gray-500">Examples:</span>
-                    <button @click="searchAddress = '0xdead...beef'; analyzeAddress()" 
-                            class="text-xs text-purple-400 hover:text-purple-300">Known Mixer</button>
-                    <button @click="searchAddress = '0x1234...5678'; analyzeAddress()" 
-                            class="text-xs text-purple-400 hover:text-purple-300">Normal Wallet</button>
-                    <button @click="searchAddress = '0xabcd...ef01'; analyzeAddress()" 
-                            class="text-xs text-purple-400 hover:text-purple-300">Contract</button>
+                <div class="rc-examples">
+                    <span class="rc-examples-label">Try:</span>
+                    <button @click="searchAddress = '0xdead...beef'; analyzeAddress()"
+                            class="rc-example-btn">Known Mixer</button>
+                    <button @click="searchAddress = '0x1234...5678'; analyzeAddress()"
+                            class="rc-example-btn">Normal Wallet</button>
+                    <button @click="searchAddress = '0xabcd...ef01'; analyzeAddress()"
+                            class="rc-example-btn">Contract</button>
                 </div>
             </div>
-        </div>
 
-        <!-- Results Section -->
-        <template x-if="result">
-            <div class="space-y-8">
-                <!-- Risk Score Card -->
-                <div class="card p-8">
-                    <div class="flex flex-col lg:flex-row items-center gap-8">
+            <!-- Results Section -->
+            <template x-if="result">
+                <div class="rc-sections">
+                    <!-- Risk Score Card -->
+                    <div class="rc-card rc-result-hero">
                         <!-- Risk Gauge -->
-                        <div class="relative">
-                            <div class="w-48 h-48 rounded-full risk-gauge p-1">
-                                <div class="w-full h-full rounded-full bg-gray-900 flex items-center justify-center">
-                                    <div class="text-center">
-                                        <div class="text-5xl font-bold"
-                                             :class="getRiskClass(result.risk_level)"
-                                             x-text="Math.round(result.risk_score * 100) + '%'"></div>
-                                        <div class="text-sm text-gray-400 mt-1">Risk Score</div>
-                                    </div>
+                        <div class="rc-gauge-wrap">
+                            <div class="rc-gauge">
+                                <div class="rc-gauge-inner">
+                                    <div class="rc-gauge-score"
+                                         :class="{
+                                             'rc-color-critical': result.risk_level === 'critical',
+                                             'rc-color-high': result.risk_level === 'high',
+                                             'rc-color-medium': result.risk_level === 'medium',
+                                             'rc-color-low': result.risk_level === 'low'
+                                         }"
+                                         x-text="Math.round(result.risk_score * 100) + '%'"></div>
+                                    <div class="rc-gauge-label">Risk Score</div>
                                 </div>
                             </div>
-                            <div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 px-4 py-1 rounded-full text-sm font-medium uppercase"
-                                 :class="'bg-risk-' + result.risk_level + ' border'"
+                            <div class="rc-risk-badge"
+                                 :class="{
+                                     'rc-badge-critical': result.risk_level === 'critical',
+                                     'rc-badge-high': result.risk_level === 'high',
+                                     'rc-badge-medium': result.risk_level === 'medium',
+                                     'rc-badge-low': result.risk_level === 'low'
+                                 }"
                                  x-text="result.risk_level"></div>
                         </div>
-                        
+
                         <!-- Address Info -->
-                        <div class="flex-1 text-center lg:text-left">
-                            <div class="flex items-center justify-center lg:justify-start space-x-3 mb-4">
-                                <span class="text-2xl" x-text="result.is_contract ? '📜' : '👛'"></span>
-                                <h2 class="text-2xl font-bold" x-text="result.is_contract ? 'Contract' : 'Wallet'"></h2>
+                        <div class="rc-addr-info">
+                            <div class="rc-addr-type">
+                                <span class="rc-addr-type-icon" x-text="result.is_contract ? '\uD83D\uDCDC' : '\uD83D\uDC5B'"></span>
+                                <span class="rc-addr-type-name" x-text="result.is_contract ? 'Contract' : 'Wallet'"></span>
                             </div>
-                            <div class="font-mono text-sm text-gray-400 break-all mb-4" x-text="result.address"></div>
-                            
+                            <div class="rc-addr-hash" x-text="result.address"></div>
+
                             <!-- Labels -->
-                            <div class="flex flex-wrap gap-2 justify-center lg:justify-start">
+                            <div class="rc-labels">
                                 <template x-for="label in result.labels" :key="label">
-                                    <span class="label-tag px-3 py-1 rounded-full text-xs font-medium"
+                                    <span class="rc-label-tag"
                                           :class="{
-                                              'bg-red-500/20 text-red-400 border border-red-500/30': ['mixer', 'sanctioned', 'scammer', 'exploiter'].includes(label),
-                                              'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30': ['high_frequency', 'bot', 'suspicious'].includes(label),
-                                              'bg-blue-500/20 text-blue-400 border border-blue-500/30': ['exchange', 'dex', 'defi'].includes(label),
-                                              'bg-green-500/20 text-green-400 border border-green-500/30': ['verified', 'safe', 'trusted'].includes(label),
-                                              'bg-purple-500/20 text-purple-400 border border-purple-500/30': !['mixer', 'sanctioned', 'scammer', 'exploiter', 'high_frequency', 'bot', 'suspicious', 'exchange', 'dex', 'defi', 'verified', 'safe', 'trusted'].includes(label)
+                                              'rc-tag-danger': ['mixer', 'sanctioned', 'scammer', 'exploiter'].includes(label),
+                                              'rc-tag-warning': ['high_frequency', 'bot', 'suspicious'].includes(label),
+                                              'rc-tag-info': ['exchange', 'dex', 'defi'].includes(label),
+                                              'rc-tag-success': ['verified', 'safe', 'trusted'].includes(label),
+                                              'rc-tag-default': !['mixer', 'sanctioned', 'scammer', 'exploiter', 'high_frequency', 'bot', 'suspicious', 'exchange', 'dex', 'defi', 'verified', 'safe', 'trusted'].includes(label)
                                           }"
                                           x-text="label"></span>
                                 </template>
                             </div>
                         </div>
-                        
+
                         <!-- Quick Stats -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="text-center p-4 bg-gray-800 rounded-lg">
-                                <div class="text-2xl font-bold" x-text="result.transaction_count"></div>
-                                <div class="text-xs text-gray-400">Transactions</div>
+                        <div class="rc-quick-stats">
+                            <div class="rc-stat-box">
+                                <div class="rc-stat-val" x-text="result.transaction_count"></div>
+                                <div class="rc-stat-lbl">Transactions</div>
                             </div>
-                            <div class="text-center p-4 bg-gray-800 rounded-lg">
-                                <div class="text-2xl font-bold" x-text="'$' + formatNumber(result.total_volume_usd)"></div>
-                                <div class="text-xs text-gray-400">Total Volume</div>
+                            <div class="rc-stat-box">
+                                <div class="rc-stat-val" x-text="'$' + formatNumber(result.total_volume_usd)"></div>
+                                <div class="rc-stat-lbl">Total Volume</div>
                             </div>
-                            <div class="text-center p-4 bg-gray-800 rounded-lg">
-                                <div class="text-2xl font-bold" x-text="result.connected_wallets_count"></div>
-                                <div class="text-xs text-gray-400">Connections</div>
+                            <div class="rc-stat-box">
+                                <div class="rc-stat-val" x-text="result.connected_wallets_count"></div>
+                                <div class="rc-stat-lbl">Connections</div>
                             </div>
-                            <div class="text-center p-4 bg-gray-800 rounded-lg">
-                                <div class="text-2xl font-bold" :class="result.connected_to_mixer ? 'text-red-400' : 'text-green-400'"
+                            <div class="rc-stat-box">
+                                <div class="rc-stat-val"
+                                     :class="result.connected_to_mixer ? 'rc-color-critical' : 'rc-color-low'"
                                      x-text="result.connected_to_mixer ? 'Yes' : 'No'"></div>
-                                <div class="text-xs text-gray-400">Mixer Link</div>
+                                <div class="rc-stat-lbl">Mixer Link</div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Risk Factors -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <!-- Risk Factor Breakdown -->
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-6">Risk Factor Breakdown</h3>
-                        <div class="space-y-4">
-                            <template x-for="factor in result.risk_factors" :key="factor">
-                                <div>
-                                    <div class="flex justify-between text-sm mb-1">
-                                        <span class="capitalize" x-text="factor.replace(/_/g, ' ')"></span>
-                                        <span class="font-mono" x-text="getFactorWeight(factor) + '%'"></span>
+                    <!-- Risk Factors + Activity -->
+                    <div class="rc-grid-2">
+                        <!-- Risk Factor Breakdown -->
+                        <div class="rc-card rc-card-body">
+                            <h3 class="rc-card-hdr">Risk Factor Breakdown</h3>
+                            <div>
+                                <template x-for="factor in result.risk_factors" :key="factor">
+                                    <div class="rc-factor-row">
+                                        <div class="rc-factor-hdr">
+                                            <span class="rc-factor-name" x-text="factor.replace(/_/g, ' ')"></span>
+                                            <span class="rc-factor-pct" x-text="getFactorWeight(factor) + '%'"></span>
+                                        </div>
+                                        <div class="rc-factor-track">
+                                            <div class="rc-factor-fill"
+                                                 :class="{
+                                                     'rc-fill-critical': getFactorWeight(factor) >= 30,
+                                                     'rc-fill-high': getFactorWeight(factor) >= 20 && getFactorWeight(factor) < 30,
+                                                     'rc-fill-medium': getFactorWeight(factor) >= 15 && getFactorWeight(factor) < 20,
+                                                     'rc-fill-low': getFactorWeight(factor) < 15
+                                                 }"
+                                                 :style="'width: ' + getFactorWeight(factor) + '%'"></div>
+                                        </div>
                                     </div>
-                                    <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
-                                        <div class="factor-bar h-full rounded-full"
-                                             :class="getFactorColor(factor)"
-                                             :style="'width: ' + getFactorWeight(factor) + '%'"></div>
+                                </template>
+
+                                <template x-if="result.risk_factors.length === 0">
+                                    <div class="rc-empty">
+                                        <div class="rc-empty-icon">&#10003;</div>
+                                        <p class="rc-empty-text">No risk factors detected</p>
                                     </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Activity Summary -->
+                        <div class="rc-card rc-card-body">
+                            <h3 class="rc-card-hdr">Activity Summary</h3>
+                            <div>
+                                <div class="rc-activity-row">
+                                    <div class="rc-activity-left">
+                                        <span class="rc-activity-icon">&#128197;</span>
+                                        <span class="rc-activity-label">First Seen</span>
+                                    </div>
+                                    <span class="rc-activity-value" x-text="formatDate(result.first_seen)"></span>
+                                </div>
+                                <div class="rc-activity-row">
+                                    <div class="rc-activity-left">
+                                        <span class="rc-activity-icon">&#9200;</span>
+                                        <span class="rc-activity-label">Last Activity</span>
+                                    </div>
+                                    <span class="rc-activity-value" x-text="formatDate(result.last_activity)"></span>
+                                </div>
+                                <div class="rc-activity-row">
+                                    <div class="rc-activity-left">
+                                        <span class="rc-activity-icon">&#128279;</span>
+                                        <span class="rc-activity-label">Chain</span>
+                                    </div>
+                                    <span class="rc-activity-value" style="text-transform:capitalize" x-text="result.chain_id"></span>
+                                </div>
+                                <div class="rc-activity-row">
+                                    <div class="rc-activity-left">
+                                        <span class="rc-activity-icon">&#127974;</span>
+                                        <span class="rc-activity-label">Exchange Link</span>
+                                    </div>
+                                    <span class="rc-activity-value"
+                                          :style="result.connected_to_exchange ? 'color:var(--s3-cyan)' : 'color:var(--s3-text-3)'"
+                                          x-text="result.connected_to_exchange ? 'Yes' : 'No'"></span>
+                                </div>
+                            </div>
+
+                            <!-- Explorer Link -->
+                            <a :href="result.explorer_url" target="_blank"
+                               x-show="result.explorer_url"
+                               class="rc-explorer-btn">
+                                <span>View on Explorer</span>
+                                <span>&#8599;</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div class="rc-card rc-card-body">
+                        <h3 class="rc-card-hdr">Recommendations</h3>
+                        <div class="rc-recs-grid">
+                            <template x-for="rec in getRecommendations(result)" :key="rec.title">
+                                <div class="rc-rec"
+                                     :class="{
+                                         'rc-rec-danger':  rec.type === 'danger',
+                                         'rc-rec-warning': rec.type === 'warning',
+                                         'rc-rec-info':    rec.type === 'info'
+                                     }">
+                                    <div class="rc-rec-hdr">
+                                        <span class="rc-rec-icon" x-text="rec.icon"></span>
+                                        <span class="rc-rec-title" x-text="rec.title"></span>
+                                    </div>
+                                    <p class="rc-rec-desc" x-text="rec.description"></p>
                                 </div>
                             </template>
-                            
-                            <template x-if="result.risk_factors.length === 0">
-                                <div class="text-center py-8 text-gray-400">
-                                    <span class="text-4xl">✅</span>
-                                    <p class="mt-2">No risk factors detected</p>
-                                </div>
-                            </template>
                         </div>
                     </div>
-
-                    <!-- Activity Timeline -->
-                    <div class="card p-6">
-                        <h3 class="text-lg font-semibold mb-6">Activity Summary</h3>
-                        <div class="space-y-4">
-                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                                <div class="flex items-center space-x-3">
-                                    <span class="text-xl">📅</span>
-                                    <span class="text-gray-400">First Seen</span>
-                                </div>
-                                <span class="font-mono text-sm" x-text="formatDate(result.first_seen)"></span>
-                            </div>
-                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                                <div class="flex items-center space-x-3">
-                                    <span class="text-xl">⏰</span>
-                                    <span class="text-gray-400">Last Activity</span>
-                                </div>
-                                <span class="font-mono text-sm" x-text="formatDate(result.last_activity)"></span>
-                            </div>
-                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                                <div class="flex items-center space-x-3">
-                                    <span class="text-xl">🔗</span>
-                                    <span class="text-gray-400">Chain</span>
-                                </div>
-                                <span class="font-mono text-sm capitalize" x-text="result.chain_id"></span>
-                            </div>
-                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                                <div class="flex items-center space-x-3">
-                                    <span class="text-xl">🏦</span>
-                                    <span class="text-gray-400">Exchange Link</span>
-                                </div>
-                                <span :class="result.connected_to_exchange ? 'text-blue-400' : 'text-gray-500'"
-                                      x-text="result.connected_to_exchange ? 'Yes' : 'No'"></span>
-                            </div>
-                        </div>
-                        
-                        <!-- Explorer Link -->
-                        <a :href="result.explorer_url" target="_blank" 
-                           x-show="result.explorer_url"
-                           class="mt-6 flex items-center justify-center space-x-2 p-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
-                            <span>View on Explorer</span>
-                            <span>↗</span>
-                        </a>
-                    </div>
                 </div>
+            </template>
 
-                <!-- Recommendations -->
-                <div class="card p-6">
-                    <h3 class="text-lg font-semibold mb-4">Recommendations</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <template x-for="rec in getRecommendations(result)" :key="rec.title">
-                            <div class="p-4 rounded-lg"
-                                 :class="rec.type === 'danger' ? 'bg-red-500/10 border border-red-500/30' : 
-                                         rec.type === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/30' : 
-                                         'bg-blue-500/10 border border-blue-500/30'">
-                                <div class="flex items-center space-x-2 mb-2">
-                                    <span x-text="rec.icon"></span>
-                                    <span class="font-medium" x-text="rec.title"></span>
-                                </div>
-                                <p class="text-sm text-gray-400" x-text="rec.description"></p>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-        </template>
-
-        <!-- High Risk Wallets Section -->
-        <div class="mt-12">
-            <h2 class="text-2xl font-bold mb-6">Recently Flagged High-Risk Addresses</h2>
-            <div class="card">
-                <div class="divide-y divide-gray-700">
+            <!-- High Risk Wallets Section -->
+            <div>
+                <h2 class="rc-flagged-title">Recently Flagged High-Risk Addresses</h2>
+                <div class="rc-card">
                     <template x-for="wallet in highRiskWallets" :key="wallet.address">
-                        <div class="p-4 flex items-center justify-between hover:bg-gray-800/50 cursor-pointer"
+                        <div class="rc-wallet-row"
                              @click="searchAddress = wallet.address; analyzeAddress()">
-                            <div class="flex items-center space-x-4">
-                                <div class="w-10 h-10 rounded-full flex items-center justify-center"
-                                     :class="'bg-risk-' + wallet.risk_level">
-                                    <span x-text="Math.round(wallet.risk_score * 100) + '%'" class="text-xs font-bold"></span>
+                            <div class="rc-wallet-left">
+                                <div class="rc-wallet-score-badge"
+                                     :class="{
+                                         'rc-badge-critical': wallet.risk_level === 'critical',
+                                         'rc-badge-high': wallet.risk_level === 'high',
+                                         'rc-badge-medium': wallet.risk_level === 'medium',
+                                         'rc-badge-low': wallet.risk_level === 'low'
+                                     }">
+                                    <span x-text="Math.round(wallet.risk_score * 100) + '%'"></span>
                                 </div>
                                 <div>
-                                    <div class="font-mono text-sm" x-text="wallet.address.slice(0, 10) + '...' + wallet.address.slice(-8)"></div>
-                                    <div class="text-xs text-gray-500" x-text="wallet.chain_id + ' • ' + wallet.event_count + ' events'"></div>
+                                    <div class="rc-wallet-addr" x-text="wallet.address.slice(0, 10) + '...' + wallet.address.slice(-8)"></div>
+                                    <div class="rc-wallet-meta" x-text="wallet.chain_id + ' \u2022 ' + wallet.event_count + ' events'"></div>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-4">
-                                <div class="text-right">
-                                    <div class="text-sm font-medium capitalize"
-                                         :class="'risk-' + wallet.risk_level"
+                            <div class="rc-wallet-right">
+                                <div>
+                                    <div class="rc-wallet-level"
+                                         :class="{
+                                             'rc-color-critical': wallet.risk_level === 'critical',
+                                             'rc-color-high': wallet.risk_level === 'high',
+                                             'rc-color-medium': wallet.risk_level === 'medium',
+                                             'rc-color-low': wallet.risk_level === 'low'
+                                         }"
                                          x-text="wallet.risk_level"></div>
-                                    <div class="text-xs text-gray-500" x-text="wallet.highest_severity + ' severity'"></div>
+                                    <div class="rc-wallet-sev" x-text="wallet.highest_severity + ' severity'"></div>
                                 </div>
-                                <span class="text-gray-400">→</span>
+                                <span class="rc-wallet-arrow">&#8594;</span>
                             </div>
                         </div>
                     </template>
-                    
+
                     <template x-if="highRiskWallets.length === 0">
-                        <div class="p-8 text-center text-gray-400">
-                            <span class="text-4xl">🔍</span>
-                            <p class="mt-2">No high-risk wallets detected recently</p>
+                        <div class="rc-empty" style="padding:40px 16px;">
+                            <div class="rc-empty-icon">&#128269;</div>
+                            <p class="rc-empty-text">No high-risk wallets detected recently</p>
                         </div>
                     </template>
                 </div>
             </div>
-        </div>
         </div>
     </main>
 </div><!-- /app -->
 
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
     <script>
         function riskChecker() {
             return {
@@ -370,17 +942,17 @@
                 loading: false,
                 result: null,
                 highRiskWallets: [],
-                
+
                 async init() {
                     await this.loadHighRiskWallets();
                 },
-                
+
                 async analyzeAddress() {
                     if (!this.searchAddress) return;
-                    
+
                     this.loading = true;
                     this.result = null;
-                    
+
                     try {
                         const response = await fetch((window.SENTINEL3_API_BASE || '') + `/api/analytics/risk/score/${this.searchAddress}?chain_id=${this.selectedChain}`);
                         this.result = await response.json();
@@ -405,10 +977,10 @@
                             explorer_url: null
                         };
                     }
-                    
+
                     this.loading = false;
                 },
-                
+
                 async loadHighRiskWallets() {
                     try {
                         const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/analytics/risk/high-risk-wallets?limit=10');
@@ -417,11 +989,11 @@
                         console.error('Failed to load high-risk wallets:', error);
                     }
                 },
-                
+
                 getRiskClass(level) {
-                    return 'risk-' + level;
+                    return 'rc-color-' + level;
                 },
-                
+
                 getFactorWeight(factor) {
                     const weights = {
                         'connected_to_high_risk_entity': 30,
@@ -436,72 +1008,72 @@
                     };
                     return weights[factor] || 15;
                 },
-                
+
                 getFactorColor(factor) {
                     const weight = this.getFactorWeight(factor);
-                    if (weight >= 30) return 'bg-red-500';
-                    if (weight >= 20) return 'bg-orange-500';
-                    if (weight >= 15) return 'bg-yellow-500';
-                    return 'bg-blue-500';
+                    if (weight >= 30) return 'rc-fill-critical';
+                    if (weight >= 20) return 'rc-fill-high';
+                    if (weight >= 15) return 'rc-fill-medium';
+                    return 'rc-fill-low';
                 },
-                
+
                 getRecommendations(result) {
                     const recs = [];
-                    
+
                     if (result.risk_level === 'critical') {
                         recs.push({
                             type: 'danger',
-                            icon: '🚫',
+                            icon: '\uD83D\uDEAB',
                             title: 'Block Transactions',
                             description: 'Consider blocking all transactions with this address immediately.'
                         });
                     }
-                    
+
                     if (result.connected_to_mixer) {
                         recs.push({
                             type: 'danger',
-                            icon: '🌀',
+                            icon: '\uD83C\uDF00',
                             title: 'Mixer Connection',
                             description: 'This address has interacted with known mixing services.'
                         });
                     }
-                    
+
                     if (result.risk_level === 'high' || result.risk_level === 'critical') {
                         recs.push({
                             type: 'warning',
-                            icon: '👁️',
+                            icon: '\uD83D\uDC41\uFE0F',
                             title: 'Enhanced Monitoring',
                             description: 'Enable enhanced monitoring for all transactions involving this address.'
                         });
                     }
-                    
+
                     if (result.transaction_count > 1000) {
                         recs.push({
                             type: 'info',
-                            icon: '📊',
+                            icon: '\uD83D\uDCCA',
                             title: 'High Activity',
                             description: 'This is a high-activity address. Consider rate limiting interactions.'
                         });
                     }
-                    
+
                     if (result.risk_level === 'low') {
                         recs.push({
                             type: 'info',
-                            icon: '✅',
+                            icon: '\u2705',
                             title: 'Low Risk',
                             description: 'No immediate concerns detected. Continue standard monitoring.'
                         });
                     }
-                    
+
                     return recs;
                 },
-                
+
                 formatNumber(num) {
                     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
                     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
                     return num?.toFixed(0) || '0';
                 },
-                
+
                 formatDate(dateStr) {
                     if (!dateStr) return 'Unknown';
                     return new Date(dateStr).toLocaleDateString();
