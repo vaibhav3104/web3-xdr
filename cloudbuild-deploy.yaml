@@ -256,7 +256,7 @@ steps:
       - '--cpu=2'
       - '--timeout=300'
       - '--set-env-vars=ENVIRONMENT=production,GRAPH_ENABLED=true,ML_DETECTION_ENABLED=true,PROC_TYPE=api,NEO4J_URI=neo4j+s://4b563cb0.databases.neo4j.io,NEO4J_USERNAME=neo4j,ENABLE_RATE_LIMITING=true,RATE_LIMIT_RPM=120'
-      - '--update-secrets=DATABASE_URL=web3-xdr-database-url:latest,NEO4J_PASSWORD=neo4j-password:latest,REDIS_URL=web3-xdr-redis-url:latest,SLACK_WEBHOOK_URL=web3-xdr-slack-webhook-url:latest,TELEGRAM_BOT_TOKEN=web3-xdr-telegram-bot-token:latest,TELEGRAM_CHANNEL_ID=web3-xdr-telegram-channel-id:latest'
+      - '--update-secrets=DATABASE_URL=web3-xdr-database-url:latest,NEO4J_PASSWORD=neo4j-password:latest,REDIS_URL=web3-xdr-redis-url:latest,SLACK_WEBHOOK_URL=web3-xdr-slack-webhook-url:latest,TELEGRAM_BOT_TOKEN=web3-xdr-telegram-bot-token:latest,TELEGRAM_CHANNEL_ID=web3-xdr-telegram-channel-id:latest,GEMINI_API_KEY=web3-xdr-gemini-api-key:latest,ANTHROPIC_API_KEY=web3-xdr-anthropic-api-key:latest'
     waitFor: ['push-image']
 
   # Deploy Worker service
@@ -276,7 +276,7 @@ steps:
       - '--no-cpu-throttling'
       - '--min-instances=1'
       - '--set-env-vars=ENVIRONMENT=production,GRAPH_ENABLED=true,ML_DETECTION_ENABLED=true,PROC_TYPE=worker,NEO4J_URI=neo4j+s://4b563cb0.databases.neo4j.io,NEO4J_USERNAME=neo4j,POLL_INTERVAL_SECONDS=2.0,BATCH_SIZE=10,CONTINUOUS_LEARNING_ENABLED=true'
-      - '--update-secrets=DATABASE_URL=web3-xdr-database-url:latest,NEO4J_PASSWORD=neo4j-password:latest,REDIS_URL=web3-xdr-redis-url:latest,SLACK_WEBHOOK_URL=web3-xdr-slack-webhook-url:latest,TELEGRAM_BOT_TOKEN=web3-xdr-telegram-bot-token:latest,TELEGRAM_CHANNEL_ID=web3-xdr-telegram-channel-id:latest'
+      - '--update-secrets=DATABASE_URL=web3-xdr-database-url:latest,NEO4J_PASSWORD=neo4j-password:latest,REDIS_URL=web3-xdr-redis-url:latest,SLACK_WEBHOOK_URL=web3-xdr-slack-webhook-url:latest,TELEGRAM_BOT_TOKEN=web3-xdr-telegram-bot-token:latest,TELEGRAM_CHANNEL_ID=web3-xdr-telegram-channel-id:latest,GEMINI_API_KEY=web3-xdr-gemini-api-key:latest,ANTHROPIC_API_KEY=web3-xdr-anthropic-api-key:latest'
     waitFor: ['push-image']
 
   # =========================================================================
