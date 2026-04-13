@@ -100,7 +100,7 @@ def create_app(
             await DatabaseManager.initialize()
             await DatabaseManager.ensure_indexes()
             logger.info("database_initialized")
-        except (ConnectionError, OSError, ImportError) as e:
+        except (ConnectionError, OSError, ImportError, RuntimeError) as e:
             logger.error("database_init_failed", error=str(e))
 
         try:
@@ -114,7 +114,7 @@ def create_app(
             from .api_keys import api_key_manager
             loaded = await api_key_manager.load_from_db()
             logger.info("api_keys_loaded", count=loaded)
-        except (ImportError, ConnectionError, OSError) as e:
+        except (ImportError, ConnectionError, OSError, RuntimeError) as e:
             logger.warning("api_keys_load_failed", error=str(e))
 
         # Bootstrap TP/FP feedback loop from historical incident data
