@@ -16,8 +16,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+
     # -- customers table --
-    op.create_table(
+    if not conn.dialect.has_table(conn, "customers"):
+      op.create_table(
         "customers",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("customer_id", sa.String(64), unique=True, nullable=False, index=True),
@@ -36,10 +39,11 @@ def upgrade() -> None:
         sa.Column("rate_limit_multiplier", sa.Float, nullable=False, server_default="1.0"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
+      )
 
     # -- api_keys table --
-    op.create_table(
+    if not conn.dialect.has_table(conn, "api_keys"):
+      op.create_table(
         "api_keys",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("key_id", sa.String(64), unique=True, nullable=False, index=True),
@@ -59,9 +63,9 @@ def upgrade() -> None:
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_by", sa.String(256), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
+      )
 
-    op.create_index("ix_api_keys_customer_status", "api_keys", ["customer_id", "status"])
+    op.create_index("ix_api_keys_customer_status", "api_keys", ["customer_id", "status"], if_not_exists=True)
 
 
 def downgrade() -> None:
