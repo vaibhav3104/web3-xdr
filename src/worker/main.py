@@ -1623,16 +1623,17 @@ class Sentinel3Worker:
                             
                             # Create incident for HIGH, CRITICAL, and MEDIUM severity rules
                             if match.rule.severity.upper() in ["HIGH", "CRITICAL", "MEDIUM"]:
-                                await self._create_incident_from_rule(
+                                created_incident_id = await self._create_incident_from_rule(
                                     rule=match.rule,
                                     event_data=db_event,
                                     db_event=db_event,
                                     match_details=match.match_details
                                 )
                                 # LLM triage (non-blocking background task)
-                                asyncio.create_task(
-                                    self._run_llm_triage(match, db_event)
-                                )
+                                if created_incident_id:
+                                    asyncio.create_task(
+                                        self._run_llm_triage(match, db_event, created_incident_id)
+                                    )
                 except Exception as rule_err:
                     logger.debug("event_handler_rule_evaluation_error", error=str(rule_err))
             
@@ -2039,11 +2040,12 @@ class Sentinel3Worker:
         except Exception as e:
             logger.error("invariant_violation_handler_failed", error=str(e), exc_info=True)
 
-    async def _run_llm_triage(self, match, db_event: dict):
-        """Run LLM-powered triage on an alert match (non-blocking, native async)."""
+    async def _run_llm_triage(self, match, db_event: dict, incident_id: str = None):
+        """Run LLM-powered triage on an alert match and update incident status."""
         try:
             from src.ai.llm.incident_triage import IncidentTriage
             from src.ai.llm.rate_limiter import get_rate_limiter
+            from src.database.service import DatabaseService
 
             limiter = get_rate_limiter()
             if not limiter.can_make_request():
@@ -2057,10 +2059,39 @@ class Sentinel3Worker:
                 logger.info(
                     "llm_triage_complete",
                     rule_id=match.rule.id,
+                    incident_id=incident_id,
                     verdict=verdict.verdict,
                     confidence=verdict.confidence,
                     action=verdict.suggested_action,
                 )
+
+                # Update incident status based on verdict
+                if incident_id:
+                    action = verdict.suggested_action
+                    if action == "dismiss" or verdict.verdict == "false_positive":
+                        new_status = "DISMISSED"
+                        notes = f"LLM auto-triage: {verdict.verdict} ({verdict.confidence:.0%}) — {verdict.reasoning}"
+                    elif action == "escalate" or verdict.verdict == "true_positive":
+                        new_status = "ESCALATED"
+                        notes = f"LLM auto-triage: {verdict.verdict} ({verdict.confidence:.0%}) — {verdict.reasoning}"
+                    elif action == "auto_resolve":
+                        new_status = "RESOLVED"
+                        notes = f"LLM auto-resolved: {verdict.reasoning}"
+                    else:
+                        new_status = "INVESTIGATING"
+                        notes = f"LLM triage: needs review ({verdict.confidence:.0%}) — {verdict.reasoning}"
+
+                    await DatabaseService.update_incident_status(
+                        incident_id=incident_id,
+                        status=new_status,
+                        notes=notes,
+                    )
+                    logger.info(
+                        "incident_status_updated_by_triage",
+                        incident_id=incident_id,
+                        new_status=new_status,
+                        verdict=verdict.verdict,
+                    )
         except ImportError:
             pass  # LLM modules not available
         except Exception as e:
@@ -2422,8 +2453,11 @@ class Sentinel3Worker:
 
                 # Guardian auto-response (fire-and-forget)
                 asyncio.create_task(self._trigger_guardian_response(incident_data))
+
+                return saved_id
         except Exception as e:
             logger.error("incident_creation_failed", error=str(e), rule_id=rule.id, exc_info=True)
+        return None
 
     async def _create_ml_incident(
         self,
