@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>html,body{background:#030305!important;color:#f1f5f9;margin:0}</style>
+    <title>Fund Tracing - Sentinel3</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--s3-bg-0);
+            color: var(--s3-text);
+            margin: 0;
+            min-height: 100vh;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* ── Glass Card ───────────────────────────────────── */
+        .glass {
+            background: var(--s3-glass);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover { border-color: rgba(255,255,255,0.09); }
+
+        /* ── Header ───────────────────────────────────────── */
+        .ft-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .ft-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+        .ft-header h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 17px; font-weight: 700; margin: 0;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--s3-text) 60%, var(--s3-accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .ft-header-right { display: flex; align-items: center; gap: 12px; }
+
+        /* ── Page Content ─────────────────────────────────── */
+        .page-content {
+            flex: 1; min-width: 0;
+            padding: 0;
+            overflow-y: auto;
+        }
+
+        /* ── Controls Bar ─────────────────────────────────── */
+        .ft-controls {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 28px;
+            flex-wrap: wrap;
+        }
+        .ft-input {
+            flex: 1; min-width: 260px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 14px;
+            font-size: 13px;
+            color: var(--s3-text);
+            outline: none;
+            font-family: 'JetBrains Mono', monospace;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .ft-input::placeholder { color: var(--s3-text-3); }
+        .ft-input:focus {
+            border-color: rgba(139,92,246,0.4);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
+        }
+        .ft-select {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 10px 14px;
+            font-size: 12px;
+            color: var(--s3-text);
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            appearance: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            min-width: 120px;
+        }
+        .ft-select:focus { border-color: rgba(139,92,246,0.4); }
+        .ft-select option { background: #111219; color: #f1f5f9; }
+
+        /* ── Buttons ──────────────────────────────────────── */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 10px 20px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px; font-weight: 600;
+            border: none; cursor: pointer;
+            transition: all 0.2s;
+            color: #fff;
+            white-space: nowrap;
+        }
+        .btn-accent {
+            background: linear-gradient(135deg, var(--s3-accent), #6d28d9);
+            box-shadow: 0 2px 12px rgba(139,92,246,0.3);
+        }
+        .btn-accent:hover { background: linear-gradient(135deg, #7c4fe0, #5b21b6); }
+        .btn-accent:disabled {
+            opacity: 0.5; cursor: not-allowed;
+            box-shadow: none;
+        }
+        .btn-ghost {
+            background: var(--s3-bg-3);
+            border: 1px solid var(--s3-border);
+            color: var(--s3-text-2);
+        }
+        .btn-ghost:hover { background: var(--s3-bg-4); border-color: rgba(255,255,255,0.1); color: var(--s3-text); }
+        .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+        /* ── Main Layout ──────────────────────────────────── */
+        .ft-body {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            gap: 16px;
+            padding: 0 28px 20px;
+            min-height: 500px;
+        }
+        @media (max-width: 1000px) {
+            .ft-body { grid-template-columns: 1fr; }
+        }
+
+        /* ── Left Panel ───────────────────────────────────── */
+        .ft-left { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+        .ft-left::-webkit-scrollbar { width: 4px; }
+        .ft-left::-webkit-scrollbar-track { background: transparent; }
+        .ft-left::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+        .ft-panel { padding: 16px; }
+        .ft-panel-title {
+            font-size: 11px; font-weight: 600;
+            color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin: 0 0 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* ── Stats ────────────────────────────────────────── */
+        .ft-stat-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .ft-stat-row:last-child { border-bottom: none; }
+        .ft-stat-label { font-size: 12px; color: var(--s3-text-3); }
+        .ft-stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px; font-weight: 700;
+            color: var(--s3-text);
+        }
+        .ft-stat-value.highlight {
+            background: linear-gradient(135deg, var(--s3-accent-light), var(--s3-cyan));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        /* ── Address List ─────────────────────────────────── */
+        .ft-addr-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-bottom: 2px;
+        }
+        .ft-addr-item:hover { background: rgba(139,92,246,0.06); }
+        .ft-addr-item.source {
+            border-left: 3px solid var(--s3-critical);
+            background: rgba(244,63,94,0.04);
+        }
+        .ft-addr-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .ft-addr-hash {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; color: var(--s3-text-2);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            flex: 1; min-width: 0;
+        }
+        .ft-addr-label {
+            font-size: 10px; font-weight: 600;
+            padding: 2px 6px; border-radius: 4px;
+            white-space: nowrap;
+        }
+        .ft-addr-label.mixer {
+            background: rgba(244,63,94,0.12); color: #fb7185;
+        }
+        .ft-addr-label.exchange {
+            background: rgba(59,130,246,0.12); color: #60a5fa;
+        }
+        .ft-addr-label.bridge {
+            background: rgba(139,92,246,0.12); color: #a78bfa;
+        }
+        .ft-addr-label.contract {
+            background: rgba(234,179,8,0.12); color: #facc15;
+        }
+        .ft-addr-label.eoa {
+            background: rgba(100,116,139,0.12); color: #94a3b8;
+        }
+        .ft-addr-volume {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px; color: var(--s3-text-3);
+            white-space: nowrap;
+        }
+
+        /* ── Risk badge ───────────────────────────────────── */
+        .risk-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 10px;
+            font-size: 10px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .risk-badge.high { background: rgba(244,63,94,0.12); color: #fb7185; border: 1px solid rgba(244,63,94,0.2); }
+        .risk-badge.medium { background: rgba(234,179,8,0.12); color: #facc15; border: 1px solid rgba(234,179,8,0.2); }
+        .risk-badge.low { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+
+        /* ── Sankey Diagram Container ─────────────────────── */
+        .ft-sankey-wrap {
+            display: flex; flex-direction: column;
+            min-height: 0; position: relative;
+        }
+        .ft-sankey-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--s3-border);
+            flex-shrink: 0;
+        }
+        .ft-sankey-title {
+            font-size: 14px; font-weight: 600; color: var(--s3-text);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .ft-sankey-title-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            background: var(--s3-accent-dim);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .ft-sankey-title-icon svg { width: 14px; height: 14px; color: var(--s3-accent-light); }
+        .ft-sankey-actions { display: flex; gap: 8px; }
+        .ft-sankey-area {
+            flex: 1; min-height: 420px; position: relative;
+            overflow: hidden;
+        }
+        .ft-sankey-area svg {
+            width: 100%; height: 100%;
+        }
+
+        /* Sankey node labels */
+        .sankey-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            fill: var(--s3-text-2);
+            pointer-events: none;
+        }
+        .sankey-amount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            fill: var(--s3-text-3);
+            pointer-events: none;
+        }
+
+        /* ── Tooltip ──────────────────────────────────────── */
+        .ft-tooltip {
+            position: fixed;
+            background: rgba(10,11,16,0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--s3-border);
+            border-radius: 10px;
+            padding: 12px 16px;
+            pointer-events: none;
+            z-index: 100;
+            max-width: 340px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .ft-tooltip.visible { opacity: 1; }
+        .ft-tooltip-title {
+            font-size: 11px; font-weight: 600; color: var(--s3-text);
+            margin-bottom: 6px;
+        }
+        .ft-tooltip-row {
+            display: flex; justify-content: space-between; gap: 16px;
+            padding: 2px 0;
+        }
+        .ft-tooltip-key { font-size: 11px; color: var(--s3-text-3); }
+        .ft-tooltip-val {
+            font-size: 11px; color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
+            text-align: right;
+        }
+
+        /* ── Chain Color Legend ────────────────────────────── */
+        .ft-legend {
+            position: absolute; bottom: 16px; left: 16px;
+            background: rgba(10, 11, 16, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 12px 16px;
+            z-index: 10;
+        }
+        .ft-legend-title {
+            font-size: 10px; font-weight: 600;
+            color: var(--s3-text-3);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            margin-bottom: 8px;
+        }
+        .ft-legend-item {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11px; color: var(--s3-text-2);
+            margin-bottom: 3px;
+        }
+        .ft-legend-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+
+        /* ── Flow Table ───────────────────────────────────── */
+        .ft-table-section {
+            padding: 0 28px 28px;
+        }
+        .ft-table-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--s3-border);
+        }
+        .ft-table-title {
+            font-size: 14px; font-weight: 600; color: var(--s3-text);
+        }
+        .table-wrap { overflow-x: auto; }
+        .s3-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .s3-table thead { background: rgba(255,255,255,0.02); }
+        .s3-table th {
+            padding: 12px 14px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--s3-border);
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.15s;
+            white-space: nowrap;
+        }
+        .s3-table th:hover { color: var(--s3-text-2); }
+        .s3-table th.sorted { color: var(--s3-accent-light); }
+        .s3-table th .sort-arrow {
+            display: inline-block; margin-left: 4px;
+            font-size: 9px; opacity: 0.5;
+        }
+        .s3-table th.sorted .sort-arrow { opacity: 1; }
+        .s3-table td {
+            padding: 10px 14px;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            vertical-align: middle;
+        }
+        .s3-table tbody tr {
+            transition: background 0.15s;
+        }
+        .s3-table tbody tr:hover {
+            background: rgba(139,92,246,0.04);
+        }
+        .td-mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+        .td-hash {
+            max-width: 140px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            color: var(--s3-text-2);
+        }
+        .td-amount {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            color: var(--s3-text);
+        }
+        .td-chain {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 2px 8px; border-radius: 6px;
+            font-size: 11px; font-weight: 500;
+        }
+        .td-depth {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 24px; height: 24px; border-radius: 6px;
+            font-size: 11px; font-weight: 700;
+            background: var(--s3-bg-3); color: var(--s3-text-2);
+            border: 1px solid var(--s3-border);
+        }
+
+        /* ── Loading Overlay ──────────────────────────────── */
+        .ft-loading {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: rgba(3,3,5,0.8);
+            backdrop-filter: blur(8px);
+            z-index: 20;
+            border-radius: var(--s3-radius);
+        }
+        .ft-spinner {
+            width: 48px; height: 48px;
+            border: 3px solid rgba(139,92,246,0.15);
+            border-top-color: var(--s3-accent);
+            border-radius: 50%;
+            animation: ft-spin 0.8s linear infinite;
+        }
+        @keyframes ft-spin { to { transform: rotate(360deg); } }
+        .ft-loading-text {
+            margin-top: 16px;
+            font-size: 13px; color: var(--s3-text-3);
+        }
+        .ft-progress-bar {
+            width: 200px; height: 4px;
+            background: var(--s3-bg-3);
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .ft-progress-fill {
+            height: 100%; border-radius: 2px;
+            background: linear-gradient(90deg, var(--s3-accent), var(--s3-cyan));
+            transition: width 0.5s ease;
+        }
+
+        /* ── Empty State ──────────────────────────────────── */
+        .ft-empty {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 60px 20px;
+            color: var(--s3-text-3);
+        }
+        .ft-empty svg {
+            width: 64px; height: 64px;
+            color: var(--s3-text-3);
+            opacity: 0.3;
+            margin-bottom: 20px;
+        }
+        .ft-empty-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px; font-weight: 600;
+            color: var(--s3-text-2);
+            margin-bottom: 8px;
+        }
+        .ft-empty-sub { font-size: 13px; color: var(--s3-text-3); }
+
+        /* ── Notification Toast ───────────────────────────── */
+        .ft-toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: rgba(10,11,16,0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px 20px;
+            display: flex; align-items: center; gap: 10px;
+            z-index: 200;
+            animation: ft-slidein 0.3s ease;
+            max-width: 400px;
+        }
+        .ft-toast.error { border-color: rgba(244,63,94,0.3); }
+        .ft-toast.success { border-color: rgba(16,185,129,0.3); }
+        @keyframes ft-slidein {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Node Detail Popup ────────────────────────────── */
+        .ft-node-detail {
+            position: absolute; top: 16px; right: 16px;
+            width: 280px;
+            background: rgba(10,11,16,0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius);
+            padding: 18px;
+            z-index: 15;
+            display: none;
+        }
+        .ft-node-detail.visible { display: block; }
+        .ft-node-detail-close {
+            position: absolute; top: 10px; right: 10px;
+            width: 24px; height: 24px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+            border: none; color: var(--s3-text-3);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s;
+        }
+        .ft-node-detail-close:hover { background: rgba(255,255,255,0.08); color: var(--s3-text); }
+        .ft-node-detail-addr {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; color: var(--s3-accent-light);
+            word-break: break-all;
+            margin-bottom: 12px;
+        }
+
+        /* Chain color utilities */
+        .chain-ethereum  { color: #3B82F6; }
+        .chain-polygon   { color: #8B5CF6; }
+        .chain-arbitrum   { color: #06B6D4; }
+        .chain-solana    { color: #10B981; }
+        .chain-bsc       { color: #F59E0B; }
+        .chain-avalanche { color: #EF4444; }
+        .chain-optimism  { color: #EF4444; }
+        .chain-base      { color: #3B82F6; }
+        .chain-unknown   { color: #64748B; }
+    </style>
+</head>
+<body>
+    <div id="app" style="flex:1;min-width:0;display:flex;flex-direction:column;">
+
+        <!-- Header -->
+        <header class="ft-header">
+            <h1>Cross-Chain Fund Tracing</h1>
+            <div class="ft-header-right">
+                <span id="statusBadge" class="risk-badge low" style="display:none;">
+                    <span style="width:6px;height:6px;border-radius:50%;background:currentColor;"></span>
+                    <span id="statusText">Ready</span>
+                </span>
+            </div>
+        </header>
+
+        <!-- Controls Bar -->
+        <div class="ft-controls">
+            <input type="text" id="addressInput" class="ft-input" placeholder="Enter address to trace (0x...)">
+            <select id="depthSelect" class="ft-select">
+                <option value="1">Depth: 1</option>
+                <option value="2">Depth: 2</option>
+                <option value="3">Depth: 3</option>
+                <option value="4">Depth: 4</option>
+                <option value="5" selected>Depth: 5</option>
+                <option value="6">Depth: 6</option>
+                <option value="7">Depth: 7</option>
+                <option value="8">Depth: 8</option>
+                <option value="9">Depth: 9</option>
+                <option value="10">Depth: 10</option>
+            </select>
+            <select id="chainSelect" class="ft-select">
+                <option value="">Chains: All</option>
+                <option value="ethereum">Ethereum</option>
+                <option value="polygon">Polygon</option>
+                <option value="arbitrum">Arbitrum</option>
+                <option value="optimism">Optimism</option>
+                <option value="base">Base</option>
+                <option value="bsc">BSC</option>
+                <option value="avalanche">Avalanche</option>
+                <option value="solana">Solana</option>
+            </select>
+            <button id="traceBtn" class="btn btn-accent" onclick="startTrace()">
+                <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                Trace Funds
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="loadDemo()" title="Load demo data">Demo</button>
+            <button id="exportBtn" class="btn btn-ghost btn-sm" onclick="exportCSV()" style="display:none;" title="Export as CSV">
+                <svg style="width:13px;height:13px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Export CSV
+            </button>
+        </div>
+
+        <!-- Main Body: Left panel + Sankey -->
+        <div class="ft-body" id="mainBody" style="display:none;">
+            <!-- Left Panel -->
+            <div class="ft-left">
+                <!-- Stats Panel -->
+                <div class="glass ft-panel">
+                    <div class="ft-panel-title">
+                        <svg style="width:12px;height:12px;color:var(--s3-accent-light);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                        Flow Statistics
+                    </div>
+                    <div id="statsPanel">
+                        <div class="ft-stat-row">
+                            <span class="ft-stat-label">Total Traced</span>
+                            <span class="ft-stat-value highlight" id="statTotal">$0</span>
+                        </div>
+                        <div class="ft-stat-row">
+                            <span class="ft-stat-label">Transactions</span>
+                            <span class="ft-stat-value" id="statTxCount">0</span>
+                        </div>
+                        <div class="ft-stat-row">
+                            <span class="ft-stat-label">Max Depth</span>
+                            <span class="ft-stat-value" id="statMaxDepth">0</span>
+                        </div>
+                        <div class="ft-stat-row">
+                            <span class="ft-stat-label">Chains</span>
+                            <span class="ft-stat-value" id="statChains">0</span>
+                        </div>
+                        <div class="ft-stat-row">
+                            <span class="ft-stat-label">Addresses</span>
+                            <span class="ft-stat-value" id="statAddresses">0</span>
+                        </div>
+                        <div class="ft-stat-row">
+                            <span class="ft-stat-label">Risk Flags</span>
+                            <span id="statRisk" class="risk-badge low">None</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Address List Panel -->
+                <div class="glass ft-panel" style="flex:1;overflow-y:auto;">
+                    <div class="ft-panel-title">
+                        <svg style="width:12px;height:12px;color:var(--s3-cyan);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Addresses
+                    </div>
+                    <div id="addressList"></div>
+                </div>
+            </div>
+
+            <!-- Sankey Diagram -->
+            <div class="glass ft-sankey-wrap">
+                <div class="ft-sankey-header">
+                    <div class="ft-sankey-title">
+                        <div class="ft-sankey-title-icon">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        Fund Flow Diagram
+                    </div>
+                    <div class="ft-sankey-actions">
+                        <button class="btn btn-ghost btn-sm" onclick="resetZoom()" title="Reset view">Reset</button>
+                    </div>
+                </div>
+                <div class="ft-sankey-area" id="sankeyArea">
+                    <!-- Loading overlay -->
+                    <div class="ft-loading" id="loadingOverlay" style="display:none;">
+                        <div class="ft-spinner"></div>
+                        <div class="ft-loading-text" id="loadingText">Starting investigation...</div>
+                        <div class="ft-progress-bar">
+                            <div class="ft-progress-fill" id="progressFill" style="width:0%;"></div>
+                        </div>
+                    </div>
+                    <!-- Node detail popup -->
+                    <div class="ft-node-detail" id="nodeDetail">
+                        <button class="ft-node-detail-close" onclick="closeNodeDetail()">
+                            <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                        <div id="nodeDetailContent"></div>
+                    </div>
+                    <!-- Legend -->
+                    <div class="ft-legend" id="legend" style="display:none;">
+                        <div class="ft-legend-title">Chains</div>
+                        <div id="legendItems"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty state -->
+        <div class="ft-empty" id="emptyState">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <div class="ft-empty-title">Cross-Chain Fund Tracing</div>
+            <div class="ft-empty-sub">Enter an address above to trace fund flows across chains, or click Demo to explore sample data.</div>
+        </div>
+
+        <!-- Flow Table -->
+        <div class="ft-table-section" id="tableSection" style="display:none;">
+            <div class="glass" style="overflow:hidden;">
+                <div class="ft-table-header">
+                    <span class="ft-table-title">Fund Flow Details</span>
+                    <span style="font-size:12px;color:var(--s3-text-3);" class="mono" id="tableCount">0 flows</span>
+                </div>
+                <div class="table-wrap">
+                    <table class="s3-table">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('from')" id="th-from">From <span class="sort-arrow"></span></th>
+                                <th onclick="sortTable('to')" id="th-to">To <span class="sort-arrow"></span></th>
+                                <th onclick="sortTable('amount_usd')" id="th-amount_usd">Amount <span class="sort-arrow"></span></th>
+                                <th onclick="sortTable('chain_id')" id="th-chain_id">Chain <span class="sort-arrow"></span></th>
+                                <th onclick="sortTable('tx_hash')" id="th-tx_hash">Tx Hash <span class="sort-arrow"></span></th>
+                                <th onclick="sortTable('timestamp')" id="th-timestamp">Timestamp <span class="sort-arrow"></span></th>
+                                <th onclick="sortTable('depth')" id="th-depth">Depth <span class="sort-arrow"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="flowTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div class="ft-tooltip" id="tooltip"></div>
+
+    <script>
+    /* ============================================================
+       Sentinel3 Fund Tracing — Frontend Logic
+       ============================================================ */
+
+    // ── Chain Colors ──────────────────────────────────────────────
+    const CHAIN_COLORS = {
+        ethereum:  '#3B82F6',
+        polygon:   '#8B5CF6',
+        arbitrum:  '#06B6D4',
+        optimism:  '#EF4444',
+        base:      '#3B82F6',
+        bsc:       '#F59E0B',
+        avalanche: '#EF4444',
+        solana:    '#10B981',
+        unknown:   '#64748B',
+    };
+
+    // ── Known Address Labels (demo) ──────────────────────────────
+    const KNOWN_LABELS = {
+        '0x6CCe...3a2F': { label: 'Euler Attacker', type: 'eoa', risk: 'high' },
+        '0x1234...abCD': { label: 'Tornado Cash', type: 'mixer', risk: 'high' },
+        '0xABcd...5678': { label: 'Tornado Cash 2', type: 'mixer', risk: 'high' },
+        '0x9988...1122': { label: 'Binance Hot', type: 'exchange', risk: 'low' },
+        '0xDEad...bEEf': { label: 'OKX Deposit', type: 'exchange', risk: 'low' },
+        '0x7777...8888': { label: 'Hop Bridge', type: 'bridge', risk: 'medium' },
+        '0xaaaa...bbbb': { label: 'Across Bridge', type: 'bridge', risk: 'medium' },
+        '0xCCCC...DDDD': { label: 'Intermediary 1', type: 'eoa', risk: 'medium' },
+        '0xEEEE...FFFF': { label: 'Intermediary 2', type: 'eoa', risk: 'medium' },
+        '0x5555...6666': { label: 'Uniswap V3', type: 'contract', risk: 'low' },
+    };
+
+    // ── State ────────────────────────────────────────────────────
+    let currentFlows = [];
+    let currentAddresses = [];
+    let sortCol = 'depth';
+    let sortDir = 'asc';
+    let investigationId = null;
+    let pollTimer = null;
+
+    // ── Utility Functions ────────────────────────────────────────
+    function shortAddr(addr) {
+        if (!addr) return '???';
+        if (addr.length > 12) return addr.slice(0, 6) + '...' + addr.slice(-4);
+        return addr;
+    }
+
+    function formatUSD(val) {
+        if (val == null) return '$0';
+        if (val >= 1e6) return '$' + (val / 1e6).toFixed(2) + 'M';
+        if (val >= 1e3) return '$' + (val / 1e3).toFixed(1) + 'K';
+        return '$' + val.toFixed(2);
+    }
+
+    function chainColor(chain) {
+        return CHAIN_COLORS[(chain || '').toLowerCase()] || CHAIN_COLORS.unknown;
+    }
+
+    function chainName(chain) {
+        if (!chain) return 'Unknown';
+        return chain.charAt(0).toUpperCase() + chain.slice(1);
+    }
+
+    function getLabel(addr) {
+        const short = shortAddr(addr);
+        return KNOWN_LABELS[short] || KNOWN_LABELS[addr] || null;
+    }
+
+    function sanitize(str) {
+        if (typeof DOMPurify !== 'undefined') return DOMPurify.sanitize(str);
+        const el = document.createElement('div');
+        el.textContent = str;
+        return el.innerHTML;
+    }
+
+    // ── Trace Start ──────────────────────────────────────────────
+    async function startTrace() {
+        const address = document.getElementById('addressInput').value.trim();
+        if (!address) return;
+
+        const depth = parseInt(document.getElementById('depthSelect').value);
+        const chain = document.getElementById('chainSelect').value;
+        const chainIds = chain ? [chain] : [];
+
+        showLoading('Starting investigation...');
+        document.getElementById('traceBtn').disabled = true;
+
+        try {
+            const resp = await sentinel3Fetch('/api/forensics/investigate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query_type: 'fund_flow_trace',
+                    addresses: [address],
+                    max_depth: depth,
+                    chain_ids: chainIds,
+                }),
+            });
+
+            if (!resp.ok) throw new Error('API returned ' + resp.status);
+
+            const data = await resp.json();
+            investigationId = data.investigation_id;
+            pollForResults(investigationId);
+        } catch (err) {
+            console.warn('API error, loading demo data:', err.message);
+            hideLoading();
+            document.getElementById('traceBtn').disabled = false;
+            loadDemo();
+            showToast('API unavailable - showing demo data', 'error');
+        }
+    }
+
+    // ── Poll for Results ─────────────────────────────────────────
+    async function pollForResults(invId) {
+        let attempts = 0;
+        const maxAttempts = 60;
+
+        async function poll() {
+            attempts++;
+            try {
+                const resp = await sentinel3Fetch('/api/forensics/investigate/' + invId);
+                if (!resp.ok) throw new Error('Poll failed');
+
+                const data = await resp.json();
+                updateProgress(data.progress || (attempts / maxAttempts));
+
+                if (data.status === 'completed' && data.result) {
+                    hideLoading();
+                    document.getElementById('traceBtn').disabled = false;
+                    processResults(data.result);
+                    return;
+                } else if (data.status === 'failed') {
+                    hideLoading();
+                    document.getElementById('traceBtn').disabled = false;
+                    showToast('Investigation failed: ' + (data.error || 'Unknown error'), 'error');
+                    loadDemo();
+                    return;
+                }
+
+                if (attempts < maxAttempts) {
+                    pollTimer = setTimeout(poll, 1500);
+                } else {
+                    hideLoading();
+                    document.getElementById('traceBtn').disabled = false;
+                    showToast('Investigation timed out - showing demo data', 'error');
+                    loadDemo();
+                }
+            } catch (err) {
+                hideLoading();
+                document.getElementById('traceBtn').disabled = false;
+                showToast('Poll error - showing demo data', 'error');
+                loadDemo();
+            }
+        }
+
+        poll();
+    }
+
+    // ── Process Results ──────────────────────────────────────────
+    function processResults(result) {
+        const flows = result.fund_flows || [];
+        if (flows.length === 0) {
+            showToast('No fund flows found - showing demo data', 'error');
+            loadDemo();
+            return;
+        }
+        renderAll(flows, result.affected_addresses || [], result.affected_chains || []);
+    }
+
+    // ── Render All ───────────────────────────────────────────────
+    function renderAll(flows, addresses, chains) {
+        currentFlows = flows;
+
+        // Collect unique addresses from flows
+        const addrSet = new Set();
+        flows.forEach(f => {
+            if (f.from) addrSet.add(f.from);
+            if (f.to) addrSet.add(f.to);
+        });
+        currentAddresses = Array.from(addrSet);
+
+        // Show panels
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('mainBody').style.display = 'grid';
+        document.getElementById('tableSection').style.display = 'block';
+        document.getElementById('exportBtn').style.display = 'inline-flex';
+        document.getElementById('statusBadge').style.display = 'inline-flex';
+
+        // Unique chains
+        const uniqueChains = [...new Set(flows.map(f => f.chain_id || 'unknown'))];
+
+        updateStats(flows, uniqueChains);
+        renderAddressList(flows);
+        renderSankey(flows, uniqueChains);
+        renderTable(flows);
+        renderLegend(uniqueChains);
+    }
+
+    // ── Update Stats ─────────────────────────────────────────────
+    function updateStats(flows, chains) {
+        const totalUSD = flows.reduce((s, f) => s + (f.amount_usd || 0), 0);
+        const maxDepth = Math.max(0, ...flows.map(f => f.depth || 0));
+        const addrSet = new Set();
+        flows.forEach(f => { if (f.from) addrSet.add(f.from); if (f.to) addrSet.add(f.to); });
+
+        document.getElementById('statTotal').textContent = formatUSD(totalUSD);
+        document.getElementById('statTxCount').textContent = flows.length;
+        document.getElementById('statMaxDepth').textContent = maxDepth;
+        document.getElementById('statChains').textContent = chains.length;
+        document.getElementById('statAddresses').textContent = addrSet.size;
+
+        // Risk assessment
+        const hasMixer = flows.some(f => {
+            const lFrom = getLabel(f.from);
+            const lTo = getLabel(f.to);
+            return (lFrom && lFrom.type === 'mixer') || (lTo && lTo.type === 'mixer');
+        });
+        const riskEl = document.getElementById('statRisk');
+        if (hasMixer) {
+            riskEl.className = 'risk-badge high';
+            riskEl.textContent = 'Mixer Detected';
+        } else if (maxDepth > 3) {
+            riskEl.className = 'risk-badge medium';
+            riskEl.textContent = 'Multi-hop';
+        } else {
+            riskEl.className = 'risk-badge low';
+            riskEl.textContent = 'None';
+        }
+    }
+
+    // ── Render Address List ──────────────────────────────────────
+    function renderAddressList(flows) {
+        const addrVolume = {};
+        flows.forEach(f => {
+            const amt = f.amount_usd || 0;
+            if (f.from) addrVolume[f.from] = (addrVolume[f.from] || 0) + amt;
+            if (f.to) addrVolume[f.to] = (addrVolume[f.to] || 0) + amt;
+        });
+
+        const sorted = Object.entries(addrVolume).sort((a, b) => b[1] - a[1]);
+        const sourceAddr = document.getElementById('addressInput').value.trim();
+
+        let html = '';
+        sorted.forEach(([addr, vol]) => {
+            const label = getLabel(addr);
+            const isSource = addr === sourceAddr;
+            const chainForAddr = flows.find(f => f.from === addr || f.to === addr);
+            const color = chainColor(chainForAddr ? chainForAddr.chain_id : 'unknown');
+
+            html += '<div class="ft-addr-item' + (isSource ? ' source' : '') + '" onclick="highlightAddress(\'' + sanitize(addr) + '\')">';
+            html += '<div class="ft-addr-dot" style="background:' + color + ';"></div>';
+            html += '<span class="ft-addr-hash" title="' + sanitize(addr) + '">' + sanitize(shortAddr(addr)) + '</span>';
+            if (label) {
+                html += '<span class="ft-addr-label ' + label.type + '">' + sanitize(label.label) + '</span>';
+            }
+            html += '<span class="ft-addr-volume">' + formatUSD(vol) + '</span>';
+            html += '</div>';
+        });
+
+        document.getElementById('addressList').innerHTML = html;
+    }
+
+    // ── Render Sankey Diagram ────────────────────────────────────
+    function renderSankey(flows, chains) {
+        const area = document.getElementById('sankeyArea');
+        const existing = area.querySelector('svg.sankey-svg');
+        if (existing) existing.remove();
+
+        if (flows.length === 0) return;
+
+        const rect = area.getBoundingClientRect();
+        const width = rect.width || 800;
+        const height = rect.height || 420;
+        const margin = { top: 20, right: 120, bottom: 20, left: 120 };
+
+        // Build node/link data for sankey
+        const nodeMap = new Map();
+        let nodeIdx = 0;
+
+        // We need to handle cycles: sankey doesn't support them.
+        // Suffix nodes by depth to linearize the graph.
+        const sankeyNodes = [];
+        const sankeyLinks = [];
+        const nodeKeyToIdx = {};
+
+        flows.forEach(f => {
+            const fromKey = (f.from || 'unknown') + '_d' + (f.depth || 0);
+            const toKey = (f.to || 'unknown') + '_d' + ((f.depth || 0) + 1);
+
+            if (!(fromKey in nodeKeyToIdx)) {
+                nodeKeyToIdx[fromKey] = sankeyNodes.length;
+                sankeyNodes.push({
+                    name: f.from || 'unknown',
+                    key: fromKey,
+                    chain: f.chain_id || 'unknown',
+                    depth: f.depth || 0,
+                });
+            }
+            if (!(toKey in nodeKeyToIdx)) {
+                nodeKeyToIdx[toKey] = sankeyNodes.length;
+                sankeyNodes.push({
+                    name: f.to || 'unknown',
+                    key: toKey,
+                    chain: f.chain_id || 'unknown',
+                    depth: (f.depth || 0) + 1,
+                });
+            }
+
+            sankeyLinks.push({
+                source: nodeKeyToIdx[fromKey],
+                target: nodeKeyToIdx[toKey],
+                value: Math.max(f.amount_usd || 1, 1),
+                chain: f.chain_id || 'unknown',
+                tx_hash: f.tx_hash || '',
+                timestamp: f.timestamp || '',
+                amount_usd: f.amount_usd || 0,
+                fromAddr: f.from || 'unknown',
+                toAddr: f.to || 'unknown',
+            });
+        });
+
+        // Merge duplicate links (same source+target)
+        const linkMerge = {};
+        sankeyLinks.forEach(l => {
+            const k = l.source + '->' + l.target;
+            if (linkMerge[k]) {
+                linkMerge[k].value += l.value;
+                linkMerge[k].amount_usd += l.amount_usd;
+                linkMerge[k].tx_hash = linkMerge[k].tx_hash || l.tx_hash;
+            } else {
+                linkMerge[k] = { ...l };
+            }
+        });
+        const mergedLinks = Object.values(linkMerge);
+
+        const svg = d3.select(area)
+            .append('svg')
+            .attr('class', 'sankey-svg')
+            .attr('width', width)
+            .attr('height', height);
+
+        const g = svg.append('g');
+
+        // Zoom
+        const zoom = d3.zoom()
+            .scaleExtent([0.3, 3])
+            .on('zoom', (event) => g.attr('transform', event.transform));
+        svg.call(zoom);
+        window._sankeyZoom = zoom;
+        window._sankeySvg = svg;
+
+        try {
+            const sankey = d3.sankey()
+                .nodeId(d => d.index)
+                .nodeWidth(16)
+                .nodePadding(14)
+                .nodeAlign(d3.sankeyLeft)
+                .extent([[margin.left, margin.top], [width - margin.right, height - margin.bottom]]);
+
+            const graph = sankey({
+                nodes: sankeyNodes.map((d, i) => ({ ...d, index: i })),
+                links: mergedLinks.map(d => ({ ...d })),
+            });
+
+            // Draw links
+            const link = g.append('g')
+                .attr('fill', 'none')
+                .selectAll('g')
+                .data(graph.links)
+                .join('g')
+                .style('mix-blend-mode', 'screen');
+
+            const linkPath = link.append('path')
+                .attr('d', d3.sankeyLinkHorizontal())
+                .attr('stroke', d => chainColor(d.chain))
+                .attr('stroke-opacity', 0.35)
+                .attr('stroke-width', d => Math.max(2, d.width))
+                .style('cursor', 'pointer');
+
+            linkPath.on('mouseover', function(event, d) {
+                d3.select(this).attr('stroke-opacity', 0.7);
+                showTooltip(event, {
+                    title: 'Transfer',
+                    rows: [
+                        ['From', shortAddr(d.fromAddr)],
+                        ['To', shortAddr(d.toAddr)],
+                        ['Amount', formatUSD(d.amount_usd)],
+                        ['Chain', chainName(d.chain)],
+                        ['Tx Hash', d.tx_hash ? shortAddr(d.tx_hash) : 'N/A'],
+                        ['Timestamp', d.timestamp || 'N/A'],
+                    ],
+                });
+            }).on('mousemove', function(event) {
+                moveTooltip(event);
+            }).on('mouseout', function() {
+                d3.select(this).attr('stroke-opacity', 0.35);
+                hideTooltip();
+            });
+
+            // Draw nodes
+            const node = g.append('g')
+                .selectAll('g')
+                .data(graph.nodes)
+                .join('g')
+                .style('cursor', 'pointer');
+
+            node.append('rect')
+                .attr('x', d => d.x0)
+                .attr('y', d => d.y0)
+                .attr('height', d => Math.max(4, d.y1 - d.y0))
+                .attr('width', d => d.x1 - d.x0)
+                .attr('fill', d => chainColor(d.chain))
+                .attr('rx', 3)
+                .attr('opacity', 0.85)
+                .on('mouseover', function() { d3.select(this).attr('opacity', 1); })
+                .on('mouseout', function() { d3.select(this).attr('opacity', 0.85); });
+
+            // Node labels
+            node.append('text')
+                .attr('class', 'sankey-label')
+                .attr('x', d => d.x0 < width / 2 ? d.x1 + 8 : d.x0 - 8)
+                .attr('y', d => (d.y0 + d.y1) / 2)
+                .attr('dy', '0.35em')
+                .attr('text-anchor', d => d.x0 < width / 2 ? 'start' : 'end')
+                .text(d => {
+                    const label = getLabel(d.name);
+                    return label ? label.label : shortAddr(d.name);
+                });
+
+            // Node amount labels
+            node.append('text')
+                .attr('class', 'sankey-amount')
+                .attr('x', d => d.x0 < width / 2 ? d.x1 + 8 : d.x0 - 8)
+                .attr('y', d => (d.y0 + d.y1) / 2 + 14)
+                .attr('text-anchor', d => d.x0 < width / 2 ? 'start' : 'end')
+                .text(d => formatUSD(d.value));
+
+            // Click node for detail
+            node.on('click', function(event, d) {
+                showNodeDetail(d);
+            });
+
+        } catch (err) {
+            console.error('Sankey render error:', err);
+            // Fallback: render force-directed
+            renderForceDirected(flows, chains, svg, g, width, height, zoom);
+        }
+    }
+
+    // ── Force-Directed Fallback ──────────────────────────────────
+    function renderForceDirected(flows, chains, svg, g, width, height, zoom) {
+        g.selectAll('*').remove();
+
+        const nodeMap = new Map();
+        flows.forEach(f => {
+            if (f.from && !nodeMap.has(f.from)) nodeMap.set(f.from, { id: f.from, chain: f.chain_id, vol: 0 });
+            if (f.to && !nodeMap.has(f.to)) nodeMap.set(f.to, { id: f.to, chain: f.chain_id, vol: 0 });
+            if (f.from) nodeMap.get(f.from).vol += (f.amount_usd || 0);
+            if (f.to) nodeMap.get(f.to).vol += (f.amount_usd || 0);
+        });
+
+        const nodes = Array.from(nodeMap.values());
+        const links = flows.map(f => ({
+            source: f.from,
+            target: f.to,
+            value: f.amount_usd || 1,
+            chain: f.chain_id || 'unknown',
+            tx_hash: f.tx_hash,
+            timestamp: f.timestamp,
+        }));
+
+        const maxVol = Math.max(1, ...nodes.map(n => n.vol));
+        const rScale = d3.scaleSqrt().domain([0, maxVol]).range([6, 30]);
+        const wScale = d3.scaleSqrt().domain([0, d3.max(links, d => d.value) || 1]).range([1, 8]);
+
+        const sim = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-200))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(d => rScale(d.vol) + 4));
+
+        // Arrow marker
+        g.append('defs').selectAll('marker')
+            .data(['arrow'])
+            .join('marker')
+            .attr('id', 'arrow')
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 20)
+            .attr('refY', 0)
+            .attr('markerWidth', 6)
+            .attr('markerHeight', 6)
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('fill', 'rgba(148,163,184,0.4)');
+
+        const link = g.append('g')
+            .selectAll('line')
+            .data(links)
+            .join('line')
+            .attr('stroke', d => chainColor(d.chain))
+            .attr('stroke-opacity', 0.3)
+            .attr('stroke-width', d => wScale(d.value))
+            .attr('marker-end', 'url(#arrow)');
+
+        const nodeG = g.append('g')
+            .selectAll('g')
+            .data(nodes)
+            .join('g')
+            .call(d3.drag()
+                .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+                .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+            );
+
+        nodeG.append('circle')
+            .attr('r', d => rScale(d.vol))
+            .attr('fill', d => chainColor(d.chain))
+            .attr('fill-opacity', 0.3)
+            .attr('stroke', d => chainColor(d.chain))
+            .attr('stroke-width', 1.5);
+
+        nodeG.append('text')
+            .attr('class', 'sankey-label')
+            .attr('dy', d => -rScale(d.vol) - 6)
+            .attr('text-anchor', 'middle')
+            .text(d => {
+                const label = getLabel(d.id);
+                return label ? label.label : shortAddr(d.id);
+            });
+
+        sim.on('tick', () => {
+            link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            nodeG.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+        });
+    }
+
+    // ── Render Legend ─────────────────────────────────────────────
+    function renderLegend(chains) {
+        const legendEl = document.getElementById('legend');
+        const items = document.getElementById('legendItems');
+        let html = '';
+        chains.forEach(c => {
+            html += '<div class="ft-legend-item">';
+            html += '<div class="ft-legend-dot" style="background:' + chainColor(c) + ';"></div>';
+            html += chainName(c);
+            html += '</div>';
+        });
+        items.innerHTML = html;
+        legendEl.style.display = chains.length > 0 ? 'block' : 'none';
+    }
+
+    // ── Render Table ─────────────────────────────────────────────
+    function renderTable(flows) {
+        const sorted = [...flows].sort((a, b) => {
+            let va = a[sortCol], vb = b[sortCol];
+            if (sortCol === 'amount_usd' || sortCol === 'depth') {
+                va = Number(va) || 0;
+                vb = Number(vb) || 0;
+            } else {
+                va = String(va || '').toLowerCase();
+                vb = String(vb || '').toLowerCase();
+            }
+            return sortDir === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+        });
+
+        document.getElementById('tableCount').textContent = sorted.length + ' flows';
+
+        // Update sort indicators
+        document.querySelectorAll('.s3-table th').forEach(th => {
+            th.classList.remove('sorted');
+            const arrow = th.querySelector('.sort-arrow');
+            if (arrow) arrow.textContent = '';
+        });
+        const activeTh = document.getElementById('th-' + sortCol);
+        if (activeTh) {
+            activeTh.classList.add('sorted');
+            const arrow = activeTh.querySelector('.sort-arrow');
+            if (arrow) arrow.textContent = sortDir === 'asc' ? '\u25B2' : '\u25BC';
+        }
+
+        let html = '';
+        sorted.forEach(f => {
+            const c = chainColor(f.chain_id);
+            html += '<tr>';
+            html += '<td class="td-mono td-hash" title="' + sanitize(f.from || '') + '">' + sanitize(shortAddr(f.from)) + '</td>';
+            html += '<td class="td-mono td-hash" title="' + sanitize(f.to || '') + '">' + sanitize(shortAddr(f.to)) + '</td>';
+            html += '<td class="td-amount">' + formatUSD(f.amount_usd) + '</td>';
+            html += '<td><span class="td-chain" style="background:' + c + '15;color:' + c + ';">' + sanitize(chainName(f.chain_id)) + '</span></td>';
+            html += '<td class="td-mono td-hash" title="' + sanitize(f.tx_hash || '') + '">' + sanitize(shortAddr(f.tx_hash)) + '</td>';
+            html += '<td class="mono" style="font-size:11px;color:var(--s3-text-3);">' + sanitize(f.timestamp || 'N/A') + '</td>';
+            html += '<td><span class="td-depth">' + (f.depth != null ? f.depth : '-') + '</span></td>';
+            html += '</tr>';
+        });
+
+        document.getElementById('flowTableBody').innerHTML = html;
+    }
+
+    // ── Sort Table ───────────────────────────────────────────────
+    function sortTable(col) {
+        if (sortCol === col) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortCol = col;
+            sortDir = col === 'amount_usd' ? 'desc' : 'asc';
+        }
+        renderTable(currentFlows);
+    }
+
+    // ── Node Detail ──────────────────────────────────────────────
+    function showNodeDetail(d) {
+        const el = document.getElementById('nodeDetail');
+        const content = document.getElementById('nodeDetailContent');
+        const label = getLabel(d.name);
+
+        let html = '<div class="ft-node-detail-addr">' + sanitize(d.name) + '</div>';
+        if (label) {
+            html += '<div style="margin-bottom:8px;"><span class="ft-addr-label ' + label.type + '">' + sanitize(label.label) + '</span>';
+            html += ' <span class="risk-badge ' + label.risk + '">' + label.risk + '</span></div>';
+        }
+
+        // Calculate in/out volumes
+        let inVol = 0, outVol = 0, txCount = 0;
+        currentFlows.forEach(f => {
+            if (f.to === d.name) { inVol += (f.amount_usd || 0); txCount++; }
+            if (f.from === d.name) { outVol += (f.amount_usd || 0); txCount++; }
+        });
+
+        html += '<div class="ft-stat-row"><span class="ft-stat-label">Inbound</span><span class="ft-stat-value" style="color:#34d399;">' + formatUSD(inVol) + '</span></div>';
+        html += '<div class="ft-stat-row"><span class="ft-stat-label">Outbound</span><span class="ft-stat-value" style="color:#fb7185;">' + formatUSD(outVol) + '</span></div>';
+        html += '<div class="ft-stat-row"><span class="ft-stat-label">Transactions</span><span class="ft-stat-value">' + txCount + '</span></div>';
+        html += '<div class="ft-stat-row"><span class="ft-stat-label">Chain</span><span class="ft-stat-value" style="color:' + chainColor(d.chain) + ';">' + chainName(d.chain) + '</span></div>';
+
+        content.innerHTML = html;
+        el.classList.add('visible');
+    }
+
+    function closeNodeDetail() {
+        document.getElementById('nodeDetail').classList.remove('visible');
+    }
+
+    // ── Highlight Address ────────────────────────────────────────
+    function highlightAddress(addr) {
+        // Highlight in sankey
+        const svg = document.querySelector('.sankey-svg');
+        if (!svg) return;
+
+        d3.select(svg).selectAll('.sankey-label')
+            .attr('fill', function() {
+                const text = d3.select(this).text();
+                const label = getLabel(addr);
+                const matchText = label ? label.label : shortAddr(addr);
+                return text === matchText ? '#fff' : 'var(--s3-text-2)';
+            })
+            .attr('font-weight', function() {
+                const text = d3.select(this).text();
+                const label = getLabel(addr);
+                const matchText = label ? label.label : shortAddr(addr);
+                return text === matchText ? '700' : '400';
+            });
+
+        // Show node detail for this address
+        const node = { name: addr, chain: 'unknown' };
+        currentFlows.forEach(f => {
+            if (f.from === addr || f.to === addr) node.chain = f.chain_id;
+        });
+        showNodeDetail(node);
+    }
+
+    // ── Reset Zoom ───────────────────────────────────────────────
+    function resetZoom() {
+        if (window._sankeySvg && window._sankeyZoom) {
+            window._sankeySvg.transition().duration(500)
+                .call(window._sankeyZoom.transform, d3.zoomIdentity);
+        }
+    }
+
+    // ── Tooltip ──────────────────────────────────────────────────
+    function showTooltip(event, data) {
+        const tt = document.getElementById('tooltip');
+        let html = '<div class="ft-tooltip-title">' + sanitize(data.title) + '</div>';
+        data.rows.forEach(([k, v]) => {
+            html += '<div class="ft-tooltip-row"><span class="ft-tooltip-key">' + sanitize(k) + '</span><span class="ft-tooltip-val">' + sanitize(v) + '</span></div>';
+        });
+        tt.innerHTML = html;
+        tt.classList.add('visible');
+        moveTooltip(event);
+    }
+
+    function moveTooltip(event) {
+        const tt = document.getElementById('tooltip');
+        const x = event.clientX + 16;
+        const y = event.clientY - 10;
+        tt.style.left = x + 'px';
+        tt.style.top = y + 'px';
+    }
+
+    function hideTooltip() {
+        document.getElementById('tooltip').classList.remove('visible');
+    }
+
+    // ── Loading State ────────────────────────────────────────────
+    function showLoading(text) {
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('mainBody').style.display = 'grid';
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        document.getElementById('loadingText').textContent = text || 'Processing...';
+        document.getElementById('progressFill').style.width = '0%';
+    }
+
+    function hideLoading() {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    function updateProgress(pct) {
+        const p = Math.min(1, Math.max(0, pct)) * 100;
+        document.getElementById('progressFill').style.width = p + '%';
+        if (p < 30) {
+            document.getElementById('loadingText').textContent = 'Tracing fund flows...';
+        } else if (p < 70) {
+            document.getElementById('loadingText').textContent = 'Analyzing cross-chain transfers...';
+        } else {
+            document.getElementById('loadingText').textContent = 'Building flow graph...';
+        }
+    }
+
+    // ── Toast ────────────────────────────────────────────────────
+    function showToast(msg, type) {
+        const existing = document.querySelector('.ft-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.className = 'ft-toast ' + (type || '');
+        toast.innerHTML = '<span style="font-size:13px;color:var(--s3-text-2);">' + sanitize(msg) + '</span>';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    // ── Export CSV ────────────────────────────────────────────────
+    function exportCSV() {
+        if (currentFlows.length === 0) return;
+        const headers = ['From', 'To', 'Amount (USD)', 'Chain', 'Tx Hash', 'Timestamp', 'Depth'];
+        const rows = currentFlows.map(f => [
+            f.from || '', f.to || '', f.amount_usd || 0, f.chain_id || '',
+            f.tx_hash || '', f.timestamp || '', f.depth != null ? f.depth : '',
+        ]);
+        let csv = headers.join(',') + '\n';
+        rows.forEach(r => {
+            csv += r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',') + '\n';
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'fund-flows-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Exported ' + currentFlows.length + ' flows to CSV', 'success');
+    }
+
+    // ── Demo Data ────────────────────────────────────────────────
+    function loadDemo() {
+        const now = new Date();
+        const ts = (h) => new Date(now.getTime() - h * 3600000).toISOString();
+
+        const demoFlows = [
+            // Euler exploit initial fund movements
+            { from: '0x6CCe...3a2F', to: '0xCCCC...DDDD', amount_usd: 197000000, chain_id: 'ethereum', tx_hash: '0xa0c4...7d9e', timestamp: ts(72), depth: 0 },
+            // Split through intermediaries
+            { from: '0xCCCC...DDDD', to: '0x1234...abCD', amount_usd: 100000000, chain_id: 'ethereum', tx_hash: '0xb2f1...c3a8', timestamp: ts(68), depth: 1 },
+            { from: '0xCCCC...DDDD', to: '0x7777...8888', amount_usd: 50000000, chain_id: 'ethereum', tx_hash: '0xc3d2...e4b7', timestamp: ts(67), depth: 1 },
+            { from: '0xCCCC...DDDD', to: '0x5555...6666', amount_usd: 30000000, chain_id: 'ethereum', tx_hash: '0xd4e3...f5c6', timestamp: ts(66), depth: 1 },
+            { from: '0xCCCC...DDDD', to: '0xEEEE...FFFF', amount_usd: 17000000, chain_id: 'ethereum', tx_hash: '0xe5f4...a6d5', timestamp: ts(65), depth: 1 },
+            // Tornado Cash mixing
+            { from: '0x1234...abCD', to: '0xABcd...5678', amount_usd: 100000000, chain_id: 'ethereum', tx_hash: '0xf6a5...b7e4', timestamp: ts(60), depth: 2 },
+            // Bridge to Polygon
+            { from: '0x7777...8888', to: '0xEEEE...FFFF', amount_usd: 50000000, chain_id: 'polygon', tx_hash: '0xa7b6...c8f3', timestamp: ts(55), depth: 2 },
+            // DEX swap
+            { from: '0x5555...6666', to: '0x9988...1122', amount_usd: 30000000, chain_id: 'ethereum', tx_hash: '0xb8c7...d9a2', timestamp: ts(50), depth: 2 },
+            // Final destinations
+            { from: '0xABcd...5678', to: '0x9988...1122', amount_usd: 60000000, chain_id: 'ethereum', tx_hash: '0xc9d8...e0b1', timestamp: ts(48), depth: 3 },
+            { from: '0xABcd...5678', to: '0xDEad...bEEf', amount_usd: 40000000, chain_id: 'ethereum', tx_hash: '0xd0e9...f1c0', timestamp: ts(46), depth: 3 },
+            { from: '0xEEEE...FFFF', to: '0xaaaa...bbbb', amount_usd: 67000000, chain_id: 'polygon', tx_hash: '0xe1f0...a2d9', timestamp: ts(44), depth: 3 },
+            // Bridge out to Arbitrum
+            { from: '0xaaaa...bbbb', to: '0xDEad...bEEf', amount_usd: 67000000, chain_id: 'arbitrum', tx_hash: '0xf2a1...b3e8', timestamp: ts(40), depth: 4 },
+        ];
+
+        document.getElementById('addressInput').value = '0x6CCe...3a2F';
+        renderAll(demoFlows, [], []);
+        showToast('Demo data loaded - Euler exploit fund tracing', 'success');
+    }
+
+    // ── Enter key to trace ───────────────────────────────────────
+    document.getElementById('addressInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') startTrace();
+    });
+
+    // ── Resize handler ───────────────────────────────────────────
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (currentFlows.length > 0) {
+                const chains = [...new Set(currentFlows.map(f => f.chain_id || 'unknown'))];
+                renderSankey(currentFlows, chains);
+            }
+        }, 300);
+    });
+    </script>
+</body>
+</html>

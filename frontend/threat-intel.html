@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>html,body{background:#030305!important;color:#f1f5f9;margin:0}</style>
+    <title>Sentinel3 — Threat Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #030305; color: #f1f5f9; margin: 0; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* Glass cards */
+        .glass {
+            background: rgba(10, 11, 16, 0.7);
+            backdrop-filter: blur(16px) saturate(1.2);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover { border-color: rgba(255,255,255,0.1); }
+
+        /* Header */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+        }
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+
+        /* Stat mini cards */
+        .stat-mini {
+            position: relative; overflow: hidden;
+            padding: 18px 20px;
+        }
+        .stat-mini::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: 16px 16px 0 0;
+        }
+        .stat-mini.a-red::before    { background: linear-gradient(90deg, #f43f5e, transparent); }
+        .stat-mini.a-blue::before   { background: linear-gradient(90deg, #3b82f6, transparent); }
+        .stat-mini.a-green::before  { background: linear-gradient(90deg, #10b981, transparent); }
+        .stat-mini.a-purple::before { background: linear-gradient(90deg, #8b5cf6, transparent); }
+        .stat-mini.a-amber::before  { background: linear-gradient(90deg, #f59e0b, transparent); }
+        .stat-mini.a-cyan::before   { background: linear-gradient(90deg, #06b6d4, transparent); }
+
+        .stat-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 26px; font-weight: 700;
+            letter-spacing: -0.03em; line-height: 1;
+        }
+        .stat-lbl {
+            font-size: 11px; color: #475569;
+            text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+            margin-bottom: 10px;
+        }
+        .stat-hint { font-size: 11px; color: #334155; margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+
+        /* Panel sections */
+        .panel-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .panel-title {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: #e2e8f0;
+        }
+        .panel-icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* Severity badges */
+        .sev-badge {
+            display: inline-flex; align-items: center;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+            letter-spacing: 0.03em; text-transform: uppercase;
+        }
+        .sev-critical { background: rgba(244,63,94,0.12); color: #fb7185; border: 1px solid rgba(244,63,94,0.2); }
+        .sev-high     { background: rgba(249,115,22,0.12); color: #fb923c; border: 1px solid rgba(249,115,22,0.2); }
+        .sev-medium   { background: rgba(234,179,8,0.12);  color: #facc15; border: 1px solid rgba(234,179,8,0.2); }
+        .sev-low      { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+
+        /* Chain pills */
+        .chain-pill {
+            display: inline-flex; align-items: center;
+            padding: 2px 8px; border-radius: 12px;
+            font-size: 10px; font-weight: 500;
+        }
+        .chain-ethereum  { background: rgba(98,126,234,0.15); color: #627eea; }
+        .chain-polygon   { background: rgba(130,71,229,0.15); color: #8247e5; }
+        .chain-solana    { background: rgba(20,241,149,0.15); color: #14f195; }
+        .chain-arbitrum  { background: rgba(40,160,240,0.15); color: #28a0f0; }
+        .chain-avalanche { background: rgba(232,65,66,0.15);  color: #e84142; }
+        .chain-bsc       { background: rgba(243,186,47,0.15); color: #f3ba2f; }
+        .chain-base      { background: rgba(59,130,246,0.15); color: #3b82f6; }
+
+        /* Tag pills */
+        .tag-pill {
+            display: inline-flex; align-items: center;
+            padding: 2px 8px; border-radius: 12px;
+            font-size: 10px; font-weight: 500;
+            background: rgba(139,92,246,0.10); color: #a78bfa;
+            border: 1px solid rgba(139,92,246,0.15);
+        }
+
+        /* IOC type badges */
+        .ioc-badge {
+            display: inline-flex; align-items: center;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .ioc-address  { background: rgba(139,92,246,0.12); color: #a78bfa; border: 1px solid rgba(139,92,246,0.2); }
+        .ioc-tx_hash  { background: rgba(34,211,238,0.12);  color: #22d3ee; border: 1px solid rgba(34,211,238,0.2); }
+        .ioc-contract { background: rgba(249,115,22,0.12);  color: #fb923c; border: 1px solid rgba(249,115,22,0.2); }
+        .ioc-domain   { background: rgba(16,185,129,0.12);  color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+
+        /* Signature card */
+        .sig-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 14px;
+            padding: 20px;
+            transition: border-color 0.3s, box-shadow 0.3s, transform 0.2s;
+        }
+        .sig-card:hover {
+            border-color: rgba(139,92,246,0.2);
+            box-shadow: 0 0 20px rgba(139,92,246,0.06);
+            transform: translateY(-2px);
+        }
+
+        /* Address row */
+        .addr-row {
+            display: grid;
+            grid-template-columns: 1fr 180px 100px 100px 140px 1fr;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            transition: background 0.2s;
+        }
+        .addr-row:hover { background: rgba(255,255,255,0.02); }
+        .addr-row + .addr-row { border-top: 1px solid rgba(255,255,255,0.03); }
+
+        /* Address checker */
+        .checker-input {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: #f1f5f9;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .checker-input:focus {
+            border-color: rgba(139,92,246,0.4);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+        }
+        .checker-input::placeholder { color: #334155; }
+
+        .checker-btn {
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            border: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            color: #fff;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .checker-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        .checker-btn:active { transform: translateY(0) scale(0.98); }
+        .checker-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* Result panels */
+        .result-safe {
+            background: rgba(16,185,129,0.08);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 12px;
+            padding: 14px 18px;
+        }
+        .result-danger {
+            background: rgba(244,63,94,0.08);
+            border: 1px solid rgba(244,63,94,0.2);
+            border-radius: 12px;
+            padding: 14px 18px;
+        }
+        .result-warn {
+            background: rgba(234,179,8,0.08);
+            border: 1px solid rgba(234,179,8,0.2);
+            border-radius: 12px;
+            padding: 14px 18px;
+        }
+
+        /* Loss metric */
+        .loss-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700; letter-spacing: -0.02em;
+        }
+
+        /* Live dot */
+        .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: s3p 2s ease-in-out infinite; }
+        @keyframes s3p { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
+    </style>
+</head>
+<body>
+<div id="app" x-data="threatIntel()">
+
+    <!-- Header -->
+    <header class="s3-header">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <h1 class="font-display text-base font-semibold text-white tracking-tight">Threat Intelligence</h1>
+                <span class="text-[11px] text-zinc-500 font-mono">Public Feed v1.0</span>
+            </div>
+            <div class="flex items-center gap-5">
+                <div class="flex items-center gap-2">
+                    <div class="live-dot"></div>
+                    <span class="text-[11px] text-emerald-400 font-medium">Feed Active</span>
+                </div>
+                <div class="text-[11px] font-mono text-zinc-600" x-text="feedUpdated ? 'Updated ' + timeAgo(feedUpdated) : ''"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="p-6 space-y-6 max-w-[1800px] mx-auto">
+
+        <!-- Stats Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="glass stat-mini a-red">
+                <div class="stat-lbl">Malicious Addresses</div>
+                <div class="stat-num text-rose-400" x-text="addresses.length"></div>
+                <div class="stat-hint">Known threat actors</div>
+            </div>
+            <div class="glass stat-mini a-purple">
+                <div class="stat-lbl">Attack Signatures</div>
+                <div class="stat-num text-violet-400" x-text="signatures.length"></div>
+                <div class="stat-hint">Tracked patterns</div>
+            </div>
+            <div class="glass stat-mini a-amber">
+                <div class="stat-lbl">Total Incidents</div>
+                <div class="stat-num text-amber-400" x-text="totalIncidents.toLocaleString()"></div>
+                <div class="stat-hint">Across all signatures</div>
+            </div>
+            <div class="glass stat-mini a-cyan">
+                <div class="stat-lbl">Total Loss (USD)</div>
+                <div class="stat-num text-cyan-400" x-text="'$' + formatLargeNumber(totalLoss)"></div>
+                <div class="stat-hint">Cumulative impact</div>
+            </div>
+        </div>
+
+        <!-- Address Checker -->
+        <div class="glass" style="overflow:hidden;">
+            <div class="panel-head">
+                <div class="panel-title">
+                    <div class="panel-icon" style="background:rgba(139,92,246,0.12);">
+                        <svg style="width:16px;height:16px;" fill="none" stroke="#a78bfa" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                    Address Threat Checker
+                </div>
+            </div>
+            <div class="p-5">
+                <div class="flex gap-3">
+                    <input type="text" class="checker-input flex-1"
+                           placeholder="Enter any blockchain address (0x...)"
+                           x-model="checkAddress"
+                           @keydown.enter="runCheck()"
+                    />
+                    <button class="checker-btn" @click="runCheck()" :disabled="checking || !checkAddress.trim()">
+                        <span x-show="!checking">Check Address</span>
+                        <span x-show="checking">Checking...</span>
+                    </button>
+                </div>
+                <!-- Result -->
+                <template x-if="checkResult !== null">
+                    <div class="mt-4">
+                        <template x-if="checkResult.found">
+                            <div class="result-danger">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <svg style="width:18px;height:18px;" fill="none" stroke="#fb7185" viewBox="0 0 24 24" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                    </svg>
+                                    <span class="font-semibold text-rose-400">THREAT DETECTED</span>
+                                </div>
+                                <div class="text-sm text-zinc-300" x-text="checkResult.threat.label"></div>
+                                <div class="flex items-center gap-3 mt-2">
+                                    <span class="sev-badge" :class="'sev-' + checkResult.threat.severity" x-text="checkResult.threat.severity"></span>
+                                    <span class="text-xs font-mono text-zinc-500" x-text="checkResult.threat.chain"></span>
+                                    <template x-if="checkResult.threat.total_stolen_usd > 0">
+                                        <span class="text-xs text-rose-400">$<span x-text="checkResult.threat.total_stolen_usd.toLocaleString()"></span> stolen</span>
+                                    </template>
+                                </div>
+                                <div class="flex flex-wrap gap-1.5 mt-2">
+                                    <template x-for="tag in (checkResult.threat.tags || [])">
+                                        <span class="tag-pill" x-text="tag"></span>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="!checkResult.found && checkResult.activity_detected">
+                            <div class="result-warn">
+                                <div class="flex items-center gap-2">
+                                    <svg style="width:18px;height:18px;" fill="none" stroke="#facc15" viewBox="0 0 24 24" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span class="font-semibold text-amber-400">NOT IN THREAT DB</span>
+                                    <span class="text-xs text-zinc-500">but activity detected</span>
+                                </div>
+                                <div class="text-sm text-zinc-400 mt-1" x-text="checkResult.event_count + ' events found for this address'"></div>
+                            </div>
+                        </template>
+                        <template x-if="!checkResult.found && !checkResult.activity_detected">
+                            <div class="result-safe">
+                                <div class="flex items-center gap-2">
+                                    <svg style="width:18px;height:18px;" fill="none" stroke="#34d399" viewBox="0 0 24 24" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span class="font-semibold text-emerald-400">CLEAN</span>
+                                </div>
+                                <div class="text-sm text-zinc-400 mt-1">Address not found in threat database and no suspicious activity detected.</div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Attack Signatures -->
+        <div class="glass" style="overflow:hidden;">
+            <div class="panel-head">
+                <div class="panel-title">
+                    <div class="panel-icon" style="background:rgba(244,63,94,0.12);">
+                        <svg style="width:16px;height:16px;" fill="none" stroke="#fb7185" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                        </svg>
+                    </div>
+                    Attack Signatures
+                </div>
+                <span class="text-[11px] text-zinc-500 font-mono" x-text="signatures.length + ' patterns tracked'"></span>
+            </div>
+            <div class="p-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <template x-for="sig in signatures" :key="sig.id">
+                        <div class="sig-card">
+                            <div class="flex items-start justify-between mb-3">
+                                <div>
+                                    <div class="font-semibold text-sm text-zinc-100" x-text="sig.name"></div>
+                                    <div class="text-[11px] font-mono text-zinc-500 mt-0.5" x-text="sig.id + ' / ' + sig.attack_type"></div>
+                                </div>
+                                <span class="sev-badge" :class="'sev-' + sig.severity" x-text="sig.severity"></span>
+                            </div>
+                            <p class="text-xs text-zinc-400 leading-relaxed mb-3" x-text="sig.description"></p>
+                            <div class="flex items-center gap-4 mb-3">
+                                <div>
+                                    <div class="text-[10px] text-zinc-500 uppercase">Incidents</div>
+                                    <div class="text-sm font-semibold text-zinc-200" x-text="sig.total_incidents.toLocaleString()"></div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] text-zinc-500 uppercase">Total Loss</div>
+                                    <div class="text-sm font-semibold loss-value text-rose-400" x-text="'$' + formatLargeNumber(sig.total_loss_usd)"></div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] text-zinc-500 uppercase">First Seen</div>
+                                    <div class="text-sm text-zinc-300" x-text="sig.first_seen"></div>
+                                </div>
+                            </div>
+                            <!-- Chains -->
+                            <div class="flex flex-wrap gap-1.5 mb-2">
+                                <template x-for="ch in sig.chains" :key="ch">
+                                    <span class="chain-pill" :class="'chain-' + ch" x-text="ch"></span>
+                                </template>
+                            </div>
+                            <!-- MITRE Tactics -->
+                            <template x-if="sig.mitre_tactics && sig.mitre_tactics.length">
+                                <div class="flex flex-wrap gap-1.5 mt-2">
+                                    <template x-for="tactic in sig.mitre_tactics" :key="tactic">
+                                        <span class="tag-pill" x-text="tactic"></span>
+                                    </template>
+                                </div>
+                            </template>
+                            <!-- Indicators -->
+                            <template x-if="sig.indicators && sig.indicators.length">
+                                <div class="mt-3 pt-3" style="border-top:1px solid rgba(255,255,255,0.04);">
+                                    <div class="text-[10px] text-zinc-500 uppercase mb-1.5">Indicators</div>
+                                    <template x-for="ind in sig.indicators" :key="ind.value">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="text-[10px] font-mono text-violet-400 bg-violet-400/10 px-1.5 py-0.5 rounded" x-text="ind.type"></span>
+                                            <span class="text-xs text-zinc-400 font-mono" x-text="ind.value"></span>
+                                            <template x-if="ind.description">
+                                                <span class="text-[10px] text-zinc-600" x-text="'- ' + ind.description"></span>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Malicious Addresses Table -->
+        <div class="glass" style="overflow:hidden;">
+            <div class="panel-head">
+                <div class="panel-title">
+                    <div class="panel-icon" style="background:rgba(249,115,22,0.12);">
+                        <svg style="width:16px;height:16px;" fill="none" stroke="#fb923c" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                        </svg>
+                    </div>
+                    Malicious Addresses
+                </div>
+                <span class="text-[11px] text-zinc-500 font-mono" x-text="addresses.length + ' known addresses'"></span>
+            </div>
+            <div class="p-5">
+                <!-- Table header -->
+                <div class="addr-row text-[10px] text-zinc-500 uppercase tracking-wider font-semibold" style="border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:10px; margin-bottom:4px;">
+                    <div>Address</div>
+                    <div>Label</div>
+                    <div>Chain</div>
+                    <div>Severity</div>
+                    <div>Total Stolen</div>
+                    <div>Tags</div>
+                </div>
+                <template x-for="addr in addresses" :key="addr.address">
+                    <div class="addr-row">
+                        <div class="font-mono text-xs text-zinc-300 truncate" :title="addr.address" x-text="addr.address.substring(0, 6) + '...' + addr.address.substring(addr.address.length - 4)"></div>
+                        <div class="text-xs text-zinc-200 font-medium" x-text="addr.label"></div>
+                        <div>
+                            <span class="chain-pill" :class="'chain-' + addr.chain" x-text="addr.chain"></span>
+                        </div>
+                        <div>
+                            <span class="sev-badge" :class="'sev-' + addr.severity" x-text="addr.severity"></span>
+                        </div>
+                        <div class="text-xs font-mono" :class="addr.total_stolen_usd > 0 ? 'text-rose-400' : 'text-zinc-500'" x-text="addr.total_stolen_usd > 0 ? '$' + formatLargeNumber(addr.total_stolen_usd) : 'N/A'"></div>
+                        <div class="flex flex-wrap gap-1">
+                            <template x-for="tag in (addr.tags || [])" :key="tag">
+                                <span class="tag-pill" x-text="tag"></span>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- IOC Feed -->
+        <div class="glass" style="overflow:hidden;">
+            <div class="panel-head">
+                <div class="panel-title">
+                    <div class="panel-icon" style="background:rgba(34,211,238,0.12);">
+                        <svg style="width:16px;height:16px;" fill="none" stroke="#22d3ee" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                        </svg>
+                    </div>
+                    IOC Feed
+                </div>
+                <span class="text-[11px] text-zinc-500 font-mono" x-text="iocs.length + ' indicators'"></span>
+            </div>
+            <div class="p-5">
+                <template x-if="iocs.length === 0">
+                    <div class="text-center py-10">
+                        <div class="text-zinc-500 text-sm mb-1">No community-reported IOCs yet</div>
+                        <div class="text-zinc-600 text-xs">Use the POST /api/threat-intel/report endpoint to submit IOCs</div>
+                    </div>
+                </template>
+                <template x-for="ioc in iocs" :key="ioc.id">
+                    <div class="flex items-center gap-4 py-3" style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                        <span class="ioc-badge" :class="'ioc-' + ioc.type" x-text="ioc.type"></span>
+                        <span class="font-mono text-xs text-zinc-300 flex-1 truncate" x-text="ioc.value"></span>
+                        <span class="sev-badge" :class="'sev-' + ioc.severity" x-text="ioc.severity"></span>
+                        <span class="text-[10px] text-zinc-500 font-mono" x-text="ioc.source"></span>
+                        <span class="text-[10px] text-zinc-600 font-mono" x-text="ioc.last_seen ? timeAgo(ioc.last_seen) : ''"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+function threatIntel() {
+    return {
+        // State
+        addresses: [],
+        signatures: [],
+        iocs: [],
+        feedUpdated: null,
+        totalIncidents: 0,
+        totalLoss: 0,
+
+        // Address checker
+        checkAddress: '',
+        checking: false,
+        checkResult: null,
+
+        async init() {
+            await this.loadFeed();
+            await this.loadIOCs();
+        },
+
+        async loadFeed() {
+            try {
+                const res = await sentinel3Fetch('/api/threat-intel/feed');
+                if (!res.ok) return;
+                const data = await res.json();
+                this.feedUpdated = data.updated_at;
+
+                this.addresses = [];
+                this.signatures = [];
+
+                for (const item of (data.items || [])) {
+                    if (item.type === 'malicious_address') {
+                        this.addresses.push(item);
+                    } else if (item.type === 'attack_signature') {
+                        this.signatures.push(item);
+                    }
+                }
+
+                // Compute aggregates
+                this.totalIncidents = this.signatures.reduce((sum, s) => sum + (s.total_incidents || 0), 0);
+                this.totalLoss = this.signatures.reduce((sum, s) => sum + (s.total_loss_usd || 0), 0);
+            } catch (e) {
+                console.error('Failed to load threat feed:', e);
+            }
+        },
+
+        async loadIOCs() {
+            // IOCs come from the feed items of type ioc, but they're submitted via POST
+            // For now, we just populate from the feed; the seeded data only has addresses and signatures
+            // Community IOCs would appear after POST /api/threat-intel/report
+            try {
+                const res = await sentinel3Fetch('/api/threat-intel/feed?limit=500');
+                if (!res.ok) return;
+                const data = await res.json();
+                this.iocs = (data.items || []).filter(i => i.type !== 'malicious_address' && i.type !== 'attack_signature');
+            } catch (e) {
+                // Silently fail - IOCs are optional
+            }
+        },
+
+        async runCheck() {
+            const addr = this.checkAddress.trim();
+            if (!addr) return;
+            this.checking = true;
+            this.checkResult = null;
+            try {
+                const res = await sentinel3Fetch('/api/threat-intel/check/' + encodeURIComponent(addr));
+                if (res.ok) {
+                    this.checkResult = await res.json();
+                }
+            } catch (e) {
+                console.error('Address check failed:', e);
+            } finally {
+                this.checking = false;
+            }
+        },
+
+        formatLargeNumber(n) {
+            if (n === null || n === undefined) return '0';
+            if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toLocaleString();
+        },
+
+        timeAgo(iso) {
+            if (!iso) return '';
+            const diff = Date.now() - new Date(iso).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            const days = Math.floor(hrs / 24);
+            return days + 'd ago';
+        },
+    };
+}
+</script>
+</body>
+</html>

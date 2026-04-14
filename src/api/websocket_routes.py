@@ -25,6 +25,7 @@ class ConnectionManager:
             "incidents": set(),
             "alerts": set(),
             "stats": set(),
+            "guardian": set(),
             "all": set(),  # Receives everything
         }
         self._lock = asyncio.Lock()
@@ -103,7 +104,14 @@ class ConnectionManager:
             "type": "stats",
             "data": stats
         }, "stats")
-    
+
+    async def broadcast_guardian(self, action: dict):
+        """Broadcast a guardian action update"""
+        await self.broadcast({
+            "type": "guardian",
+            "data": action
+        }, "guardian")
+
     @property
     def total_connections(self) -> int:
         """Total unique connections across all channels"""
@@ -200,6 +208,17 @@ async def alerts_websocket(websocket: WebSocket):
         await manager.disconnect(websocket)
 
 
+@router.websocket("/ws/guardian")
+async def guardian_websocket(websocket: WebSocket):
+    """WebSocket endpoint for guardian action stream only"""
+    await manager.connect(websocket, "guardian")
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await manager.disconnect(websocket)
+
+
 @router.get("/ws/status")
 async def websocket_status():
     """Get WebSocket connection status"""
@@ -237,3 +256,8 @@ async def broadcast_new_alert(alert: dict):
 async def broadcast_stats_update(stats: dict):
     """Broadcast stats update to all WebSocket clients"""
     await manager.broadcast_stats(stats)
+
+
+async def broadcast_guardian_action(action: dict):
+    """Broadcast a guardian action update to all WebSocket clients"""
+    await manager.broadcast_guardian(action)

@@ -18,28 +18,40 @@ logger = structlog.get_logger()
 @dataclass
 class AlertConfig:
     """Configuration for alerting."""
-    
+
     # Telegram config
     telegram_enabled: bool = False
     telegram_bot_token: Optional[str] = None
     telegram_critical_channel: Optional[str] = None
     telegram_general_channel: Optional[str] = None
-    
+
     # Slack config
     slack_enabled: bool = False
     slack_webhook_url: Optional[str] = None
     slack_critical_channel: Optional[str] = None
     slack_general_channel: Optional[str] = None
-    
+
+    # Email config
+    email_enabled: bool = False
+    email_provider: str = "smtp"  # "smtp" or "sendgrid"
+    email_smtp_host: Optional[str] = None
+    email_smtp_port: int = 587
+    email_smtp_user: Optional[str] = None
+    email_smtp_password: Optional[str] = None
+    email_smtp_use_tls: bool = True
+    email_sendgrid_api_key: Optional[str] = None
+    email_from: Optional[str] = None
+    email_to: Optional[List[str]] = None
+
     # PagerDuty config
     pagerduty_enabled: bool = False
-    pagerduty_api_key: Optional[str] = None
-    pagerduty_service_id: Optional[str] = None
-    
+    pagerduty_routing_key: Optional[str] = None
+    pagerduty_min_severity: str = "high"
+
     # Rate limiting
     min_alert_interval_seconds: int = 60
     max_alerts_per_hour: int = 50
-    
+
     # Dedup
     dedup_window_minutes: int = 30
 
@@ -61,6 +73,7 @@ class AlertRouter:
         # Initialize alerters
         self.telegram = None
         self.slack = None
+        self.email = None
         self.pagerduty = None
         
         # Rate limiting
@@ -80,7 +93,7 @@ class AlertRouter:
                 general_channel=self.config.telegram_general_channel,
             )
             logger.info("telegram_alerter_initialized")
-        
+
         if self.config.slack_enabled:
             from .slack import SlackAlerter
             self.slack = SlackAlerter(
@@ -89,6 +102,29 @@ class AlertRouter:
                 general_channel=self.config.slack_general_channel,
             )
             logger.info("slack_alerter_initialized")
+
+        if self.config.email_enabled:
+            from .email_alerter import EmailAlerter
+            self.email = EmailAlerter(
+                provider=self.config.email_provider,
+                smtp_host=self.config.email_smtp_host,
+                smtp_port=self.config.email_smtp_port,
+                smtp_user=self.config.email_smtp_user,
+                smtp_password=self.config.email_smtp_password,
+                smtp_use_tls=self.config.email_smtp_use_tls,
+                sendgrid_api_key=self.config.email_sendgrid_api_key,
+                from_email=self.config.email_from,
+                to_emails=self.config.email_to,
+            )
+            logger.info("email_alerter_initialized")
+
+        if self.config.pagerduty_enabled:
+            from .pagerduty import PagerDutyAlerter
+            self.pagerduty = PagerDutyAlerter(
+                routing_key=self.config.pagerduty_routing_key,
+                min_severity=self.config.pagerduty_min_severity,
+            )
+            logger.info("pagerduty_alerter_initialized")
     
     async def route(self, incident: Incident, explanation: Explanation):
         """
@@ -123,7 +159,20 @@ class AlertRouter:
                 incident_id=incident.id,
                 error=str(e)
             )
-    
+
+        # Fire-and-forget WebSocket broadcast for the alert
+        try:
+            from ..api.ws_broadcast import broadcast_alert
+            asyncio.create_task(broadcast_alert({
+                "incident_id": incident.id,
+                "severity": severity.name,
+                "attack_type": str(incident.attack_type.value) if hasattr(incident.attack_type, 'value') else str(incident.attack_type),
+                "title": explanation.title if explanation else "",
+                "confidence": getattr(incident, 'confidence', 0.0),
+            }))
+        except Exception:
+            pass  # WS unavailable; non-critical
+
     async def _route_critical(self, incident: Incident, explanation: Explanation):
         """
         Route critical alerts - all channels + pager.
@@ -133,75 +182,74 @@ class AlertRouter:
             incident_id=incident.id,
             title=explanation.title
         )
-        
+
         tasks = []
-        
+
         # PagerDuty
         if self.pagerduty:
-            tasks.append(self._send_pagerduty(incident, explanation))
-        
+            tasks.append(self.pagerduty.send_critical(incident, explanation))
+
         # Telegram
         if self.telegram:
             tasks.append(self.telegram.send_critical(incident, explanation))
-        
+
         # Slack
         if self.slack:
             tasks.append(self.slack.send_critical(incident, explanation))
-        
+
+        # Email
+        if self.email:
+            tasks.append(self.email.send_critical(incident, explanation))
+
         await asyncio.gather(*tasks, return_exceptions=True)
     
     async def _route_high(self, incident: Incident, explanation: Explanation):
         """
-        Route high severity alerts - Telegram + Slack.
+        Route high severity alerts - Telegram + Slack + Email + PagerDuty.
         """
         logger.info(
             "routing_high_alert",
             incident_id=incident.id,
             title=explanation.title
         )
-        
+
         tasks = []
-        
+
+        # PagerDuty (respects its own min_severity filter)
+        if self.pagerduty:
+            tasks.append(self.pagerduty.send_high(incident, explanation))
+
         if self.telegram:
             tasks.append(self.telegram.send_high(incident, explanation))
-        
+
         if self.slack:
             tasks.append(self.slack.send_high(incident, explanation))
-        
+
+        if self.email:
+            tasks.append(self.email.send_high(incident, explanation))
+
         await asyncio.gather(*tasks, return_exceptions=True)
     
     async def _route_normal(self, incident: Incident, explanation: Explanation):
         """
-        Route normal alerts - Slack only.
+        Route normal alerts - Slack + Email.
         """
         logger.info(
             "routing_normal_alert",
             incident_id=incident.id,
             title=explanation.title
         )
-        
+
+        tasks = []
+
         if self.slack:
-            await self.slack.send_info(incident, explanation)
-    
-    async def _send_pagerduty(self, incident: Incident, explanation: Explanation):
-        """Send PagerDuty alert via the centralized alert_notifier."""
-        try:
-            from ..notifications.alert_notifier import get_notifier
-            notifier = get_notifier()
-            if not notifier.config.pagerduty_routing_key:
-                logger.debug("pagerduty_not_configured")
-                return
-            await notifier._send_pagerduty({
-                "alert_id": incident.id,
-                "risk_level": incident.severity.name,
-                "chain_id": ",".join(incident.affected_chains) if hasattr(incident, 'affected_chains') else "unknown",
-                "threat_category": incident.attack_type.value if hasattr(incident.attack_type, 'value') else str(incident.attack_type),
-                "confidence": incident.confidence if hasattr(incident, 'confidence') else 0.0,
-                "contract_address": "",
-                "tx_hash": "",
-            })
-        except Exception as e:
-            logger.error("pagerduty_alert_failed", incident_id=incident.id, error=str(e))
+            tasks.append(self.slack.send_info(incident, explanation))
+
+        if self.email:
+            tasks.append(self.email.send_info(incident, explanation))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
     
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""
@@ -250,6 +298,7 @@ class AlertRouter:
             "max_per_hour": self.config.max_alerts_per_hour,
             "telegram_enabled": self.config.telegram_enabled,
             "slack_enabled": self.config.slack_enabled,
+            "email_enabled": self.config.email_enabled,
             "pagerduty_enabled": self.config.pagerduty_enabled,
         }
 

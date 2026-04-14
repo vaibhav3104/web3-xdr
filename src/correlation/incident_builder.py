@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+import asyncio
 import hashlib
 import structlog
 
@@ -355,6 +356,13 @@ class IncidentBuilder:
                 self._address_chains.setdefault(addr, set()).add(
                     (event.chain_id, cluster_key)
                 )
+
+        # Fire-and-forget WebSocket broadcast
+        try:
+            from ..api.ws_broadcast import broadcast_incident
+            asyncio.create_task(broadcast_incident(incident.to_dict()))
+        except Exception:
+            pass  # WS unavailable; non-critical
 
         return incident
     

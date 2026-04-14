@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>html,body{background:#030305!important;color:#f1f5f9;margin:0}</style>
+    <title>Invariant Builder | Sentinel3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/frontend/config.js"></script>
+    <script src="/frontend/nav.js" defer></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #030305; color: #f1f5f9; margin: 0; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+
+        /* Glass cards */
+        .glass {
+            background: rgba(10, 11, 16, 0.7);
+            backdrop-filter: blur(16px) saturate(1.2);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .glass:hover { border-color: rgba(255,255,255,0.1); }
+
+        /* Header */
+        .s3-header {
+            position: sticky; top: 0; z-index: 30;
+            background: rgba(3, 3, 5, 0.6);
+            backdrop-filter: blur(20px) saturate(1.3);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding: 14px 28px;
+        }
+        .s3-header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(139,92,246,0.2), rgba(34,211,238,0.15), transparent);
+        }
+
+        /* Form inputs */
+        .form-input {
+            width: 100%;
+            background: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: #f1f5f9;
+            font-size: 13px;
+            font-family: 'Inter', system-ui, sans-serif;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            outline: none;
+        }
+        .form-input:focus {
+            border-color: rgba(139,92,246,0.5);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+        }
+        .form-input::placeholder { color: #475569; }
+
+        textarea.form-input { resize: vertical; min-height: 70px; }
+
+        select.form-input {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+            cursor: pointer;
+        }
+        select.form-input option { background: #1a1a2e; color: #f1f5f9; }
+
+        .form-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+
+        /* Severity badges */
+        .sev-badge {
+            display: inline-flex; align-items: center;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+            letter-spacing: 0.03em; text-transform: uppercase;
+        }
+        .sev-info     { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
+        .sev-low      { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+        .sev-medium   { background: rgba(234,179,8,0.12); color: #facc15; border: 1px solid rgba(234,179,8,0.2); }
+        .sev-high     { background: rgba(249,115,22,0.12); color: #fb923c; border: 1px solid rgba(249,115,22,0.2); }
+        .sev-critical { background: rgba(244,63,94,0.12); color: #fb7185; border: 1px solid rgba(244,63,94,0.2); }
+
+        /* Type badges */
+        .type-badge {
+            display: inline-flex; align-items: center;
+            padding: 3px 10px; border-radius: 20px;
+            font-size: 10px; font-weight: 500;
+            letter-spacing: 0.04em; text-transform: uppercase;
+            background: rgba(139,92,246,0.1); color: #a78bfa;
+            border: 1px solid rgba(139,92,246,0.15);
+        }
+
+        /* Invariant card in list */
+        .inv-card {
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.05);
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .inv-card:hover {
+            border-color: rgba(139,92,246,0.25);
+            background: rgba(139,92,246,0.04);
+            box-shadow: 0 0 20px rgba(139,92,246,0.06);
+        }
+        .inv-card.active {
+            border-color: rgba(139,92,246,0.4);
+            background: rgba(139,92,246,0.06);
+        }
+
+        /* Condition row */
+        .cond-row {
+            display: grid;
+            grid-template-columns: 1fr 120px 150px 40px;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 10px;
+            transition: background 0.2s;
+        }
+        .cond-row:nth-child(odd) { background: rgba(255,255,255,0.015); }
+        .cond-row:nth-child(even) { background: rgba(255,255,255,0.03); }
+
+        /* YAML preview */
+        .yaml-preview {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #94a3b8;
+            padding: 16px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.04);
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .yaml-key { color: #8b5cf6; }
+        .yaml-str { color: #22d3ee; }
+        .yaml-num { color: #f59e0b; }
+        .yaml-bool { color: #10b981; }
+        .yaml-comment { color: #334155; font-style: italic; }
+
+        /* Toggle switch */
+        .toggle-track {
+            width: 40px; height: 22px;
+            border-radius: 11px;
+            background: rgba(255,255,255,0.08);
+            position: relative;
+            cursor: pointer;
+            transition: background 0.25s;
+            flex-shrink: 0;
+        }
+        .toggle-track.on { background: rgba(139,92,246,0.4); }
+        .toggle-knob {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: #94a3b8;
+            position: absolute;
+            top: 3px; left: 3px;
+            transition: transform 0.25s, background 0.25s;
+        }
+        .toggle-track.on .toggle-knob { transform: translateX(18px); background: #a78bfa; }
+
+        /* Multi-select chips */
+        .chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 11px; font-weight: 500;
+            background: rgba(139,92,246,0.12);
+            color: #a78bfa;
+            border: 1px solid rgba(139,92,246,0.2);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chip:hover { background: rgba(139,92,246,0.2); }
+        .chip.selected { background: rgba(139,92,246,0.3); border-color: rgba(139,92,246,0.5); color: #c4b5fd; }
+        .chip.selected .chip-x { display: inline; }
+        .chip-x { display: none; font-size: 13px; margin-left: 2px; }
+
+        /* Action buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .btn-primary:hover { box-shadow: 0 0 24px rgba(139,92,246,0.3); transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.04);
+            color: #94a3b8;
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.08); color: #e2e8f0; border-color: rgba(255,255,255,0.15); }
+
+        .btn-danger {
+            background: rgba(244,63,94,0.1);
+            color: #fb7185;
+            border: 1px solid rgba(244,63,94,0.2);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .btn-danger:hover { background: rgba(244,63,94,0.2); border-color: rgba(244,63,94,0.4); }
+
+        .btn-small {
+            padding: 6px 14px;
+            font-size: 12px;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            top: 20px; right: 20px;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 100;
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.4s;
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
+        .toast.error { background: rgba(244,63,94,0.15); color: #fb7185; border-color: rgba(244,63,94,0.3); }
+        .toast.info { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+
+        /* Slider */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.06);
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: #8b5cf6;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(139,92,246,0.4);
+        }
+
+        /* Live dot */
+        .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: s3p 2s ease-in-out infinite; }
+        @keyframes s3p { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #475569;
+        }
+        .empty-state svg {
+            width: 48px; height: 48px;
+            margin: 0 auto 16px;
+            color: #334155;
+        }
+    </style>
+</head>
+<body>
+<div id="app" x-data="invariantBuilder()">
+
+    <!-- Toast -->
+    <div class="toast" :class="[toast.type, toast.show ? 'show' : '']" x-text="toast.message"></div>
+
+    <!-- Header -->
+    <header class="s3-header">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <h1 class="font-display text-base font-semibold text-white tracking-tight">Invariant Builder</h1>
+                <span class="text-[11px] text-zinc-500 font-mono">Custom YAML DSL</span>
+            </div>
+            <div class="flex items-center gap-5">
+                <div class="flex items-center gap-2">
+                    <div class="live-dot"></div>
+                    <span class="text-[11px] text-emerald-400 font-medium" x-text="invariants.length + ' invariant' + (invariants.length !== 1 ? 's' : '') + ' loaded'"></span>
+                </div>
+                <button class="btn-primary btn-small" @click="resetForm()">
+                    + New Invariant
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main layout: two-panel -->
+    <div class="flex gap-6" style="max-width: 1520px; margin: 0 auto; padding: 24px 28px 48px;">
+
+        <!-- Left panel: invariant list -->
+        <div class="glass" style="width: 320px; flex-shrink: 0; padding: 0; overflow: hidden; align-self: flex-start; max-height: calc(100vh - 110px); display: flex; flex-direction: column;">
+            <div style="padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <div class="flex items-center gap-2">
+                    <svg style="width:18px;height:18px;color:#8b5cf6;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;">Custom Invariants</span>
+                </div>
+            </div>
+            <div style="flex: 1; overflow-y: auto; padding: 12px;">
+                <div class="flex flex-col gap-2">
+                    <template x-for="inv in invariants" :key="inv.name">
+                        <div class="inv-card" :class="{'active': selectedName === inv.name}" @click="selectInvariant(inv)">
+                            <div class="flex items-center justify-between mb-2">
+                                <span style="font-size: 13px; font-weight: 600; color: #e2e8f0;" x-text="inv.name"></span>
+                                <div class="toggle-track" :class="{'on': inv.enabled}" style="width: 32px; height: 18px;" @click.stop="toggleEnabled(inv)">
+                                    <div class="toggle-knob" style="width: 12px; height: 12px; top: 3px; left: 3px;" :style="inv.enabled ? 'transform:translateX(14px);background:#a78bfa' : ''"></div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="type-badge" x-text="inv.type"></span>
+                                <span class="sev-badge" :class="'sev-' + inv.severity" x-text="inv.severity"></span>
+                                <span style="font-size: 10px; color: #475569; margin-left: auto;" x-text="inv.conditions + ' condition' + (inv.conditions !== 1 ? 's' : '')"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <template x-if="invariants.length === 0 && !loading">
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        <p style="font-size: 13px; margin-bottom: 4px;">No custom invariants</p>
+                        <p style="font-size: 11px;">Create one using the builder form</p>
+                    </div>
+                </template>
+                <template x-if="loading">
+                    <div class="empty-state">
+                        <div class="s3-pulse" style="font-size: 13px;">Loading invariants...</div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Right panel: builder + preview -->
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+
+            <!-- Builder form -->
+            <div class="glass" style="padding: 0;">
+                <div style="padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(139,92,246,0.15); display: flex; align-items: center; justify-content: center;">
+                        <svg style="width:16px;height:16px;color:#a78bfa;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </div>
+                    <span style="font-size: 14px; font-weight: 600; color: #e2e8f0;" x-text="isEditing ? 'Edit Invariant' : 'New Invariant'"></span>
+                </div>
+
+                <div style="padding: 20px; display: flex; flex-direction: column; gap: 20px;">
+
+                    <!-- Row 1: Name + Type + Severity -->
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="form-label">Name</label>
+                            <input class="form-input" type="text" placeholder="e.g. large_transfer_alert" x-model="form.name">
+                        </div>
+                        <div>
+                            <label class="form-label">Type</label>
+                            <select class="form-input" x-model="form.type">
+                                <option value="economic">Economic</option>
+                                <option value="temporal">Temporal</option>
+                                <option value="governance">Governance</option>
+                                <option value="velocity">Velocity</option>
+                                <option value="threshold">Threshold</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Severity</label>
+                            <select class="form-input" x-model="form.severity">
+                                <option value="info">Info</option>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <div>
+                        <label class="form-label">Description</label>
+                        <textarea class="form-input" placeholder="Describe what this invariant detects..." x-model="form.description"></textarea>
+                    </div>
+
+                    <!-- Row 2: Chains multi-select -->
+                    <div>
+                        <label class="form-label">Chains <span style="color: #475569; font-weight: 400; text-transform: none;">(empty = all chains)</span></label>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="chain in allChains" :key="chain">
+                                <span class="chip" :class="{'selected': form.chains.includes(chain)}" @click="toggleChip('chains', chain)">
+                                    <span x-text="chain"></span>
+                                    <span class="chip-x">&times;</span>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Event types multi-select -->
+                    <div>
+                        <label class="form-label">Event Types <span style="color: #475569; font-weight: 400; text-transform: none;">(empty = all types)</span></label>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="et in allEventTypes" :key="et">
+                                <span class="chip" :class="{'selected': form.event_types.includes(et)}" @click="toggleChip('event_types', et)">
+                                    <span x-text="et"></span>
+                                    <span class="chip-x">&times;</span>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Match mode, Cooldown, Confidence, Enabled -->
+                    <div class="grid grid-cols-4 gap-4">
+                        <div>
+                            <label class="form-label">Match Mode</label>
+                            <div class="flex items-center gap-2" style="margin-top: 4px;">
+                                <button class="btn-small" :class="form.match_mode === 'all' ? 'btn-primary' : 'btn-secondary'" @click="form.match_mode = 'all'" style="padding: 7px 14px;">ALL</button>
+                                <button class="btn-small" :class="form.match_mode === 'any' ? 'btn-primary' : 'btn-secondary'" @click="form.match_mode = 'any'" style="padding: 7px 14px;">ANY</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label">Cooldown (seconds)</label>
+                            <input class="form-input" type="number" min="0" step="1" x-model.number="form.cooldown_seconds">
+                        </div>
+                        <div>
+                            <label class="form-label">Confidence <span style="color:#a78bfa; font-weight: 500;" x-text="form.confidence.toFixed(2)"></span></label>
+                            <input type="range" min="0" max="1" step="0.01" x-model.number="form.confidence" style="margin-top: 10px;">
+                        </div>
+                        <div>
+                            <label class="form-label">Enabled</label>
+                            <div class="flex items-center gap-3" style="margin-top: 6px;">
+                                <div class="toggle-track" :class="{'on': form.enabled}" @click="form.enabled = !form.enabled">
+                                    <div class="toggle-knob"></div>
+                                </div>
+                                <span style="font-size: 12px;" :style="form.enabled ? 'color: #a78bfa' : 'color: #475569'" x-text="form.enabled ? 'Active' : 'Disabled'"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Conditions builder -->
+                    <div>
+                        <div class="flex items-center justify-between" style="margin-bottom: 10px;">
+                            <label class="form-label" style="margin-bottom: 0;">Conditions</label>
+                            <button class="btn-secondary btn-small" @click="addCondition()" style="font-size: 11px; padding: 5px 12px;">+ Add Condition</button>
+                        </div>
+
+                        <div style="border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; overflow: hidden;">
+                            <!-- Column headers -->
+                            <div class="grid gap-2" style="grid-template-columns: 1fr 120px 150px 40px; padding: 8px 12px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.04);">
+                                <span style="font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.06em;">Field</span>
+                                <span style="font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.06em;">Operator</span>
+                                <span style="font-size: 10px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.06em;">Value</span>
+                                <span></span>
+                            </div>
+
+                            <template x-for="(cond, idx) in form.conditions" :key="idx">
+                                <div class="cond-row">
+                                    <select class="form-input" x-model="cond.field" style="padding: 7px 10px; font-size: 12px;">
+                                        <option value="">Select field...</option>
+                                        <optgroup label="Event">
+                                            <option value="event.amount_usd">event.amount_usd</option>
+                                            <option value="event.chain_id">event.chain_id</option>
+                                        </optgroup>
+                                        <optgroup label="Context">
+                                            <option value="context.total_locked">context.total_locked</option>
+                                            <option value="context.total_minted">context.total_minted</option>
+                                            <option value="context.tvl_change_pct">context.tvl_change_pct</option>
+                                            <option value="context.event_count_last_hour">context.event_count_last_hour</option>
+                                        </optgroup>
+                                    </select>
+                                    <select class="form-input" x-model="cond.operator" style="padding: 7px 10px; font-size: 12px;">
+                                        <option value="gt">&gt; (gt)</option>
+                                        <option value="gte">&gt;= (gte)</option>
+                                        <option value="lt">&lt; (lt)</option>
+                                        <option value="lte">&lt;= (lte)</option>
+                                        <option value="eq">== (eq)</option>
+                                        <option value="ne">!= (ne)</option>
+                                    </select>
+                                    <input class="form-input" type="text" placeholder="100000 or $context.total_locked" x-model="cond.value" style="padding: 7px 10px; font-size: 12px;">
+                                    <button @click="removeCondition(idx)" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(244,63,94,0.2); background: rgba(244,63,94,0.06); color: #fb7185; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 16px; line-height: 1;" title="Remove condition">&times;</button>
+                                </div>
+                            </template>
+
+                            <template x-if="form.conditions.length === 0">
+                                <div style="padding: 24px; text-align: center; color: #334155; font-size: 12px;">
+                                    No conditions defined. Click "+ Add Condition" to start.
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- YAML Preview -->
+            <div class="glass" style="padding: 0;">
+                <div style="padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: space-between;">
+                    <div class="flex items-center gap-2">
+                        <svg style="width:16px;height:16px;color:#22d3ee;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                        <span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">YAML Preview</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="btn-secondary btn-small" @click="copyYaml()" style="font-size: 11px; padding: 5px 12px;">
+                            <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                        </button>
+                        <button class="btn-secondary btn-small" @click="validateYaml()" style="font-size: 11px; padding: 5px 12px; border-color: rgba(34,211,238,0.2); color: #22d3ee;">
+                            Validate
+                        </button>
+                    </div>
+                </div>
+                <div class="yaml-preview" x-html="yamlHighlighted()"></div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center gap-3">
+                <button class="btn-primary" @click="saveInvariant()" :disabled="!form.name || saving">
+                    <span x-text="saving ? 'Saving...' : 'Save Invariant'"></span>
+                </button>
+                <template x-if="isEditing">
+                    <button class="btn-danger" @click="deleteInvariant()">Delete</button>
+                </template>
+                <button class="btn-secondary" @click="resetForm()">Clear Form</button>
+                <button class="btn-secondary" style="margin-left: auto; opacity: 0.5; cursor: not-allowed;" disabled title="Coming soon">
+                    Test Against Recent Events
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function invariantBuilder() {
+    return {
+        invariants: [],
+        loading: true,
+        saving: false,
+        copied: false,
+        selectedName: null,
+        toast: { message: '', type: 'info', show: false },
+
+        allChains: ['ethereum', 'polygon', 'arbitrum', 'solana', 'avalanche', 'bsc', 'base', 'optimism', 'fantom', 'gnosis'],
+        allEventTypes: ['TRANSFER', 'LOCK', 'MINT', 'BURN', 'SWAP', 'BRIDGE_DEPOSIT', 'BRIDGE_WITHDRAW', 'GOVERNANCE_VOTE', 'GOVERNANCE_PROPOSAL', 'STAKE', 'UNSTAKE'],
+
+        form: {
+            name: '',
+            description: '',
+            type: 'threshold',
+            severity: 'medium',
+            enabled: true,
+            chains: [],
+            event_types: [],
+            conditions: [],
+            match_mode: 'all',
+            cooldown_seconds: 60,
+            confidence: 0.8,
+        },
+
+        get isEditing() {
+            return this.selectedName !== null;
+        },
+
+        async init() {
+            await this.loadInvariants();
+        },
+
+        async loadInvariants() {
+            this.loading = true;
+            try {
+                const resp = await sentinel3Fetch('/api/invariants/custom/');
+                const data = await resp.json();
+                this.invariants = data.invariants || [];
+            } catch (e) {
+                console.error('Failed to load invariants:', e);
+                this.showToast('Failed to load invariants', 'error');
+            }
+            this.loading = false;
+        },
+
+        selectInvariant(inv) {
+            this.selectedName = inv.name;
+            this.form.name = inv.name;
+            this.form.description = inv.description || '';
+            this.form.type = inv.type || 'threshold';
+            this.form.severity = inv.severity || 'medium';
+            this.form.enabled = inv.enabled !== false;
+            this.form.chains = [...(inv.chains || [])];
+            this.form.event_types = [...(inv.event_types || [])];
+            this.form.match_mode = inv.match_mode || 'all';
+            this.form.cooldown_seconds = inv.cooldown_seconds || 60;
+            this.form.confidence = inv.confidence || 0.8;
+            // Note: the list endpoint returns condition count, not full conditions
+            // Reset conditions since we only get the count from the list API
+            this.form.conditions = [];
+        },
+
+        resetForm() {
+            this.selectedName = null;
+            this.form = {
+                name: '',
+                description: '',
+                type: 'threshold',
+                severity: 'medium',
+                enabled: true,
+                chains: [],
+                event_types: [],
+                conditions: [],
+                match_mode: 'all',
+                cooldown_seconds: 60,
+                confidence: 0.8,
+            };
+        },
+
+        toggleChip(field, value) {
+            const arr = this.form[field];
+            const idx = arr.indexOf(value);
+            if (idx >= 0) {
+                arr.splice(idx, 1);
+            } else {
+                arr.push(value);
+            }
+        },
+
+        addCondition() {
+            this.form.conditions.push({ field: '', operator: 'gt', value: '' });
+        },
+
+        removeCondition(idx) {
+            this.form.conditions.splice(idx, 1);
+        },
+
+        toggleEnabled(inv) {
+            // Quick toggle from the list card -- resave with toggled state
+            inv.enabled = !inv.enabled;
+        },
+
+        buildYaml() {
+            const f = this.form;
+            let yaml = 'invariants:\n';
+            yaml += '  - name: "' + (f.name || 'untitled') + '"\n';
+            if (f.description) {
+                yaml += '    description: "' + f.description.replace(/"/g, '\\"') + '"\n';
+            }
+            yaml += '    type: ' + f.type + '\n';
+            yaml += '    severity: ' + f.severity + '\n';
+            yaml += '    enabled: ' + f.enabled + '\n';
+
+            if (f.chains.length > 0) {
+                yaml += '    chains:\n';
+                for (const c of f.chains) {
+                    yaml += '      - ' + c + '\n';
+                }
+            } else {
+                yaml += '    chains: []  # all chains\n';
+            }
+
+            if (f.event_types.length > 0) {
+                yaml += '    event_types:\n';
+                for (const et of f.event_types) {
+                    yaml += '      - ' + et + '\n';
+                }
+            } else {
+                yaml += '    event_types: []  # all types\n';
+            }
+
+            yaml += '    match_mode: ' + f.match_mode + '\n';
+            yaml += '    cooldown_seconds: ' + f.cooldown_seconds + '\n';
+            yaml += '    confidence: ' + f.confidence + '\n';
+
+            if (f.conditions.length > 0) {
+                yaml += '    conditions:\n';
+                for (const cond of f.conditions) {
+                    yaml += '      - field: ' + (cond.field || '""') + '\n';
+                    yaml += '        operator: ' + cond.operator + '\n';
+                    // Determine if value is numeric
+                    const numVal = Number(cond.value);
+                    if (cond.value !== '' && !isNaN(numVal) && !String(cond.value).startsWith('$')) {
+                        yaml += '        value: ' + numVal + '\n';
+                    } else {
+                        yaml += '        value: "' + (cond.value || '') + '"\n';
+                    }
+                }
+            } else {
+                yaml += '    conditions: []\n';
+            }
+
+            return yaml;
+        },
+
+        yamlHighlighted() {
+            const raw = this.buildYaml();
+            // Simple syntax highlighting
+            return raw
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                // Comments
+                .replace(/(#[^\n]*)/g, '<span class="yaml-comment">$1</span>')
+                // Keys (word followed by colon at start or after spaces)
+                .replace(/^(\s*-?\s*)(\w[\w_]*)(:)/gm, '$1<span class="yaml-key">$2</span>$3')
+                // Booleans
+                .replace(/:\s+(true|false)\b/g, ': <span class="yaml-bool">$1</span>')
+                // Numbers
+                .replace(/:\s+(\d+\.?\d*)\b/g, ': <span class="yaml-num">$1</span>')
+                // Strings in double quotes
+                .replace(/"([^"]*)"/g, '"<span class="yaml-str">$1</span>"');
+        },
+
+        async copyYaml() {
+            try {
+                await navigator.clipboard.writeText(this.buildYaml());
+                this.copied = true;
+                setTimeout(() => this.copied = false, 2000);
+            } catch {
+                this.showToast('Failed to copy to clipboard', 'error');
+            }
+        },
+
+        async validateYaml() {
+            try {
+                const resp = await sentinel3Fetch('/api/invariants/custom/validate', {
+                    method: 'POST',
+                    body: JSON.stringify({ yaml: this.buildYaml() }),
+                });
+                const data = await resp.json();
+                if (data.valid) {
+                    this.showToast('Valid! ' + data.invariant_count + ' invariant(s) parsed successfully.', 'success');
+                } else {
+                    this.showToast('Validation failed: ' + data.error, 'error');
+                }
+            } catch (e) {
+                this.showToast('Validation request failed: ' + e.message, 'error');
+            }
+        },
+
+        async saveInvariant() {
+            if (!this.form.name) {
+                this.showToast('Name is required', 'error');
+                return;
+            }
+
+            this.saving = true;
+            try {
+                // Parse condition values: convert numeric strings to numbers
+                const conditions = this.form.conditions.map(c => {
+                    const numVal = Number(c.value);
+                    return {
+                        field: c.field,
+                        operator: c.operator,
+                        value: (c.value !== '' && !isNaN(numVal) && !String(c.value).startsWith('$')) ? numVal : c.value,
+                    };
+                });
+
+                const payload = {
+                    name: this.form.name,
+                    description: this.form.description,
+                    type: this.form.type,
+                    severity: this.form.severity,
+                    enabled: this.form.enabled,
+                    chains: this.form.chains,
+                    event_types: this.form.event_types,
+                    conditions: conditions,
+                    match_mode: this.form.match_mode,
+                    cooldown_seconds: this.form.cooldown_seconds,
+                    confidence: this.form.confidence,
+                };
+
+                const resp = await sentinel3Fetch('/api/invariants/custom/', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Save failed');
+                }
+
+                const data = await resp.json();
+                this.showToast('Invariant "' + this.form.name + '" saved to ' + data.file, 'success');
+                this.selectedName = this.form.name;
+                await this.loadInvariants();
+            } catch (e) {
+                this.showToast('Save failed: ' + e.message, 'error');
+            }
+            this.saving = false;
+        },
+
+        async deleteInvariant() {
+            if (!this.selectedName) return;
+            if (!confirm('Delete invariant "' + this.selectedName + '"? This cannot be undone.')) return;
+
+            try {
+                const resp = await sentinel3Fetch('/api/invariants/custom/' + encodeURIComponent(this.selectedName), {
+                    method: 'DELETE',
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Delete failed');
+                }
+                this.showToast('Invariant "' + this.selectedName + '" deleted', 'info');
+                this.resetForm();
+                await this.loadInvariants();
+            } catch (e) {
+                this.showToast('Delete failed: ' + e.message, 'error');
+            }
+        },
+
+        showToast(message, type) {
+            this.toast.message = message;
+            this.toast.type = type || 'info';
+            this.toast.show = true;
+            setTimeout(() => { this.toast.show = false; }, 4000);
+        },
+    };
+}
+</script>
+</body>
+</html>

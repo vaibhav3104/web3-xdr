@@ -41,7 +41,7 @@ def record_event_ingested():
 # ---------------------------------------------------------------------------
 
 async def _check_postgres() -> dict[str, Any]:
-    """Verify PostgreSQL connectivity with a lightweight query."""
+    """Verify PostgreSQL connectivity with a lightweight query and include pool stats."""
     try:
         from ..database.connection import DatabaseManager
         if DatabaseManager._session_factory is None:
@@ -50,7 +50,8 @@ async def _check_postgres() -> dict[str, Any]:
             from sqlalchemy import text
             result = await session.execute(text("SELECT 1"))
             result.scalar()
-        return {"status": "connected"}
+        pool_stats = DatabaseManager.get_pool_stats()
+        return {"status": "connected", "pool": pool_stats}
     except Exception as exc:
         return {"status": "error", "detail": str(exc)[:120]}
 

@@ -170,3 +170,73 @@ def reset_mocks():
     yield
     # Cleanup if needed
 
+
+@pytest.fixture(autouse=True)
+def _reset_singletons_and_prometheus():
+    """
+    Reset module-level singletons and suppress Prometheus metric
+    re-registration errors between tests.
+
+    Several modules (feedback_loop, entity_registry, confidence,
+    invariants, patterns, enricher) use global singletons that
+    accumulate state across tests.  Additionally, FeedbackLoop.__init__
+    registers Prometheus Counter/Gauge metrics; creating a second
+    instance raises ValueError (duplicated timeseries).
+
+    This fixture:
+    1. Disables Prometheus registration in FeedbackLoop for the
+       duration of each test (patching PROM_AVAILABLE to False).
+    2. Resets every known singleton to None after each test so the
+       next test starts with a clean slate.
+    """
+    import src.rules.feedback_loop as _fl_mod
+
+    # Disable Prometheus metric registration during tests to avoid
+    # "Duplicated timeseries" errors when FeedbackLoop is instantiated
+    # multiple times across different test classes.
+    original_prom = _fl_mod.PROM_AVAILABLE
+    _fl_mod.PROM_AVAILABLE = False
+
+    yield
+
+    # Restore original value
+    _fl_mod.PROM_AVAILABLE = original_prom
+
+    # Reset feedback_loop singleton
+    _fl_mod._feedback_loop = None
+
+    # Reset entity_registry singleton
+    try:
+        import src.enrichment.entity_registry as _er_mod
+        _er_mod._entity_registry = None
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset confidence calculator singleton
+    try:
+        import src.rules.confidence as _cc_mod
+        _cc_mod._calculator = None
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset invariant engine singleton
+    try:
+        import src.rules.invariants as _inv_mod
+        _inv_mod._invariant_engine = None
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset pattern matcher singleton
+    try:
+        import src.rules.patterns as _pm_mod
+        _pm_mod._pattern_matcher = None
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset enricher singleton
+    try:
+        import src.enrichment.enricher as _en_mod
+        _en_mod._enricher = None
+    except (ImportError, AttributeError):
+        pass
+

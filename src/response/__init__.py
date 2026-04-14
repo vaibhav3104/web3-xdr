@@ -2,7 +2,7 @@
 Response Layer.
 
 Handles alerting and automated response:
-- Telegram / Slack / PagerDuty alerts
+- Telegram / Slack / Email / PagerDuty alerts
 - Guardian system for auto-pause
 - Runbook execution
 - Safe response templates
@@ -12,6 +12,8 @@ Handles alerting and automated response:
 from .alerting import AlertRouter, AlertConfig
 from .telegram import TelegramAlerter
 from .slack import SlackAlerter
+from .email_alerter import EmailAlerter
+from .pagerduty import PagerDutyAlerter
 from .guardian import (
     GuardianSystem,
     ProtocolConfig,
@@ -27,6 +29,8 @@ __all__ = [
     "AlertConfig",
     "TelegramAlerter",
     "SlackAlerter",
+    "EmailAlerter",
+    "PagerDutyAlerter",
     "GuardianSystem",
     "ProtocolConfig",
     "ResponseAction",

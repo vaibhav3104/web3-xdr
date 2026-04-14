@@ -78,6 +78,15 @@
 
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+        /* Flash highlight for new WS-delivered rows */
+        .ws-new-row {
+            animation: wsFlash 3s ease-out;
+        }
+        @keyframes wsFlash {
+            0%   { background: rgba(139,92,246,0.25); }
+            100% { background: transparent; }
+        }
+
         /* ── Page Layout ──────────────────────────────────── */
         .page-content {
             flex: 1; min-width: 0;
@@ -876,6 +885,7 @@
                     </div>
                     <button @click="onFilterChange()" class="btn btn-accent">Apply</button>
                     <button @click="resetFilters(); onFilterChange()" class="btn btn-ghost">Reset</button>
+                    <button @click="exportPDF()" class="btn btn-sm btn-blue">Export PDF</button>
                 </div>
 
                 <div style="display: flex; align-items: center; gap: 14px;">
@@ -956,7 +966,7 @@
                     </thead>
                     <tbody>
                         <template x-for="incident in paginatedIncidents" :key="incident.id">
-                            <tr :class="{'selected': selectedIncidents.includes(incident.id)}"
+                            <tr :class="{'selected': selectedIncidents.includes(incident.id), 'ws-new-row': incident._isNew}"
                                 @click="selectIncident(incident)">
                                 <td @click.stop>
                                     <input type="checkbox"
@@ -1048,6 +1058,10 @@
                                         <button x-show="!incident.feedbackSubmitted && incident.status !== 'false_positive'"
                                                 @click="submitFeedback(incident, false)"
                                                 class="btn btn-xs btn-critical" title="Mark False Positive">FP</button>
+                                        <button @click="exportIncidentPDF(incident)"
+                                                class="btn btn-xs btn-ghost" title="Download PDF">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -1577,34 +1591,47 @@
                 },
 
                 connectWebSocket() {
-                    const wsBase = this.getApiBase().replace('https://', 'wss://').replace('http://', 'ws://');
-                    try {
-                        this.ws = new WebSocket(`${wsBase}/ws/incidents`);
-                        this.ws.onopen = () => { this.wsConnected = true; console.log('WebSocket connected'); };
-                        this.ws.onclose = () => { this.wsConnected = false; setTimeout(() => this.connectWebSocket(), 5000); };
-                        this.ws.onmessage = (event) => {
-                            try {
-                                const data = JSON.parse(event.data);
-                                if (data.type === 'incident') {
-                                    this.handleNewIncident(data.data);
-                                }
-                            } catch (e) { console.error('WS parse error:', e); }
-                        };
-                    } catch (e) { console.error('WS connection error:', e); }
+                    if (window.sentinel3WS) {
+                        const self = this;
+                        // Use the shared WebSocket manager from config.js
+                        window.sentinel3WS.onConnect(function(connected) { self.wsConnected = connected; });
+                        window.sentinel3WS.on('incident', function(data) {
+                            if (data) self.handleNewIncident(data);
+                        });
+                    } else {
+                        // Fallback: direct WebSocket connection
+                        const wsBase = this.getApiBase().replace('https://', 'wss://').replace('http://', 'ws://');
+                        try {
+                            this.ws = new WebSocket(`${wsBase}/ws/incidents`);
+                            this.ws.onopen = () => { this.wsConnected = true; };
+                            this.ws.onclose = () => { this.wsConnected = false; setTimeout(() => this.connectWebSocket(), 5000); };
+                            this.ws.onmessage = (event) => {
+                                try {
+                                    const data = JSON.parse(event.data);
+                                    if (data.type === 'incident') this.handleNewIncident(data.data);
+                                } catch (e) {}
+                            };
+                        } catch (e) { console.error('WS connection error:', e); }
+                    }
                 },
 
                 handleNewIncident(incident) {
+                    // Normalize: backend may send incident_id or id
+                    if (!incident.id && incident.incident_id) incident.id = incident.incident_id;
                     const exists = this.incidents.find(i => i.id === incident.id);
                     if (!exists) {
+                        incident._isNew = true;  // Mark for flash highlight
                         this.incidents.unshift(incident);
                         this.applyFilters();
                         this.notifications.unshift({
                             id: Date.now(),
-                            title: `New ${incident.severity?.toUpperCase()} Incident`,
-                            message: incident.title?.substring(0, 50) + '...',
+                            title: `New ${(incident.severity || 'UNKNOWN').toUpperCase()} Incident`,
+                            message: (incident.title || incident.violation_type || 'New incident').substring(0, 50),
                             severity: incident.severity
                         });
                         setTimeout(() => this.notifications.pop(), 5000);
+                        // Remove flash highlight after 3 seconds
+                        setTimeout(() => { incident._isNew = false; }, 3000);
                     }
                 },
 
@@ -1899,11 +1926,38 @@
                 },
 
                 exportCSV() {
-                    const headers = ['ID', 'Severity', 'Risk Score', 'Attack Type', 'Chain', 'Confidence', 'Loss USD', 'Status', 'Created At'];
-                    const rows = this.filteredIncidents.map(inc => [inc.id, inc.severity, this.extractRiskScore(inc), inc.attack_type, inc.affected_chains?.join(';'), inc.confidence, inc.total_loss_usd, inc.status, inc.created_at]);
-                    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c || ''}"`).join(','))].join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `incidents_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+                    const params = this._exportQueryParams();
+                    const url = `${this.getApiBase()}/api/export/incidents/csv${params}`;
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = '';
+                    a.click();
+                },
+
+                exportPDF() {
+                    const params = this._exportQueryParams();
+                    const url = `${this.getApiBase()}/api/export/incidents/pdf${params}`;
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = '';
+                    a.click();
+                },
+
+                exportIncidentPDF(incident) {
+                    if (!incident || !incident.id) return;
+                    const url = `${this.getApiBase()}/api/export/incident/${encodeURIComponent(incident.id)}/pdf`;
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = '';
+                    a.click();
+                },
+
+                _exportQueryParams() {
+                    const p = new URLSearchParams();
+                    if (this.filters.severity) p.set('severity', this.filters.severity);
+                    if (this.filters.status) p.set('status', this.filters.status);
+                    const qs = p.toString();
+                    return qs ? `?${qs}` : '';
                 },
 
                 prevPage() { if (this.currentPage > 1) this.currentPage--; },

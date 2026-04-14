@@ -192,8 +192,8 @@
             </div>
             <div class="flex items-center gap-5">
                 <div class="flex items-center gap-2">
-                    <div class="live-dot"></div>
-                    <span class="text-[11px] text-emerald-400 font-medium">Live Monitoring</span>
+                    <div class="live-dot" :style="wsConnected ? '' : 'background:#f43f5e; animation:none'"></div>
+                    <span class="text-[11px] font-medium" :class="wsConnected ? 'text-emerald-400' : 'text-rose-400'" x-text="wsConnected ? 'Live' : 'Reconnecting...'"></span>
                 </div>
                 <div class="text-[11px] font-mono text-zinc-600" x-text="'Uptime ' + formatUptime(stats.uptime)"></div>
             </div>
@@ -447,8 +447,8 @@
                 <div class="panel-head">
                     <h3 class="text-sm font-semibold text-zinc-300">Live Event Feed</h3>
                     <div class="flex items-center gap-2">
-                        <div class="live-dot"></div>
-                        <span class="text-[11px] text-emerald-400 font-medium">Streaming</span>
+                        <div class="live-dot" :style="wsConnected ? '' : 'background:#f43f5e; animation:none'"></div>
+                        <span class="text-[11px] font-medium" :class="wsConnected ? 'text-emerald-400' : 'text-zinc-500'" x-text="wsConnected ? 'Streaming' : 'Polling'"></span>
                     </div>
                 </div>
                 <div class="p-4 space-y-1 max-h-[400px] overflow-y-auto font-mono text-sm">
@@ -496,6 +496,7 @@ function dashboard() {
             const cap = this.llmStats.daily_request_cap || 1000;
             return Math.min(100, Math.round(((this.llmStats.daily_request_count || 0) / cap) * 100));
         },
+        wsConnected: false,
         incidents: [], incidentTimeline: [], events: [], chains: [],
         heatmapData: [], charts: {}, eventHistory: [], eventHistoryLabels: [],
 
@@ -507,8 +508,61 @@ function dashboard() {
         async init() {
             await this.loadData();
             try { this.initCharts(); } catch(e) { console.warn('Charts init:', e.message); }
-            setInterval(() => this.loadData(), 3000);
+            // Reduced polling interval since WebSocket provides real-time updates
+            setInterval(() => this.loadData(), 15000);
             setInterval(() => { try { this.updateCharts(); } catch {} }, 10000);
+            this.connectWS();
+        },
+
+        connectWS() {
+            if (!window.sentinel3WS) return;
+            const ws = window.sentinel3WS;
+            const self = this;
+
+            // Track connection state
+            ws.onConnect(function(connected) { self.wsConnected = connected; });
+
+            // New incident arrives -> prepend to list
+            ws.on('incident', function(data) {
+                if (!data) return;
+                const exists = self.incidents.find(i => i.id === data.incident_id || i.incident_id === data.incident_id);
+                if (!exists) {
+                    self.incidents.unshift(data);
+                    if (self.incidents.length > 10) self.incidents.pop();
+                    self.incidentTimeline.unshift(data);
+                }
+                // Bump active incident count
+                self.stats.activeIncidents = (self.stats.activeIncidents || 0) + (exists ? 0 : 1);
+                self.stats.totalIncidents = (self.stats.totalIncidents || 0) + (exists ? 0 : 1);
+            });
+
+            // New event arrives -> prepend to event feed
+            ws.on('event', function(data) {
+                if (!data) return;
+                self.events.unshift(data);
+                if (self.events.length > 20) self.events.pop();
+                self.stats.totalEvents = (self.stats.totalEvents || 0) + 1;
+            });
+
+            // Stats update -> merge into stats
+            ws.on('stats', function(data) {
+                if (!data) return;
+                Object.assign(self.stats, {
+                    totalEvents: data.total_events || self.stats.totalEvents,
+                    totalIncidents: data.total_incidents || self.stats.totalIncidents,
+                    activeIncidents: data.active_incidents || self.stats.activeIncidents,
+                    criticalAlerts: data.critical_alerts || self.stats.criticalAlerts,
+                    highAlerts: data.high_alerts || self.stats.highAlerts,
+                });
+            });
+
+            // Alert -> bump critical/high counters
+            ws.on('alert', function(data) {
+                if (!data) return;
+                const sev = (data.severity || '').toUpperCase();
+                if (sev === 'CRITICAL') self.stats.criticalAlerts = (self.stats.criticalAlerts || 0) + 1;
+                else if (sev === 'HIGH') self.stats.highAlerts = (self.stats.highAlerts || 0) + 1;
+            });
         },
 
         async loadData() {

@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone
+import asyncio
 import structlog
 
 from ..response.guardian import (
@@ -252,6 +253,19 @@ async def approve_response(
         error=record.error,
     )
 
+    # Fire-and-forget WebSocket broadcast
+    try:
+        from .ws_broadcast import broadcast_guardian_action
+        asyncio.create_task(broadcast_guardian_action({
+            "action": "approve",
+            "response_id": record.id,
+            "protocol": record.protocol,
+            "status": record.status.value,
+            "tx_hash": record.tx_hash,
+        }))
+    except Exception:
+        pass
+
     return {
         "status": "approved",
         "response_id": record.id,
@@ -387,6 +401,19 @@ async def manual_pause(
         error=record.error,
     )
 
+    # Fire-and-forget WebSocket broadcast
+    try:
+        from .ws_broadcast import broadcast_guardian_action
+        asyncio.create_task(broadcast_guardian_action({
+            "action": "manual_pause",
+            "protocol_id": request.protocol_id,
+            "response_id": record.id,
+            "status": record.status.value,
+            "initiated_by": request.initiated_by,
+        }))
+    except Exception:
+        pass
+
     return {
         "status": "pause_initiated",
         "response_id": record.id,
@@ -495,6 +522,18 @@ async def emergency_pause(request: EmergencyPauseRequest):
                 actor_id="dashboard_user",
                 error=str(e),
             )
+
+    # Fire-and-forget WebSocket broadcast
+    try:
+        from .ws_broadcast import broadcast_guardian_action
+        asyncio.create_task(broadcast_guardian_action({
+            "action": "emergency_pause",
+            "incident_id": request.incident_id,
+            "protocols_affected": len(results),
+            "results": results,
+        }))
+    except Exception:
+        pass
 
     return {
         "status": "pause_initiated",
@@ -844,6 +883,18 @@ async def pause_protocol(protocol_id: str, body: dict):
                 tx_hash=record.tx_hash,
                 error=record.error,
             )
+
+            # Fire-and-forget WebSocket broadcast
+            try:
+                from .ws_broadcast import broadcast_guardian_action
+                asyncio.create_task(broadcast_guardian_action({
+                    "action": "protocol_pause",
+                    "protocol_id": protocol_id,
+                    "status": record.status.value,
+                    "initiated_by": initiated_by,
+                }))
+            except Exception:
+                pass
 
             return {
                 "status": "executed",

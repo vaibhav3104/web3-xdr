@@ -4,18 +4,64 @@ Handles async connection pooling and session management.
 """
 
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 import structlog
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     AsyncEngine,
     create_async_engine,
     async_sessionmaker,
 )
+from sqlalchemy.pool import Pool
 
 logger = structlog.get_logger()
+
+
+# ============================================================
+# Connection Pool Event Listeners
+# ============================================================
+
+@event.listens_for(Pool, "checkout")
+def _pool_checkout(dbapi_conn, connection_record, connection_proxy):
+    """Track connection checkouts from the pool."""
+    logger.debug("db_pool_checkout")
+    try:
+        from ..metrics.collector import metrics
+        metrics.db_pool_checkouts_total.inc()
+    except Exception:
+        pass
+
+
+@event.listens_for(Pool, "checkin")
+def _pool_checkin(dbapi_conn, connection_record):
+    """Track connection returns to the pool."""
+    logger.debug("db_pool_checkin")
+    try:
+        from ..metrics.collector import metrics
+        metrics.db_pool_checkins_total.inc()
+    except Exception:
+        pass
+
+
+@event.listens_for(Pool, "invalidate")
+def _pool_invalidate(dbapi_conn, connection_record, exception):
+    """Track connection invalidations."""
+    logger.warning("db_connection_invalidated", error=str(exception) if exception else "manual")
+    try:
+        from ..metrics.collector import metrics
+        metrics.db_pool_invalidations_total.inc()
+    except Exception:
+        pass
+
+
+@event.listens_for(Pool, "reset")
+def _pool_reset(dbapi_conn, connection_record):
+    """Track connection resets."""
+    logger.debug("db_pool_reset")
 
 
 class DatabaseManager:
@@ -160,6 +206,82 @@ class DatabaseManager:
         
         logger.info("database_initialized_successfully")
     
+    # =========================================================================
+    # Pool Monitoring, Health Check & Auto-Recovery
+    # =========================================================================
+
+    @classmethod
+    def get_pool_stats(cls) -> dict:
+        """Get current connection pool statistics."""
+        if cls._engine is None:
+            return {"status": "not_initialized"}
+        try:
+            pool = cls._engine.pool
+            return {
+                "status": "active",
+                "pool_size": pool.size(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow(),
+                "checked_in": pool.checkedin(),
+                "total": pool.size() + pool.overflow(),
+            }
+        except Exception as e:
+            logger.error("pool_stats_error", error=str(e))
+            return {"status": "error", "detail": str(e)[:120]}
+
+    @classmethod
+    async def health_check(cls) -> bool:
+        """Test DB connectivity, return True if healthy."""
+        try:
+            if cls._session_factory is None:
+                return False
+            async with cls.get_session() as session:
+                await session.execute(text("SELECT 1"))
+            return True
+        except Exception as e:
+            logger.warning("db_health_check_failed", error=str(e))
+            return False
+
+    @classmethod
+    async def auto_recover(cls) -> bool:
+        """
+        Attempt to recover from connection failures.
+        Returns True if recovery succeeded or DB was already healthy.
+        """
+        if await cls.health_check():
+            return True
+
+        logger.warning("db_unhealthy_attempting_recovery")
+        try:
+            if cls._engine is not None:
+                await cls._engine.dispose()
+                cls._engine = None
+                cls._session_factory = None
+            await cls.initialize()
+            healthy = await cls.health_check()
+            if healthy:
+                logger.info("db_recovery_successful")
+            else:
+                logger.error("db_recovery_verification_failed")
+            return healthy
+        except Exception as e:
+            logger.error("db_recovery_failed", error=str(e))
+            return False
+
+    @classmethod
+    async def update_pool_metrics(cls) -> None:
+        """Push current pool stats into Prometheus gauges."""
+        try:
+            from ..metrics.collector import metrics
+            stats = cls.get_pool_stats()
+            if stats.get("status") == "active":
+                metrics.db_pool_size.set(stats["pool_size"])
+                metrics.db_pool_checked_out.set(stats["checked_out"])
+                metrics.db_pool_overflow.set(stats["overflow"])
+                metrics.db_pool_available.set(stats["checked_in"])
+        except Exception as e:
+            logger.debug("pool_metrics_update_error", error=str(e))
+
     @classmethod
     async def close(cls) -> None:
         """
@@ -288,4 +410,70 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     async with DatabaseManager.get_session() as session:
         yield session
+
+
+# ============================================================
+# Background Health Monitor
+# ============================================================
+
+_health_monitor_task: Optional[asyncio.Task] = None
+
+
+async def _db_health_monitor(interval_seconds: int = 30) -> None:
+    """
+    Periodic background task that checks DB health, updates pool metrics,
+    and attempts auto-recovery when the database is unreachable.
+    """
+    logger.info("db_health_monitor_started", interval=interval_seconds)
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+
+            # Update Prometheus pool metrics
+            await DatabaseManager.update_pool_metrics()
+
+            # Check health and attempt recovery if needed
+            healthy = await DatabaseManager.health_check()
+
+            try:
+                from ..metrics.collector import metrics
+                metrics.db_health_status.set(1 if healthy else 0)
+            except Exception:
+                pass
+
+            if not healthy:
+                logger.warning("db_periodic_health_check_failed")
+                recovered = await DatabaseManager.auto_recover()
+                try:
+                    from ..metrics.collector import metrics
+                    metrics.db_recovery_attempts_total.inc()
+                    if recovered:
+                        metrics.db_health_status.set(1)
+                except Exception:
+                    pass
+        except asyncio.CancelledError:
+            logger.info("db_health_monitor_stopped")
+            return
+        except Exception as e:
+            logger.error("db_health_monitor_error", error=str(e))
+
+
+def start_db_health_monitor(interval_seconds: int = 30) -> asyncio.Task:
+    """Start the background DB health monitor. Safe to call multiple times."""
+    global _health_monitor_task
+    if _health_monitor_task is not None and not _health_monitor_task.done():
+        return _health_monitor_task
+    _health_monitor_task = asyncio.create_task(
+        _db_health_monitor(interval_seconds),
+        name="db_health_monitor",
+    )
+    return _health_monitor_task
+
+
+def stop_db_health_monitor() -> None:
+    """Cancel the background DB health monitor."""
+    global _health_monitor_task
+    if _health_monitor_task is not None and not _health_monitor_task.done():
+        _health_monitor_task.cancel()
+        _health_monitor_task = None
 

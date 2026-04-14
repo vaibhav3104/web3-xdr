@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from ..logging_config import configure_logging
+from ..logging_config import configure_logging, setup_logging
 configure_logging()
 
 logger = structlog.get_logger()
@@ -64,6 +64,10 @@ _OPTIONAL_ROUTES = [
     (".verification_routes", "router", None,    "verification"),
     (".forensics_routes",    "router", None,    "forensics"),
     (".dsl_routes",          "router", None,    "invariants-dsl"),
+    (".export_routes",       "router", None,    "export"),
+    (".anomaly_routes",      "router", None,    "anomaly-detection"),
+    (".mempool_routes",      "router", None,    "mempool"),
+    (".threat_intel_routes", "router", None,    "threat-intel"),
 ]
 
 
@@ -99,10 +103,15 @@ def create_app(
     @app.on_event("startup")
     async def startup_event():
         try:
-            from ..database.connection import DatabaseManager
+            from ..database.connection import DatabaseManager, start_db_health_monitor
             await DatabaseManager.initialize()
             await DatabaseManager.ensure_indexes()
             logger.info("database_initialized")
+
+            # Start periodic DB health monitor (checks every 30s, auto-recovers)
+            health_interval = int(os.getenv("DB_HEALTH_CHECK_INTERVAL", "30"))
+            start_db_health_monitor(interval_seconds=health_interval)
+            logger.info("db_health_monitor_started", interval=health_interval)
         except (ConnectionError, OSError, ImportError, RuntimeError) as e:
             logger.error("database_init_failed", error=str(e))
 
@@ -191,6 +200,10 @@ def create_app(
         logger.info("tenant_middleware_registered")
     except ImportError as e:
         logger.warning("tenant_middleware_unavailable", error=str(e))
+
+    # ── Trace ID middleware (outermost — added last) ───────────────
+    from .trace_middleware import TraceMiddleware
+    app.add_middleware(TraceMiddleware)
 
     # ── Register routes ─────────────────────────────────────────────
     registered = []

@@ -254,6 +254,55 @@ class XDRMetrics:
         )
 
         # ============================================================
+        # DB CONNECTION POOL METRICS
+        # ============================================================
+
+        self.db_pool_size = Gauge(
+            f"{namespace}_db_pool_size",
+            "Number of permanent connections in the pool"
+        )
+
+        self.db_pool_checked_out = Gauge(
+            f"{namespace}_db_pool_checked_out",
+            "Number of connections currently checked out from the pool"
+        )
+
+        self.db_pool_overflow = Gauge(
+            f"{namespace}_db_pool_overflow",
+            "Number of overflow connections currently open"
+        )
+
+        self.db_pool_available = Gauge(
+            f"{namespace}_db_pool_available",
+            "Number of connections available (checked in) in the pool"
+        )
+
+        self.db_health_status = Gauge(
+            f"{namespace}_db_health_status",
+            "Database health status (1=healthy, 0=unhealthy)"
+        )
+
+        self.db_pool_checkouts_total = Counter(
+            f"{namespace}_db_pool_checkouts_total",
+            "Total number of connection checkouts from the pool"
+        )
+
+        self.db_pool_checkins_total = Counter(
+            f"{namespace}_db_pool_checkins_total",
+            "Total number of connection checkins to the pool"
+        )
+
+        self.db_pool_invalidations_total = Counter(
+            f"{namespace}_db_pool_invalidations_total",
+            "Total number of connection invalidations"
+        )
+
+        self.db_recovery_attempts_total = Counter(
+            f"{namespace}_db_recovery_attempts_total",
+            "Total number of automatic DB recovery attempts"
+        )
+
+        # ============================================================
         # WEBSOCKET METRICS
         # ============================================================
 
@@ -411,6 +460,16 @@ def set_websocket_connections(channel: str, count: int):
 def set_custom_invariants(invariant_type: str, count: int):
     """Set the number of loaded custom invariants."""
     metrics.custom_invariants_loaded.labels(invariant_type=invariant_type).set(count)
+
+
+def update_db_pool_metrics(pool_stats: dict):
+    """Update DB pool gauge metrics from a pool stats dictionary."""
+    if pool_stats.get("status") != "active":
+        return
+    metrics.db_pool_size.set(pool_stats.get("pool_size", 0))
+    metrics.db_pool_checked_out.set(pool_stats.get("checked_out", 0))
+    metrics.db_pool_overflow.set(pool_stats.get("overflow", 0))
+    metrics.db_pool_available.set(pool_stats.get("checked_in", 0))
 
 
 # ============================================================

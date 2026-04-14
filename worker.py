@@ -115,6 +115,9 @@ class Sentinel3Worker:
         # Shared state
         self.monitor_state = None
         self.rule_engine = None
+
+        # Mempool alerter
+        self.mempool_alerter = None
         
         logger.info(
             "worker_initialized",
@@ -309,6 +312,73 @@ class Sentinel3Worker:
             except Exception as e:
                 logger.error("non_evm_listener_init_error", chain=chain_id, error=str(e))
     
+    async def init_mempool_alerter(self, config: dict):
+        """Initialize the MempoolAlerter with the bloXroute mempool source.
+
+        Falls back gracefully if bloXroute credentials are not configured.
+        """
+        try:
+            from src.runtime.mempool_alerter import MempoolAlerter, set_mempool_alerter
+            from src.runtime.intent_sources.bloxroute_source import BloxrouteMempoolSource
+
+            bloxroute_auth = os.getenv("BLOXROUTE_AUTH_HEADER", "")
+            monitored_raw = os.getenv("BLOXROUTE_MONITORED_ADDRESSES", "")
+            monitored_addresses = [
+                a.strip() for a in monitored_raw.split(",") if a.strip()
+            ]
+            chain_id = os.getenv("BLOXROUTE_CHAIN_ID", "ethereum")
+
+            if not bloxroute_auth or not monitored_addresses:
+                logger.info(
+                    "mempool_alerter_skipped",
+                    reason="BLOXROUTE_AUTH_HEADER or BLOXROUTE_MONITORED_ADDRESSES not set",
+                )
+                return
+
+            # Create the bloXroute mempool source
+            source = BloxrouteMempoolSource(
+                chain_id=chain_id,
+                auth_header=bloxroute_auth,
+                monitored_addresses=monitored_addresses,
+            )
+            await source.start()
+
+            # Optionally attach the invariant engine
+            invariant_engine = None
+            try:
+                from src.invariants.engine import create_default_engine
+                invariant_engine = create_default_engine(config)
+            except Exception as exc:
+                logger.warning("mempool_invariant_engine_unavailable", error=str(exc))
+
+            alerter = MempoolAlerter(
+                invariant_engine=invariant_engine,
+                config={
+                    "mempool_alerting_enabled": os.getenv(
+                        "MEMPOOL_ALERTING_ENABLED", "true"
+                    ).lower()
+                    == "true"
+                },
+            )
+
+            # Register the global singleton so the API routes can reach it
+            set_mempool_alerter(alerter)
+
+            # Start monitoring (runs in its own asyncio task internally)
+            await alerter.start(source)
+            self.mempool_alerter = alerter
+
+            logger.info(
+                "mempool_alerter_initialized",
+                chain_id=chain_id,
+                monitored_addresses=len(monitored_addresses),
+            )
+
+        except ImportError as exc:
+            logger.warning("mempool_alerter_import_failed", error=str(exc))
+        except Exception as exc:
+            logger.error("mempool_alerter_init_error", error=str(exc))
+
     async def process_event(self, event):
         """Process a security event from any listener."""
         try:
@@ -481,7 +551,10 @@ class Sentinel3Worker:
         # Initialize listeners
         await self.init_evm_listeners(config)
         await self.init_non_evm_listeners(config)
-        
+
+        # Initialize mempool pre-confirmation alerter
+        await self.init_mempool_alerter(config)
+
         if not self.stats.active_listeners:
             logger.error("no_listeners_started")
             return
@@ -533,12 +606,16 @@ class Sentinel3Worker:
             
             await asyncio.gather(*tasks, return_exceptions=True)
             
+            # Stop mempool alerter
+            if self.mempool_alerter:
+                await self.mempool_alerter.stop()
+
             # Disconnect listeners
             for listener in self.evm_listeners.values():
                 await listener.disconnect()
             for listener in self.non_evm_listeners.values():
                 await listener.disconnect()
-            
+
             logger.info("worker_stopped", stats=self.stats.to_dict())
     
     def signal_handler(self, sig):

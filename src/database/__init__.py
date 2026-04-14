@@ -3,7 +3,7 @@ Database module for Sentinel3.
 Provides PostgreSQL persistence and Redis caching for events, incidents, and violations.
 """
 
-from .connection import DatabaseManager, get_db
+from .connection import DatabaseManager, get_db, start_db_health_monitor, stop_db_health_monitor
 from .models import Base, EventModel, IncidentModel, ViolationModel, ChainStatsModel
 from .service import DatabaseService
 
@@ -27,6 +27,8 @@ __all__ = [
     # PostgreSQL
     "DatabaseManager",
     "get_db",
+    "start_db_health_monitor",
+    "stop_db_health_monitor",
     "Base",
     "EventModel",
     "IncidentModel",
