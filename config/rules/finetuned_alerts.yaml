@@ -31,7 +31,7 @@ rules:
           value: 5000  # > 5000 tokens (raised from 1000 — sub-5K is routine DeFi)
 
     thresholds:
-      min_amount_usd: 5000000  # $5M+ (raised from $2M — engine reputation handles known entities)
+      min_amount_usd: 10000000  # $10M+ (raised from $5M — aligns with whale-transfer-001 in whale_monitoring.yaml to avoid duplicate alerts)
 
     # Known whale/institutional addresses — supplement engine reputation with explicit excludes
     exclusions:
@@ -381,10 +381,13 @@ rules:
     name: Oracle Price Update
     description: |
       Monitors oracle price updates for potential manipulation.
+      DISABLED 2026-04-13: No deviation threshold — fires on EVERY oracle update (pure noise).
+      Oracle manipulation is properly covered by oracle-twap-manipulation-001 (15% deviation)
+      and oracle-spot-manipulation-002 (20% deviation) in advanced_attacks.yaml.
 
     severity: medium
     confidence: 0.60
-    enabled: true
+    enabled: false  # DISABLED 2026-04-13: 100% FP — no deviation filter, fires on routine updates
 
     detection:
       type: event

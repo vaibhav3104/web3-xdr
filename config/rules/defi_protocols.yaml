@@ -376,6 +376,9 @@ rules:
     description: |
       Detects patterns consistent with reentrancy attacks - multiple
       calls to same function in single transaction.
+      Tuned 2026-04-13: raised recursive_calls 3→6, added $50K min value,
+      added rate limit. Prior threshold generated 8 synthetic FPs from
+      pseudo-mempool data where normal DeFi call depth triggered the rule.
     severity: critical
     confidence: 0.75
     enabled: true
@@ -386,10 +389,20 @@ rules:
       conditions:
         - field: recursive_calls
           operator: gt
-          value: 3
+          value: 6  # Raised from 3 — normal DeFi composability has 3-5 nested calls
         - field: same_transaction
           operator: eq
           value: true
+        - field: amount_usd
+          operator: gt
+          value: 50000  # Real reentrancy attacks target meaningful value
+
+    thresholds:
+      min_amount_usd: 50000  # $50K+ (filter out synthetic/test data)
+
+    rate_limit:
+      max_alerts: 3
+      period: 1h
 
     actions:
       - type: alert
@@ -399,8 +412,9 @@ rules:
   - id: defi-access-control-001
     name: Unauthorized Admin Function Call
     description: |
-      Detects calls to admin/owner functions from non-admin addresses.
-      Overlaps with admin-change-ft007 — this rule focuses on Pause/Unpause events.
+      Detects Pause/Unpause events from non-admin addresses.
+      Tuned 2026-04-13: removed OwnershipTransferred, AdminChanged, RoleGranted
+      (already covered by admin-change-ft007) to eliminate double-alerting.
     severity: critical
     confidence: 0.90
     enabled: true
@@ -408,9 +422,6 @@ rules:
     detection:
       type: event
       event_type:
-        - OwnershipTransferred
-        - AdminChanged
-        - RoleGranted
         - Paused
         - Unpaused
 

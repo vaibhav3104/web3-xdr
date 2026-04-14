@@ -514,6 +514,24 @@ class RuleEngine:
                 return None
             pattern_name = detection.get('pattern', '')
             if pattern_name and self._pattern_matcher.check_pattern(pattern_name, event):
+                # Also evaluate YAML conditions and thresholds for pattern rules
+                conditions = detection.get('conditions', [])
+                for condition in conditions:
+                    if not self._evaluate_condition(condition, event, rule.thresholds):
+                        return None
+
+                # Check thresholds (e.g. min_amount_usd)
+                thresholds = rule.thresholds
+                if thresholds:
+                    amount_usd_raw = event.get('amount_usd', 0)
+                    try:
+                        amount_usd = float(amount_usd_raw) if amount_usd_raw else 0
+                    except (ValueError, TypeError):
+                        amount_usd = 0
+                    if 'min_amount_usd' in thresholds:
+                        if amount_usd < thresholds['min_amount_usd']:
+                            return None
+
                 return {
                     "pattern": pattern_name,
                     "matched_at": datetime.now(timezone.utc).isoformat(),
