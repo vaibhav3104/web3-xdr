@@ -3,8 +3,7 @@ Forensics Engine for Sentinel3 XDR.
 Provides historical investigation, incident replay, and fund-flow tracing.
 """
 
-import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum

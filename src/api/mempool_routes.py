@@ -6,7 +6,6 @@ Endpoints for mempool pre-confirmation alerting stats, recent alerts,
 and runtime toggle.
 """
 
-from typing import Optional
 from fastapi import APIRouter, HTTPException
 import structlog
 

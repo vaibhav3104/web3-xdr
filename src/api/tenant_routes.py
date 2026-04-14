@@ -4,19 +4,16 @@ Supports multiple organizations with isolated data, API key management,
 tier controls, and per-tenant usage statistics.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from datetime import datetime, timezone
 from uuid import uuid4
-import hashlib
-import secrets
 
-from fastapi import APIRouter, HTTPException, Depends, Request, status, Header, Query
+from fastapi import APIRouter, HTTPException, Depends, status, Header, Query
 from pydantic import BaseModel, Field
 import structlog
 
 from ..auth.jwt_handler import require_auth, require_role
 from ..auth.models import User
-from ..auth.tenant_middleware import get_tenant_id, get_tenant_tier, require_scope
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/tenants", tags=["Multi-tenancy"])

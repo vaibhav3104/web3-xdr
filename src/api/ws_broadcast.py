@@ -5,7 +5,6 @@ These are fire-and-forget wrappers around the WebSocket manager.
 Import failures are silently ignored so callers never break if
 the WebSocket module is unavailable.
 """
-import asyncio
 import logging
 
 logger = logging.getLogger(__name__)

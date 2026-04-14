@@ -16,8 +16,6 @@ from .models import (
     EventModel,
     IncidentModel,
     SimulationRunModel,
-    CustomerModel,
-    APIKeyModel,
 )
 
 logger = structlog.get_logger()
@@ -755,34 +753,6 @@ class DatabaseService:
                 for e in events
             ]
     
-    @staticmethod
-    async def get_event_by_id(event_id: str) -> Optional[Dict]:
-        """
-        Get a single event by its ID.
-        """
-        async with DatabaseManager.get_session() as session:
-            query = select(EventModel).where(EventModel.event_id == event_id)
-            result = await session.execute(query)
-            event = result.scalar_one_or_none()
-
-            if not event:
-                return None
-
-            return {
-                "event_id": event.event_id,
-                "event_type": event.event_type,
-                "chain": event.chain_id,
-                "contract_address": event.contract_address,
-                "amount": float(event.amount or 0),
-                "amount_usd": float(event.amount_usd or 0),
-                "timestamp": event.block_timestamp.isoformat() if event.block_timestamp else "",
-                "tx_hash": event.tx_hash or "",
-                "severity": event.severity or "INFO",
-                "from_address": event.from_address,
-                "to_address": event.to_address,
-                "raw_data": event.raw_data
-            }
-
     @staticmethod
     async def get_events_by_ids(event_ids: list, limit: int = 100) -> List[Dict]:
         """

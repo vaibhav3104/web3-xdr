@@ -1,7 +1,7 @@
 """YAML-based Domain Specific Language for custom invariants."""
 import yaml
 import operator
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -88,7 +88,6 @@ class DSLCondition:
             elif attr == "total_minted":
                 return float(bridge_state.get("minted", Decimal("0")))
             elif attr == "event_count_last_hour":
-                cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
                 events = context.get_recent_events(minutes=60)
                 return len(events)
 

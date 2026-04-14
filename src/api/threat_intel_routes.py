@@ -1,10 +1,9 @@
 """Public Threat Intelligence Feed API."""
 from fastapi import APIRouter, Query
 from typing import Optional, List
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 import hashlib
-import json
 
 router = APIRouter(prefix="/api/threat-intel", tags=["threat-intelligence"])
 

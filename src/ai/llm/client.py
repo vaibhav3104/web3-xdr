@@ -9,10 +9,9 @@ that exposes the same .messages.create() interface regardless of backend.
 """
 
 import os
-import json
 import structlog
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import List, Any
 
 logger = structlog.get_logger(__name__)
 
