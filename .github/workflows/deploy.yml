@@ -129,7 +129,7 @@ jobs:
               --max-instances 5 \
               --vpc-connector sentinel3-vpc \
               --vpc-egress private-ranges-only \
-              --remove-cloudsql-instances web3-xdr:us-central1:web3-xdr-db \
+              --add-cloudsql-instances web3-xdr:us-central1:web3-xdr-db \
               --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=api,API_PORT=8080,REDIS_ENABLED=true,REDIS_URL=redis://10.74.131.163:6379/0,LAST_DEPLOY=$(date +%s)" \
               --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,ANTHROPIC_API_KEY=web3-xdr-anthropic-api-key:latest"; then
               echo "✅ API deployed successfully"
@@ -166,7 +166,7 @@ jobs:
               --cpu-boost \
               --vpc-connector sentinel3-vpc \
               --vpc-egress private-ranges-only \
-              --remove-cloudsql-instances web3-xdr:us-central1:web3-xdr-db \
+              --add-cloudsql-instances web3-xdr:us-central1:web3-xdr-db \
               --set-env-vars "ENVIRONMENT=staging,GCP_PROJECT=${{ env.GCP_PROJECT }},PROC_TYPE=worker,WORKER_HEALTH_PORT=9090,RUNTIME_ENABLED=true,MEMPOOL_SOURCE=pseudo,AUTO_START_SCANNER=true,SCANNER_CHAINS=ethereum:polygon:arbitrum:base:optimism:avalanche:bsc,REDIS_ENABLED=true,REDIS_URL=redis://10.74.131.163:6379/0,LAST_DEPLOY=$(date +%s)" \
               --set-secrets "INFURA_API_KEY=web3-xdr-infura-api-key:latest,JWT_SECRET_KEY=web3-xdr-jwt-secret:latest,OPENAI_API_KEY=web3-xdr-openai-api-key:latest,DATABASE_URL=web3-xdr-database-url:latest,ANTHROPIC_API_KEY=web3-xdr-anthropic-api-key:latest"; then
               echo "✅ Worker deployed successfully"
