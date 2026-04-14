@@ -22,11 +22,17 @@ ENV/
 *.swo
 *~
 
+# Claude / AI tooling
+.claude/
+
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
+tests/
+test_*.py
+pytest.ini
 
 # Documentation
 docs/
@@ -36,8 +42,29 @@ docs/
 # Development
 .env
 .env.local
+.env.example
+env.example
 *.log
-tests/
+.pre-commit-config.yaml
+.yamllint
+ruff.toml
+Makefile
+
+# Scripts (not needed in container)
+scripts/
+examples/
+*.sh
+!entrypoint.sh
+
+# Security scans / monitoring configs (not runtime)
+security/
+.zap/
+monitoring/
+
+# Deploy configs (not needed inside the image)
+deploy/
+cloudbuild*.yaml
+github-actions-key.json
 
 # Docker
 Dockerfile*
@@ -48,4 +75,6 @@ docker-compose*
 .DS_Store
 Thumbs.db
 *.bak
+.github/
+data/
 

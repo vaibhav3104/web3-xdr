@@ -112,6 +112,13 @@ def create_app(
             health_interval = int(os.getenv("DB_HEALTH_CHECK_INTERVAL", "30"))
             start_db_health_monitor(interval_seconds=health_interval)
             logger.info("db_health_monitor_started", interval=health_interval)
+
+            # Log Alembic migration status (non-blocking, advisory only)
+            try:
+                from ..database.migrations import log_migration_status
+                await log_migration_status()
+            except Exception as e:
+                logger.debug("alembic_status_check_skipped", error=str(e))
         except (ConnectionError, OSError, ImportError, RuntimeError) as e:
             logger.error("database_init_failed", error=str(e))
 

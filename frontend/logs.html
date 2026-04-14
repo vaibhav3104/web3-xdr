@@ -1329,15 +1329,12 @@
                 }
 
                 const fullUrl = `${API_BASE}/api/events?${params.toString()}`;
-                console.log('========== DEBUG: FETCH REQUEST ==========');
-                console.log('Full URL:', fullUrl);
-                console.log('Params:', Object.fromEntries(params));
 
-                const response = await fetch(fullUrl);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-                console.log('========== DEBUG: FETCH RESPONSE ==========');
-                console.log('Response status:', response.status, response.statusText);
-                console.log('Response headers:', Object.fromEntries(response.headers));
+                const response = await fetch(fullUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
                     console.error('API request failed:', response.status, response.statusText);
@@ -1348,20 +1345,6 @@
 
                 const data = await response.json();
 
-                console.log('========== DEBUG: API RESPONSE DATA ==========');
-                console.log('Full response object:', data);
-                console.log('Response keys:', Object.keys(data));
-                console.log('Events array:', data.events);
-                console.log('Events count:', data.events ? data.events.length : 'NO EVENTS ARRAY');
-                console.log('Returned field:', data.returned);
-                console.log('Next cursor:', data.next_cursor);
-
-                if (data.events && data.events.length > 0) {
-                    console.log('========== DEBUG: FIRST EVENT SAMPLE ==========');
-                    console.log('First event:', JSON.stringify(data.events[0], null, 2));
-                    console.log('First event keys:', Object.keys(data.events[0]));
-                }
-
                 const newEvents = data.events || [];
                 allEvents = reset ? newEvents : [...allEvents, ...newEvents];
                 nextCursor = data.next_cursor || null;
@@ -1369,27 +1352,25 @@
                 const queryTime = Math.round(performance.now() - startTime);
                 document.getElementById('queryTime').textContent = queryTime;
 
-                console.log('========== DEBUG: EVENTS PROCESSED ==========');
-                console.log('New events count:', newEvents.length);
-                console.log('Total allEvents count:', allEvents.length);
-                console.log('Has next cursor:', nextCursor !== null);
-
-                if (data.query_used) {
-                    console.log('Query executed:', data.query_used);
-                }
-
                 applyFilters();
                 updateLoadMoreButton();
 
             } catch (error) {
                 console.error('Failed to load events:', error);
+                const isTimeout = error.name === 'AbortError';
+                const title = isTimeout
+                    ? 'Request timed out'
+                    : 'No events — connect to database or check API server';
+                const detail = isTimeout
+                    ? 'The API server did not respond within 10 seconds. Verify the backend is running.'
+                    : error.message;
                 document.getElementById('logTableBody').innerHTML = `
                     <tr>
                         <td colspan="8">
                             <div class="empty-state">
-                                <div class="icon">&#10060;</div>
-                                <h3>Failed to load events</h3>
-                                <p>${error.message}</p>
+                                <div class="icon">&#9888;</div>
+                                <h3>${title}</h3>
+                                <p>${detail}</p>
                             </div>
                         </td>
                     </tr>
@@ -1484,24 +1465,10 @@
 
         // Apply filters
         function applyFilters() {
-            console.log('========== DEBUG: APPLY FILTERS CALLED ==========');
-            console.log('allEvents before assignment:', allEvents.length);
-            console.log('allEvents sample:', allEvents.slice(0, 2));
-
             filteredEvents = allEvents;
 
-            console.log('filteredEvents after assignment:', filteredEvents.length);
-            console.log('Applied filters (server-side):', {
-                total: filteredEvents.length,
-                hasNext: nextCursor !== null
-            });
-
             sortEvents();
-            console.log('filteredEvents after sort:', filteredEvents.length);
-
             updateStats();
-
-            console.log('Calling renderTable...');
             renderTable();
         }
 
@@ -1548,25 +1515,12 @@
 
         // Render table
         function renderTable() {
-            console.log('========== DEBUG: RENDER TABLE CALLED ==========');
-            console.log('filteredEvents count:', filteredEvents.length);
-            console.log('allEvents count:', allEvents.length);
-            console.log('currentPage:', currentPage);
-            console.log('pageSize:', pageSize);
-
             const tbody = document.getElementById('logTableBody');
             const start = (currentPage - 1) * pageSize;
             const end = Math.min(start + pageSize, filteredEvents.length);
             const pageEvents = filteredEvents.slice(start, end);
 
-            console.log('Pagination: start=', start, 'end=', end, 'pageEvents=', pageEvents.length);
-
             if (pageEvents.length === 0) {
-                console.log('========== DEBUG: NO EVENTS TO RENDER ==========');
-                console.log('Reason: pageEvents.length is 0');
-                console.log('filteredEvents:', filteredEvents);
-                console.log('allEvents:', allEvents);
-
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8">
@@ -1574,9 +1528,6 @@
                                 <div class="icon">&#128237;</div>
                                 <h3>No events found</h3>
                                 <p>Try adjusting your filters or time range</p>
-                                <p style="font-size: 0.75rem; color: var(--s3-text-3); margin-top: 12px;">
-                                    Debug: allEvents=${allEvents.length}, filteredEvents=${filteredEvents.length}
-                                </p>
                             </div>
                         </td>
                     </tr>
@@ -1584,9 +1535,6 @@
                 updatePagination(0, 0, 0);
                 return;
             }
-
-            console.log('========== DEBUG: RENDERING EVENTS ==========');
-            console.log('First event to render:', pageEvents[0]);
 
             tbody.innerHTML = pageEvents.map((event, idx) => `
                 <tr class="log-row" data-idx="${start + idx}">
