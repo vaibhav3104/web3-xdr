@@ -157,6 +157,25 @@ def create_app(
         except (ImportError, ConnectionError, OSError, ValueError) as e:
             logger.warning("feedback_loop_bootstrap_failed", error=str(e))
 
+    # ── Shutdown ────────────────────────────────────────────────────
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        logger.info("shutdown_starting")
+        try:
+            from ..database.connection import DatabaseManager
+            await DatabaseManager.close()
+            logger.info("database_connections_closed")
+        except Exception as e:
+            logger.warning("database_close_failed", error=str(e))
+
+        try:
+            from ..database.connection import DatabaseManager
+            if hasattr(DatabaseManager, '_redis') and DatabaseManager._redis:
+                await DatabaseManager._redis.close()
+                logger.info("redis_connection_closed")
+        except Exception:
+            pass
+
     # ── CORS ────────────────────────────────────────────────────────
     env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
     is_production = os.getenv("ENVIRONMENT", "").lower() == "production"
