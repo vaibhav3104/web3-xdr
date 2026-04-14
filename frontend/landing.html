@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel3 — Web3 Extended Detection & Response</title>
+    <meta name="description" content="Runtime security for cross-chain bridges and DeFi protocols. Detect exploits in 200ms, not 200 days.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #030305;
+            --bg-1: #0a0b10;
+            --bg-2: #111219;
+            --bg-3: #1a1b25;
+            --bg-4: #232430;
+            --accent: #8b5cf6;
+            --accent-light: #a78bfa;
+            --accent-dim: rgba(139,92,246,0.12);
+            --cyan: #22d3ee;
+            --cyan-dim: rgba(34,211,238,0.1);
+            --emerald: #10b981;
+            --rose: #f43f5e;
+            --amber: #f59e0b;
+            --text: #f1f5f9;
+            --text-2: #94a3b8;
+            --text-3: #64748b;
+            --border: rgba(255,255,255,0.06);
+            --border-hover: rgba(255,255,255,0.12);
+            --glass: rgba(10,11,16,0.7);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-lg: 24px;
+        }
+
+        html { scroll-behavior: smooth; background: var(--bg); }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Ambient Background ── */
+        .bg-ambient {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        }
+        .bg-ambient::before {
+            content: '';
+            position: absolute; inset: 0;
+            background:
+                radial-gradient(ellipse 800px 800px at 15% 20%, rgba(139,92,246,0.08) 0%, transparent 70%),
+                radial-gradient(ellipse 600px 600px at 85% 15%, rgba(34,211,238,0.06) 0%, transparent 70%),
+                radial-gradient(ellipse 700px 500px at 50% 80%, rgba(139,92,246,0.05) 0%, transparent 70%);
+        }
+        .bg-ambient::after {
+            content: '';
+            position: absolute; inset: 0;
+            background-image: radial-gradient(circle, rgba(139,92,246,0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            mask-image: radial-gradient(ellipse 80% 50% at 50% 30%, black 10%, transparent 70%);
+            -webkit-mask-image: radial-gradient(ellipse 80% 50% at 50% 30%, black 10%, transparent 70%);
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+        /* ── Container ── */
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+        .container-wide { max-width: 1400px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+        /* ── Navbar ── */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            padding: 16px 0;
+            background: rgba(3,3,5,0.6);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+        .navbar.scrolled { padding: 10px 0; background: rgba(3,3,5,0.9); }
+        .navbar .container { display: flex; align-items: center; justify-content: space-between; }
+        .nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+        .nav-logo-mark {
+            width: 38px; height: 38px; border-radius: 10px;
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 20px rgba(139,92,246,0.3);
+        }
+        .nav-logo-mark svg { width: 20px; height: 20px; color: #fff; }
+        .nav-logo-text { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; color: #fff; letter-spacing: -0.03em; }
+        .nav-links { display: flex; align-items: center; gap: 32px; }
+        .nav-links a { color: var(--text-2); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: #fff; }
+        .nav-cta {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 24px; border-radius: 10px;
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: #fff; font-weight: 600; font-size: 14px;
+            text-decoration: none; border: none; cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 20px rgba(139,92,246,0.3);
+        }
+        .nav-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(139,92,246,0.4); }
+
+        /* Mobile menu */
+        .nav-mobile-toggle { display: none; background: none; border: none; color: var(--text-2); cursor: pointer; padding: 8px; }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .nav-mobile-toggle { display: block; }
+            .nav-links.open {
+                display: flex; flex-direction: column;
+                position: absolute; top: 100%; left: 0; right: 0;
+                background: rgba(3,3,5,0.95); backdrop-filter: blur(20px);
+                padding: 24px; gap: 16px;
+                border-bottom: 1px solid var(--border);
+            }
+        }
+
+        /* ── Section Base ── */
+        section { padding: 120px 0; position: relative; }
+        .section-label {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 16px; border-radius: 50px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(139,92,246,0.2);
+            color: var(--accent-light); font-size: 12px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            margin-bottom: 20px;
+        }
+        .section-label svg { width: 14px; height: 14px; }
+        .section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(32px, 5vw, 48px); font-weight: 800;
+            letter-spacing: -0.03em; line-height: 1.1;
+            margin-bottom: 16px;
+        }
+        .section-subtitle { font-size: 18px; color: var(--text-2); max-width: 600px; line-height: 1.7; }
+
+        /* ── Hero ── */
+        .hero {
+            min-height: 100vh; display: flex; align-items: center;
+            padding-top: 100px; padding-bottom: 80px;
+            position: relative; overflow: hidden;
+        }
+        .hero-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+        }
+        @media (max-width: 1024px) {
+            .hero-grid { grid-template-columns: 1fr; gap: 48px; text-align: center; }
+        }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 16px 8px 10px; border-radius: 50px;
+            background: rgba(16,185,129,0.1);
+            border: 1px solid rgba(16,185,129,0.2);
+            color: var(--emerald); font-size: 13px; font-weight: 500;
+            margin-bottom: 24px;
+        }
+        .hero-badge .pulse {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--emerald);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{ opacity:1; box-shadow:0 0 0 0 rgba(16,185,129,0.4); } 50%{ opacity:0.8; box-shadow:0 0 0 8px rgba(16,185,129,0); } }
+
+        .hero h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(40px, 6vw, 72px); font-weight: 900;
+            line-height: 1.05; letter-spacing: -0.04em;
+            margin-bottom: 24px;
+        }
+        .hero h1 .gradient {
+            background: linear-gradient(135deg, #8b5cf6, #22d3ee);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-desc {
+            font-size: 18px; color: var(--text-2); line-height: 1.8;
+            margin-bottom: 40px; max-width: 520px;
+        }
+        @media (max-width: 1024px) { .hero-desc { margin: 0 auto 40px; } }
+        .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+        @media (max-width: 1024px) { .hero-actions { justify-content: center; } }
+        .btn-primary {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 14px 32px; border-radius: 12px;
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: #fff; font-weight: 600; font-size: 15px;
+            text-decoration: none; border: none; cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 24px rgba(139,92,246,0.35);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(139,92,246,0.45); }
+        .btn-secondary {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 14px 32px; border-radius: 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-hover);
+            color: var(--text); font-weight: 600; font-size: 15px;
+            text-decoration: none; cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); transform: translateY(-2px); }
+
+        /* Hero visual */
+        .hero-visual {
+            position: relative; display: flex; align-items: center; justify-content: center;
+        }
+        .hero-terminal {
+            width: 100%; max-width: 520px;
+            background: rgba(10,11,16,0.85);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 60px rgba(139,92,246,0.08);
+        }
+        .terminal-bar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 14px 18px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid var(--border);
+        }
+        .terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .terminal-dot.red { background: #f43f5e; }
+        .terminal-dot.yellow { background: #f59e0b; }
+        .terminal-dot.green { background: #10b981; }
+        .terminal-title {
+            flex: 1; text-align: center; font-size: 12px; color: var(--text-3);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .terminal-body {
+            padding: 24px; font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; line-height: 2;
+        }
+        .terminal-body .line { opacity: 0; animation: typeLine 0.4s forwards; }
+        .terminal-body .comment { color: var(--text-3); }
+        .terminal-body .keyword { color: var(--accent-light); }
+        .terminal-body .fn { color: var(--cyan); }
+        .terminal-body .string { color: var(--emerald); }
+        .terminal-body .number { color: var(--amber); }
+        .terminal-body .critical { color: var(--rose); font-weight: 600; }
+        @keyframes typeLine { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
+        /* Floating orb behind terminal */
+        .hero-orb {
+            position: absolute; width: 300px; height: 300px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%);
+            filter: blur(60px);
+            animation: orbFloat 8s ease-in-out infinite;
+        }
+        .hero-orb-1 { top: -60px; right: -40px; }
+        .hero-orb-2 { bottom: -60px; left: -40px; background: radial-gradient(circle, rgba(34,211,238,0.1) 0%, transparent 70%); animation-delay: -4s; }
+        @keyframes orbFloat { 0%,100%{ transform:translate(0,0); } 50%{ transform:translate(15px,-20px); } }
+
+        /* ── Stats Bar ── */
+        .stats-bar {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+            background: var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            margin-top: -60px;
+            position: relative; z-index: 2;
+            box-shadow: 0 16px 64px rgba(0,0,0,0.4);
+        }
+        @media (max-width: 768px) { .stats-bar { grid-template-columns: repeat(2, 1fr); margin-top: -40px; } }
+        .stat-item {
+            background: var(--bg-1);
+            padding: 32px;
+            text-align: center;
+        }
+        .stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 36px; font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 4px;
+        }
+        .stat-value .accent { color: var(--accent-light); }
+        .stat-value .cyan { color: var(--cyan); }
+        .stat-value .emerald { color: var(--emerald); }
+        .stat-value .rose { color: var(--rose); }
+        .stat-label { font-size: 13px; color: var(--text-3); font-weight: 500; }
+
+        /* ── Problem Section ── */
+        .problem { background: linear-gradient(180deg, var(--bg) 0%, var(--bg-1) 100%); }
+        .problem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; margin-top: 64px; }
+        @media (max-width: 1024px) { .problem-grid { grid-template-columns: 1fr; gap: 48px; } }
+        .attack-timeline {
+            display: flex; flex-direction: column; gap: 0;
+            position: relative;
+        }
+        .attack-timeline::before {
+            content: ''; position: absolute; left: 24px; top: 30px; bottom: 30px;
+            width: 2px;
+            background: linear-gradient(180deg, rgba(244,63,94,0.5), rgba(244,63,94,0.1));
+        }
+        .attack-event {
+            display: flex; gap: 20px; padding: 20px 0;
+            position: relative;
+        }
+        .attack-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--rose);
+            border: 3px solid var(--bg-1);
+            flex-shrink: 0;
+            margin-top: 4px;
+            position: relative;
+            left: 19px;
+            z-index: 1;
+        }
+        .attack-content { padding-left: 16px; }
+        .attack-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+        .attack-detail { font-size: 13px; color: var(--text-3); }
+        .attack-loss { font-family: 'JetBrains Mono', monospace; color: var(--rose); font-weight: 600; font-size: 14px; margin-top: 4px; }
+
+        .problem-cards { display: flex; flex-direction: column; gap: 16px; }
+        .problem-card {
+            padding: 24px; border-radius: var(--radius);
+            background: var(--glass);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            transition: all 0.3s;
+        }
+        .problem-card:hover { border-color: rgba(244,63,94,0.3); transform: translateX(4px); }
+        .problem-card-icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: rgba(244,63,94,0.1);
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 12px;
+        }
+        .problem-card-icon svg { width: 20px; height: 20px; color: var(--rose); }
+        .problem-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .problem-card p { font-size: 13px; color: var(--text-3); line-height: 1.6; }
+
+        /* ── How It Works ── */
+        .how-it-works { overflow: hidden; }
+        .architecture-visual {
+            margin-top: 64px;
+            display: flex; flex-direction: column; gap: 3px;
+            position: relative;
+        }
+        .arch-layer {
+            display: grid; grid-template-columns: 180px 1fr; gap: 0;
+            min-height: 72px;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateX(-20px);
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .arch-layer.visible { opacity: 1; transform: translateX(0); }
+        .arch-layer-label {
+            display: flex; align-items: center; gap: 10px;
+            padding: 16px 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+        .arch-layer-label .num {
+            width: 24px; height: 24px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700;
+        }
+        .arch-layer-content {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 20px;
+            flex-wrap: wrap;
+        }
+        .arch-tag {
+            padding: 6px 14px; border-radius: 8px;
+            font-size: 12px; font-weight: 500;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            white-space: nowrap;
+        }
+
+        /* Layer colors */
+        .arch-layer:nth-child(1) .arch-layer-label { background: rgba(244,63,94,0.12); color: var(--rose); }
+        .arch-layer:nth-child(1) .arch-layer-label .num { background: rgba(244,63,94,0.2); }
+        .arch-layer:nth-child(1) .arch-layer-content { background: rgba(244,63,94,0.04); }
+        .arch-layer:nth-child(1) .arch-tag { border-color: rgba(244,63,94,0.15); color: #fda4af; }
+
+        .arch-layer:nth-child(2) .arch-layer-label { background: rgba(249,115,22,0.12); color: #fb923c; }
+        .arch-layer:nth-child(2) .arch-layer-label .num { background: rgba(249,115,22,0.2); }
+        .arch-layer:nth-child(2) .arch-layer-content { background: rgba(249,115,22,0.04); }
+        .arch-layer:nth-child(2) .arch-tag { border-color: rgba(249,115,22,0.15); color: #fdba74; }
+
+        .arch-layer:nth-child(3) .arch-layer-label { background: rgba(245,158,11,0.12); color: var(--amber); }
+        .arch-layer:nth-child(3) .arch-layer-label .num { background: rgba(245,158,11,0.2); }
+        .arch-layer:nth-child(3) .arch-layer-content { background: rgba(245,158,11,0.04); }
+        .arch-layer:nth-child(3) .arch-tag { border-color: rgba(245,158,11,0.15); color: #fcd34d; }
+
+        .arch-layer:nth-child(4) .arch-layer-label { background: rgba(139,92,246,0.12); color: var(--accent-light); }
+        .arch-layer:nth-child(4) .arch-layer-label .num { background: rgba(139,92,246,0.2); }
+        .arch-layer:nth-child(4) .arch-layer-content { background: rgba(139,92,246,0.04); }
+        .arch-layer:nth-child(4) .arch-tag { border-color: rgba(139,92,246,0.15); color: #c4b5fd; }
+
+        .arch-layer:nth-child(5) .arch-layer-label { background: rgba(34,211,238,0.12); color: var(--cyan); }
+        .arch-layer:nth-child(5) .arch-layer-label .num { background: rgba(34,211,238,0.2); }
+        .arch-layer:nth-child(5) .arch-layer-content { background: rgba(34,211,238,0.04); }
+        .arch-layer:nth-child(5) .arch-tag { border-color: rgba(34,211,238,0.15); color: #67e8f9; }
+
+        .arch-layer:nth-child(6) .arch-layer-label { background: rgba(16,185,129,0.12); color: var(--emerald); }
+        .arch-layer:nth-child(6) .arch-layer-label .num { background: rgba(16,185,129,0.2); }
+        .arch-layer:nth-child(6) .arch-layer-content { background: rgba(16,185,129,0.04); }
+        .arch-layer:nth-child(6) .arch-tag { border-color: rgba(16,185,129,0.15); color: #6ee7b7; }
+
+        .arch-layer:nth-child(7) .arch-layer-label { background: rgba(99,102,241,0.12); color: #818cf8; }
+        .arch-layer:nth-child(7) .arch-layer-label .num { background: rgba(99,102,241,0.2); }
+        .arch-layer:nth-child(7) .arch-layer-content { background: rgba(99,102,241,0.04); }
+        .arch-layer:nth-child(7) .arch-tag { border-color: rgba(99,102,241,0.15); color: #a5b4fc; }
+
+        @media (max-width: 768px) {
+            .arch-layer { grid-template-columns: 1fr; }
+        }
+
+        /* ── Core Invariant ── */
+        .invariant-section { background: var(--bg-1); }
+        .invariant-showcase {
+            margin-top: 64px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+            align-items: start;
+        }
+        @media (max-width: 1024px) { .invariant-showcase { grid-template-columns: 1fr; } }
+        .invariant-code {
+            background: rgba(10,11,16,0.9);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+        .invariant-code-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; color: var(--text-3);
+        }
+        .invariant-code-body {
+            padding: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; line-height: 2.2;
+            overflow-x: auto;
+        }
+        .invariant-cards { display: flex; flex-direction: column; gap: 16px; }
+        .inv-card {
+            padding: 24px; border-radius: var(--radius);
+            background: var(--glass);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            transition: all 0.3s;
+        }
+        .inv-card:hover { border-color: rgba(139,92,246,0.3); }
+        .inv-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+        .inv-card-badge {
+            padding: 4px 10px; border-radius: 6px;
+            font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        .inv-card-badge.critical { background: rgba(244,63,94,0.15); color: var(--rose); }
+        .inv-card-badge.high { background: rgba(249,115,22,0.15); color: #fb923c; }
+        .inv-card h4 { font-size: 15px; font-weight: 600; }
+        .inv-card p { font-size: 13px; color: var(--text-3); line-height: 1.6; }
+
+        /* ── Features Grid ── */
+        .features-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+            margin-top: 64px;
+        }
+        @media (max-width: 1024px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 640px) { .features-grid { grid-template-columns: 1fr; } }
+        .feature-card {
+            padding: 32px; border-radius: var(--radius);
+            background: var(--glass);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden;
+        }
+        .feature-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0; transition: opacity 0.4s;
+        }
+        .feature-card:hover { border-color: rgba(139,92,246,0.2); transform: translateY(-4px); }
+        .feature-card:hover::before { opacity: 1; }
+        .feature-icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 20px;
+        }
+        .feature-icon svg { width: 24px; height: 24px; }
+        .feature-icon.purple { background: rgba(139,92,246,0.12); color: var(--accent-light); }
+        .feature-icon.cyan { background: rgba(34,211,238,0.12); color: var(--cyan); }
+        .feature-icon.emerald { background: rgba(16,185,129,0.12); color: var(--emerald); }
+        .feature-icon.rose { background: rgba(244,63,94,0.12); color: var(--rose); }
+        .feature-icon.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
+        .feature-icon.indigo { background: rgba(99,102,241,0.12); color: #818cf8; }
+        .feature-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+        .feature-card p { font-size: 13px; color: var(--text-3); line-height: 1.7; }
+
+        /* ── Chains ── */
+        .chains-section { background: var(--bg-1); overflow: hidden; }
+        .chains-scroll {
+            display: flex; gap: 20px; margin-top: 48px;
+            animation: scrollChains 30s linear infinite;
+            width: max-content;
+        }
+        .chains-scroll:hover { animation-play-state: paused; }
+        @keyframes scrollChains { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .chain-card {
+            flex-shrink: 0;
+            width: 160px; padding: 24px 16px;
+            border-radius: var(--radius);
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .chain-card:hover { border-color: rgba(139,92,246,0.3); background: rgba(255,255,255,0.04); }
+        .chain-logo {
+            width: 48px; height: 48px; border-radius: 12px;
+            margin: 0 auto 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; font-weight: 700;
+        }
+        .chain-name { font-size: 14px; font-weight: 600; }
+        .chain-type { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+        /* ── Detection Pipeline ── */
+        .pipeline-visual {
+            margin-top: 64px;
+            display: flex; align-items: center; justify-content: center;
+            gap: 0; flex-wrap: wrap;
+        }
+        .pipeline-step {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 24px 20px;
+            position: relative;
+        }
+        .pipeline-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px; font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .pipeline-label { font-size: 12px; color: var(--text-3); text-align: center; max-width: 120px; }
+        .pipeline-arrow {
+            font-size: 24px; color: var(--text-3); padding: 0 8px;
+            display: flex; align-items: center;
+        }
+        @media (max-width: 768px) {
+            .pipeline-visual { flex-direction: column; }
+            .pipeline-arrow { transform: rotate(90deg); padding: 8px 0; }
+        }
+
+        /* ── Protocols ── */
+        .protocols-grid {
+            display: flex; flex-wrap: wrap; gap: 10px;
+            margin-top: 48px; justify-content: center;
+        }
+        .protocol-tag {
+            padding: 8px 16px; border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            font-size: 13px; font-weight: 500; color: var(--text-2);
+            transition: all 0.2s;
+        }
+        .protocol-tag:hover { border-color: rgba(139,92,246,0.3); color: #fff; background: rgba(139,92,246,0.06); }
+
+        /* ── Pricing ── */
+        .pricing-section { background: var(--bg-1); }
+        .pricing-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+            margin-top: 64px;
+        }
+        @media (max-width: 1024px) { .pricing-grid { grid-template-columns: 1fr; max-width: 480px; margin-left: auto; margin-right: auto; } }
+        .pricing-card {
+            padding: 40px 32px; border-radius: var(--radius-lg);
+            background: var(--glass);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            transition: all 0.3s;
+            position: relative;
+        }
+        .pricing-card.featured {
+            border-color: rgba(139,92,246,0.4);
+            background: linear-gradient(180deg, rgba(139,92,246,0.06) 0%, rgba(10,11,16,0.8) 100%);
+            box-shadow: 0 16px 64px rgba(139,92,246,0.12);
+        }
+        .pricing-card.featured::before {
+            content: 'MOST POPULAR';
+            position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+            padding: 4px 16px; border-radius: 50px;
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            font-size: 10px; font-weight: 700;
+            letter-spacing: 0.1em; color: #fff;
+        }
+        .pricing-card:hover { transform: translateY(-4px); }
+        .pricing-tier {
+            font-size: 14px; font-weight: 600; color: var(--accent-light);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+        .pricing-price {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 48px; font-weight: 800;
+            letter-spacing: -0.04em;
+            margin-bottom: 4px;
+        }
+        .pricing-price span { font-size: 16px; font-weight: 400; color: var(--text-3); }
+        .pricing-desc { font-size: 13px; color: var(--text-3); margin-bottom: 32px; line-height: 1.5; }
+        .pricing-features { list-style: none; display: flex; flex-direction: column; gap: 14px; margin-bottom: 32px; }
+        .pricing-features li {
+            display: flex; align-items: flex-start; gap: 10px;
+            font-size: 14px; color: var(--text-2);
+        }
+        .pricing-features li svg { width: 18px; height: 18px; color: var(--emerald); flex-shrink: 0; margin-top: 1px; }
+        .pricing-cta {
+            display: block; width: 100%; padding: 14px;
+            border-radius: 12px; text-align: center;
+            font-weight: 600; font-size: 14px;
+            text-decoration: none; cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+        }
+        .pricing-cta.primary {
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(139,92,246,0.3);
+        }
+        .pricing-cta.primary:hover { box-shadow: 0 8px 30px rgba(139,92,246,0.4); }
+        .pricing-cta.secondary {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-hover);
+            color: var(--text);
+        }
+        .pricing-cta.secondary:hover { background: rgba(255,255,255,0.08); }
+
+        /* ── Customers ── */
+        .customers-section { text-align: center; }
+        .customer-logos {
+            display: flex; align-items: center; justify-content: center; gap: 48px;
+            margin-top: 48px; flex-wrap: wrap;
+            opacity: 0.4;
+        }
+        .customer-logo {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px; font-weight: 700; color: var(--text-3);
+            letter-spacing: -0.02em;
+            transition: opacity 0.3s;
+        }
+        .customer-logo:hover { opacity: 0.8; }
+
+        /* ── CTA ── */
+        .cta-section {
+            text-align: center;
+            background: linear-gradient(180deg, var(--bg) 0%, var(--bg-1) 100%);
+        }
+        .cta-box {
+            max-width: 700px; margin: 0 auto;
+            padding: 72px 48px;
+            border-radius: var(--radius-lg);
+            background: linear-gradient(180deg, rgba(139,92,246,0.08) 0%, rgba(10,11,16,0.8) 100%);
+            border: 1px solid rgba(139,92,246,0.2);
+            position: relative; overflow: hidden;
+        }
+        .cta-box::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+        .cta-box h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(28px, 4vw, 40px); font-weight: 800;
+            letter-spacing: -0.03em; margin-bottom: 16px;
+        }
+        .cta-box p { font-size: 16px; color: var(--text-2); max-width: 500px; margin: 0 auto 32px; line-height: 1.7; }
+        .cta-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+        /* ── Footer ── */
+        .footer {
+            padding: 64px 0 32px;
+            border-top: 1px solid var(--border);
+        }
+        .footer-grid {
+            display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px;
+            margin-bottom: 48px;
+        }
+        @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+        .footer-brand p { font-size: 13px; color: var(--text-3); line-height: 1.7; margin-top: 12px; max-width: 280px; }
+        .footer-col h4 { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+        .footer-col a { display: block; font-size: 13px; color: var(--text-3); text-decoration: none; padding: 4px 0; transition: color 0.2s; }
+        .footer-col a:hover { color: var(--text); }
+        .footer-bottom {
+            display: flex; align-items: center; justify-content: space-between;
+            padding-top: 24px; border-top: 1px solid var(--border);
+            font-size: 12px; color: var(--text-3);
+        }
+        .footer-bottom-links { display: flex; gap: 24px; }
+        .footer-bottom-links a { color: var(--text-3); text-decoration: none; transition: color 0.2s; }
+        .footer-bottom-links a:hover { color: var(--text-2); }
+
+        /* ── Scroll Reveal ── */
+        .reveal {
+            opacity: 0; transform: translateY(20px);
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+
+        /* ── Counter Animation ── */
+        .counter { display: inline-block; }
+
+        /* Separator */
+        .section-sep {
+            height: 1px; border: none;
+            background: linear-gradient(90deg, transparent, var(--border-hover), transparent);
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Ambient background -->
+<div class="bg-ambient"></div>
+
+<!-- ── Navbar ── -->
+<nav class="navbar" id="navbar">
+    <div class="container">
+        <a href="#" class="nav-logo">
+            <div class="nav-logo-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <span class="nav-logo-text">Sentinel3</span>
+        </a>
+        <div class="nav-links" id="navLinks">
+            <a href="#problem">Problem</a>
+            <a href="#how">Architecture</a>
+            <a href="#features">Features</a>
+            <a href="#chains">Chains</a>
+            <a href="#pricing">Pricing</a>
+            <a href="login.html" class="nav-cta">Launch App</a>
+        </div>
+        <button class="nav-mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </button>
+    </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-grid">
+            <div>
+                <div class="hero-badge">
+                    <div class="pulse"></div>
+                    Monitoring 8+ Blockchains in Real-Time
+                </div>
+                <h1>
+                    Detect Bridge Exploits<br>
+                    in <span class="gradient">200ms</span>,<br>
+                    Not 200 Days.
+                </h1>
+                <p class="hero-desc">
+                    Sentinel3 is the runtime security plane for Web3. We watch every cross-chain transfer across 8+ blockchains and catch economic impossibilities before funds drain.
+                </p>
+                <div class="hero-actions">
+                    <a href="login.html" class="btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Start Monitoring
+                    </a>
+                    <a href="#how" class="btn-secondary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        See How It Works
+                    </a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="hero-orb hero-orb-1"></div>
+                <div class="hero-orb hero-orb-2"></div>
+                <div class="hero-terminal">
+                    <div class="terminal-bar">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <div class="terminal-title">sentinel3 &mdash; invariant engine</div>
+                    </div>
+                    <div class="terminal-body" id="terminalBody">
+                        <!-- Lines injected by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Stats Bar ── -->
+<div class="container">
+    <div class="stats-bar reveal">
+        <div class="stat-item">
+            <div class="stat-value"><span class="accent counter" data-target="2.8">0</span>B+</div>
+            <div class="stat-label">Lost to bridge exploits</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">&lt;<span class="cyan counter" data-target="200">0</span>ms</div>
+            <div class="stat-label">Detection latency P99</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value"><span class="emerald counter" data-target="50">0</span>+</div>
+            <div class="stat-label">Detection rules</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value"><span class="rose counter" data-target="27">0</span></div>
+            <div class="stat-label">DeFi protocols covered</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Problem ── -->
+<section class="problem" id="problem">
+    <div class="container">
+        <div class="reveal">
+            <div class="section-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                The Problem
+            </div>
+            <h2 class="section-title">$2.8 Billion Lost.<br>Audits Didn't Help.</h2>
+            <p class="section-subtitle">Bridge protocols are the #1 attack vector in Web3. Traditional security is point-in-time &mdash; audits can't catch runtime exploits.</p>
+        </div>
+
+        <div class="problem-grid">
+            <div class="attack-timeline reveal">
+                <div class="attack-event">
+                    <div class="attack-dot"></div>
+                    <div class="attack-content">
+                        <div class="attack-name">Ronin Bridge</div>
+                        <div class="attack-detail">Validator keys compromised, forged withdrawals</div>
+                        <div class="attack-loss">-$625,000,000</div>
+                    </div>
+                </div>
+                <div class="attack-event">
+                    <div class="attack-dot"></div>
+                    <div class="attack-content">
+                        <div class="attack-name">Wormhole</div>
+                        <div class="attack-detail">Forged bridge message, unbacked mint on Solana</div>
+                        <div class="attack-loss">-$320,000,000</div>
+                    </div>
+                </div>
+                <div class="attack-event">
+                    <div class="attack-dot"></div>
+                    <div class="attack-content">
+                        <div class="attack-name">Nomad Bridge</div>
+                        <div class="attack-detail">Initialization bug, anyone could forge proofs</div>
+                        <div class="attack-loss">-$190,000,000</div>
+                    </div>
+                </div>
+                <div class="attack-event">
+                    <div class="attack-dot"></div>
+                    <div class="attack-content">
+                        <div class="attack-name">Harmony Horizon</div>
+                        <div class="attack-detail">Multisig compromise, 2-of-5 threshold bypass</div>
+                        <div class="attack-loss">-$100,000,000</div>
+                    </div>
+                </div>
+                <div class="attack-event">
+                    <div class="attack-dot"></div>
+                    <div class="attack-content">
+                        <div class="attack-name">BNB Bridge</div>
+                        <div class="attack-detail">Proof verification flaw, minted 2M BNB</div>
+                        <div class="attack-loss">-$586,000,000</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="problem-cards reveal">
+                <div class="problem-card">
+                    <div class="problem-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </div>
+                    <h4>Audits Are Point-in-Time</h4>
+                    <p>Code passes audit on Monday. Exploited on Tuesday. Audits verify static code, not runtime economic state across chains.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <h4>Contracts Can't See Cross-Chain</h4>
+                    <p>A contract on Ethereum has no way to verify if tokens were actually locked on Solana. The destination chain blindly trusts the bridge message.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <h4>Detection Takes Days, Not Seconds</h4>
+                    <p>Most bridge exploits are discovered hours or days after the attack. By then, attackers have laundered funds through mixers and cross-chain hops.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="section-sep">
+
+<!-- ── Core Invariant ── -->
+<section class="invariant-section" id="invariant">
+    <div class="container">
+        <div class="reveal">
+            <div class="section-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                Core Innovation
+            </div>
+            <h2 class="section-title">Economic Truth<br>No Contract Can See</h2>
+            <p class="section-subtitle">We observe invariants that exist outside any single smart contract &mdash; mathematical truths that break when an exploit occurs.</p>
+        </div>
+
+        <div class="invariant-showcase">
+            <div class="invariant-code reveal">
+                <div class="invariant-code-header">
+                    <span>invariants/economic.py</span>
+                    <span style="color:var(--emerald)">LIVE</span>
+                </div>
+                <div class="invariant-code-body">
+                    <div><span class="comment"># The economic truth no single contract can verify</span></div>
+                    <div><span class="keyword">class</span> <span class="fn">MintLockParityInvariant</span>:</div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">"""</span></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">tokens_minted_on_dest &le; tokens_locked_on_source</span></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">"""</span></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;window &nbsp;= <span class="number">600</span> <span class="comment"># 10 minutes</span></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;tolerance = <span class="number">0.01</span> <span class="comment"># tokens</span></div>
+                    <div></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">async def</span> <span class="fn">evaluate</span>(self, event):</div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;minted = <span class="keyword">await</span> self.<span class="fn">get_mints</span>(dest_chain)</div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locked = <span class="keyword">await</span> self.<span class="fn">get_locks</span>(src_chain)</div>
+                    <div></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">if</span> minted > locked + self.tolerance:</div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">return</span> <span class="critical">Violation.CRITICAL</span>(</div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gap=minted - locked,</div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;confidence=<span class="number">0.95</span></div>
+                    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</div>
+                </div>
+            </div>
+
+            <div class="invariant-cards reveal">
+                <div class="inv-card">
+                    <div class="inv-card-header">
+                        <span class="inv-card-badge critical">CRITICAL</span>
+                        <h4>Unbacked Mint Detection</h4>
+                    </div>
+                    <p>Catches forged bridge messages, validator compromise, and contract vulnerabilities by monitoring mint-lock parity in real-time.</p>
+                </div>
+                <div class="inv-card">
+                    <div class="inv-card-header">
+                        <span class="inv-card-badge critical">CRITICAL</span>
+                        <h4>Validator Threshold Bypass</h4>
+                    </div>
+                    <p>Detects when bridge operations proceed with fewer validator signatures than the required threshold &mdash; the Ronin attack pattern.</p>
+                </div>
+                <div class="inv-card">
+                    <div class="inv-card-header">
+                        <span class="inv-card-badge high">HIGH</span>
+                        <h4>TVL Velocity Drain</h4>
+                    </div>
+                    <p>Monitors the rate of value leaving a protocol. &gt;10% TVL loss per hour triggers alerts before the total drain completes.</p>
+                </div>
+                <div class="inv-card">
+                    <div class="inv-card-header">
+                        <span class="inv-card-badge high">HIGH</span>
+                        <h4>Oracle Price Manipulation</h4>
+                    </div>
+                    <p>Detects TWAP attacks and price feed exploits by comparing on-chain prices against multi-source aggregated feeds.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="section-sep">
+
+<!-- ── Architecture ── -->
+<section class="how-it-works" id="how">
+    <div class="container">
+        <div class="reveal">
+            <div class="section-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                Architecture
+            </div>
+            <h2 class="section-title">7-Layer Detection Stack</h2>
+            <p class="section-subtitle">From raw blockchain data to actionable incident in under 200ms. Every layer adds context, reduces noise.</p>
+        </div>
+
+        <div class="architecture-visual">
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">1</span> Ingestion</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">28 Chain Listeners</span>
+                    <span class="arch-tag">WebSocket Subscriptions</span>
+                    <span class="arch-tag">HTTP RPC Fallback</span>
+                    <span class="arch-tag">Configurable RPC Pools</span>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">2</span> Mempool</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">bloXroute Cloud API</span>
+                    <span class="arch-tag">0-Block Detection</span>
+                    <span class="arch-tag">Pending Tx Analysis</span>
+                    <span class="arch-tag">Risk Router Budgeting</span>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">3</span> Simulation</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">Foundry / Anvil Forks</span>
+                    <span class="arch-tag">State Diff Extraction</span>
+                    <span class="arch-tag">Gas Anomaly Flagging</span>
+                    <span class="arch-tag">USD Impact Estimation</span>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">4</span> Detection</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">Invariant Engine (50+ rules)</span>
+                    <span class="arch-tag">Economic Invariants</span>
+                    <span class="arch-tag">Velocity Invariants</span>
+                    <span class="arch-tag">MEV Detection</span>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">5</span> Correlation</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">Cross-Chain Matching</span>
+                    <span class="arch-tag">Entity Graph</span>
+                    <span class="arch-tag">Attack Subgraph Extraction</span>
+                    <span class="arch-tag">Incident Aggregation</span>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">6</span> ML Analysis</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">Transformer Classifier</span>
+                    <span class="arch-tag">CNN Bytecode Analysis</span>
+                    <span class="arch-tag">Ensemble (RF + XGBoost)</span>
+                    <span class="arch-tag">Isolation Forest</span>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-label"><span class="num">7</span> Response</div>
+                <div class="arch-layer-content">
+                    <span class="arch-tag">PagerDuty</span>
+                    <span class="arch-tag">Telegram Bot</span>
+                    <span class="arch-tag">Slack Integration</span>
+                    <span class="arch-tag">Webhooks</span>
+                    <span class="arch-tag">Auto-Pause Triggers</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pipeline latency visual -->
+        <div class="pipeline-visual reveal" style="margin-top:64px;">
+            <div class="pipeline-step">
+                <div class="pipeline-time" style="color:var(--rose);">~100ms</div>
+                <div class="pipeline-label">Block Finality to WebSocket</div>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step">
+                <div class="pipeline-time" style="color:#fb923c;">~10ms</div>
+                <div class="pipeline-label">Event Parsing</div>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step">
+                <div class="pipeline-time" style="color:var(--amber);">~20ms</div>
+                <div class="pipeline-label">Normalization</div>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step">
+                <div class="pipeline-time" style="color:var(--accent-light);">~50ms</div>
+                <div class="pipeline-label">Invariant Check</div>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step">
+                <div class="pipeline-time" style="color:var(--cyan);">&lt;10s</div>
+                <div class="pipeline-label">Alert Delivery</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="section-sep">
+
+<!-- ── Features ── -->
+<section class="features-section" id="features">
+    <div class="container">
+        <div class="reveal" style="text-align:center;">
+            <div class="section-label" style="margin:0 auto 20px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                Capabilities
+            </div>
+            <h2 class="section-title">Built for Security Teams<br>Who Protect Billions</h2>
+            <p class="section-subtitle" style="margin:0 auto;">Every feature exists because a real exploit proved it necessary.</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card reveal">
+                <div class="feature-icon purple">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <h3>Invariant-Based Detection</h3>
+                <p>Not signature matching. We detect economic impossibilities &mdash; novel attacks caught by mathematical truth, not known patterns.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon cyan">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <h3>Cross-Chain Correlation</h3>
+                <p>Match locks on source with mints on destination across 8+ chains. 10-minute tolerance window reconciles finality delays.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon emerald">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                </div>
+                <h3>Mempool Pre-Detection</h3>
+                <p>Analyze pending transactions via bloXroute before they confirm. Catch attacks at block 0 and simulate with Foundry/Anvil forks.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon rose">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <h3>ML Threat Classification</h3>
+                <p>Transformer + CNN + XGBoost ensemble classifies 13 threat types. Continuous learning from feedback reduces false positives over time.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon amber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </div>
+                <h3>Deterministic Explainability</h3>
+                <p>Template-based evidence reports with confidence scoring. Every alert shows what happened, why it's dangerous, and the blast radius &mdash; no AI hallucination.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon indigo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <h3>Instant Response</h3>
+                <p>PagerDuty, Telegram, Slack, email, and webhooks. Critical alerts fire in &lt;10 seconds with full incident context and remediation steps.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="section-sep">
+
+<!-- ── Chains ── -->
+<section class="chains-section" id="chains">
+    <div class="container">
+        <div class="reveal" style="text-align:center;">
+            <div class="section-label" style="margin:0 auto 20px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Multi-Chain
+            </div>
+            <h2 class="section-title">Every Chain. Every Bridge.<br>One Security Plane.</h2>
+            <p class="section-subtitle" style="margin:0 auto;">Real-time monitoring across EVM and non-EVM chains with protocol-native listeners.</p>
+        </div>
+    </div>
+    <div style="overflow:hidden; margin-top:48px;">
+        <div class="chains-scroll" id="chainsScroll">
+            <!-- Row 1 -->
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#627eea,#3c3c3d);">E</div><div class="chain-name">Ethereum</div><div class="chain-type">EVM &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#8247e5,#5b2ea6);">P</div><div class="chain-name">Polygon</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#28a0f0,#1b6cb0);">A</div><div class="chain-name">Arbitrum</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#0052ff,#003bbf);">B</div><div class="chain-name">Base</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#ff0420,#cc0319);">O</div><div class="chain-name">Optimism</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#e84142,#b72d2e);">Av</div><div class="chain-name">Avalanche</div><div class="chain-type">EVM &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#14f195,#9945ff);">S</div><div class="chain-name">Solana</div><div class="chain-type">SVM &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#2e3148,#6f7390);">C</div><div class="chain-name">Cosmos</div><div class="chain-type">Tendermint</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#4fc4a1,#3da585);">Ap</div><div class="chain-name">Aptos</div><div class="chain-type">Move &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#00c1de,#009db5);">N</div><div class="chain-name">NEAR</div><div class="chain-type">Sharded &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#f0b90b,#c89a09);">BN</div><div class="chain-name">BNB Chain</div><div class="chain-type">EVM &middot; L1</div></div>
+            <!-- Duplicated for infinite scroll -->
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#627eea,#3c3c3d);">E</div><div class="chain-name">Ethereum</div><div class="chain-type">EVM &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#8247e5,#5b2ea6);">P</div><div class="chain-name">Polygon</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#28a0f0,#1b6cb0);">A</div><div class="chain-name">Arbitrum</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#0052ff,#003bbf);">B</div><div class="chain-name">Base</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#ff0420,#cc0319);">O</div><div class="chain-name">Optimism</div><div class="chain-type">EVM &middot; L2</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#e84142,#b72d2e);">Av</div><div class="chain-name">Avalanche</div><div class="chain-type">EVM &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#14f195,#9945ff);">S</div><div class="chain-name">Solana</div><div class="chain-type">SVM &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#2e3148,#6f7390);">C</div><div class="chain-name">Cosmos</div><div class="chain-type">Tendermint</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#4fc4a1,#3da585);">Ap</div><div class="chain-name">Aptos</div><div class="chain-type">Move &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#00c1de,#009db5);">N</div><div class="chain-name">NEAR</div><div class="chain-type">Sharded &middot; L1</div></div>
+            <div class="chain-card"><div class="chain-logo" style="background:linear-gradient(135deg,#f0b90b,#c89a09);">BN</div><div class="chain-name">BNB Chain</div><div class="chain-type">EVM &middot; L1</div></div>
+        </div>
+    </div>
+
+    <!-- Bridge protocols -->
+    <div class="container" style="margin-top:48px;">
+        <div class="reveal" style="text-align:center;">
+            <h3 style="font-size:18px; font-weight:600; margin-bottom:8px;">100+ Bridge Protocols Monitored</h3>
+            <p style="font-size:14px; color:var(--text-3); margin-bottom:24px;">Every major cross-chain bridge and DeFi protocol.</p>
+        </div>
+        <div class="protocols-grid reveal">
+            <span class="protocol-tag">Wormhole</span>
+            <span class="protocol-tag">LayerZero</span>
+            <span class="protocol-tag">Stargate</span>
+            <span class="protocol-tag">Across</span>
+            <span class="protocol-tag">Hop Protocol</span>
+            <span class="protocol-tag">Synapse</span>
+            <span class="protocol-tag">Celer</span>
+            <span class="protocol-tag">Polygon PoS</span>
+            <span class="protocol-tag">Uniswap V3</span>
+            <span class="protocol-tag">Aave V3</span>
+            <span class="protocol-tag">Curve</span>
+            <span class="protocol-tag">Lido</span>
+            <span class="protocol-tag">EigenLayer</span>
+            <span class="protocol-tag">MakerDAO</span>
+            <span class="protocol-tag">Compound</span>
+            <span class="protocol-tag">Balancer</span>
+            <span class="protocol-tag">dYdX</span>
+            <span class="protocol-tag">GMX</span>
+            <span class="protocol-tag">Morpho</span>
+            <span class="protocol-tag">Yearn</span>
+            <span class="protocol-tag">Convex</span>
+            <span class="protocol-tag">RocketPool</span>
+            <span class="protocol-tag">Synthetix</span>
+            <span class="protocol-tag">PancakeSwap</span>
+            <span class="protocol-tag">SushiSwap</span>
+        </div>
+    </div>
+</section>
+
+<hr class="section-sep">
+
+<!-- ── Pricing ── -->
+<section class="pricing-section" id="pricing">
+    <div class="container">
+        <div class="reveal" style="text-align:center;">
+            <div class="section-label" style="margin:0 auto 20px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Pricing
+            </div>
+            <h2 class="section-title">Security Shouldn't<br>Have a TVL Tax</h2>
+            <p class="section-subtitle" style="margin:0 auto;">Transparent pricing based on what you need, not how much you hold.</p>
+        </div>
+
+        <div class="pricing-grid">
+            <!-- Starter -->
+            <div class="pricing-card reveal">
+                <div class="pricing-tier">Starter</div>
+                <div class="pricing-price">Free</div>
+                <div class="pricing-desc">For teams exploring Web3 security monitoring. Get started with core detection.</div>
+                <ul class="pricing-features">
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 2 chains monitored</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Core invariant rules</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Email alerts</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 100 API calls/min</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 7-day data retention</li>
+                </ul>
+                <a href="login.html" class="pricing-cta secondary">Get Started Free</a>
+            </div>
+
+            <!-- Pro -->
+            <div class="pricing-card featured reveal">
+                <div class="pricing-tier">Pro</div>
+                <div class="pricing-price">$5K<span>/mo</span></div>
+                <div class="pricing-desc">For protocols managing significant TVL. Full cross-chain coverage with ML detection.</div>
+                <ul class="pricing-features">
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> All 8+ chains</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 50+ invariant rules</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> ML threat classification</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Mempool pre-detection</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> PagerDuty + Slack + Telegram</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 1,000 API calls/min</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 90-day retention</li>
+                </ul>
+                <a href="login.html" class="pricing-cta primary">Start Pro Trial</a>
+            </div>
+
+            <!-- Enterprise -->
+            <div class="pricing-card reveal">
+                <div class="pricing-tier">Enterprise</div>
+                <div class="pricing-price">Custom</div>
+                <div class="pricing-desc">For bridges, L1s, and custodians. Dedicated infrastructure with SLA guarantees.</div>
+                <ul class="pricing-features">
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Everything in Pro</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Custom invariant rules</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Dedicated infrastructure</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Auto-pause bridge triggers</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 99.9% uptime SLA</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Unlimited API calls</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 1-year retention + compliance</li>
+                </ul>
+                <a href="#" class="pricing-cta secondary">Contact Sales</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="section-sep">
+
+<!-- ── Trusted By ── -->
+<section class="customers-section">
+    <div class="container">
+        <div class="reveal">
+            <p style="font-size:13px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; font-weight:600;">Built for the protocols that move billions</p>
+            <div class="customer-logos">
+                <span class="customer-logo">Bridges</span>
+                <span class="customer-logo">DeFi Protocols</span>
+                <span class="customer-logo">L1/L2 Chains</span>
+                <span class="customer-logo">Custodians</span>
+                <span class="customer-logo">Insurance</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── CTA ── -->
+<section class="cta-section">
+    <div class="container">
+        <div class="cta-box reveal">
+            <h2>Stop Watching Exploits<br>on Twitter.</h2>
+            <p>Every second counts when a bridge is under attack. Start detecting in 200ms &mdash; not discovering on CT hours later.</p>
+            <div class="cta-actions">
+                <a href="login.html" class="btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Start Free
+                </a>
+                <a href="#how" class="btn-secondary">
+                    Read the Docs
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer class="footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <a href="#" class="nav-logo" style="margin-bottom:8px;">
+                    <div class="nav-logo-mark">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <span class="nav-logo-text">Sentinel3</span>
+                </a>
+                <p>Runtime security plane for Web3. Detecting cross-chain exploits in real-time so you don't become the next headline.</p>
+            </div>
+            <div class="footer-col">
+                <h4>Product</h4>
+                <a href="#features">Features</a>
+                <a href="#how">Architecture</a>
+                <a href="#chains">Supported Chains</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#">Changelog</a>
+            </div>
+            <div class="footer-col">
+                <h4>Developers</h4>
+                <a href="#">API Documentation</a>
+                <a href="#">SDK & Libraries</a>
+                <a href="#">Invariant Builder</a>
+                <a href="#">Status Page</a>
+            </div>
+            <div class="footer-col">
+                <h4>Company</h4>
+                <a href="#">About</a>
+                <a href="#">Blog</a>
+                <a href="#">Careers</a>
+                <a href="#">Contact</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>&copy; 2024 Sentinel3. All rights reserved.</span>
+            <div class="footer-bottom-links">
+                <a href="#">Privacy</a>
+                <a href="#">Terms</a>
+                <a href="#">Security</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script>
+// ── Terminal Animation ──
+const terminalLines = [
+    { html: '<span class="comment">// Wormhole bridge &mdash; Solana &rarr; Ethereum</span>', delay: 200 },
+    { html: '<span class="keyword">event</span> = bridge.<span class="fn">capture</span>(<span class="string">"wormhole"</span>)', delay: 400 },
+    { html: '<span class="keyword">locked</span> &nbsp;= <span class="number">120,000</span> ETH <span class="comment">// source</span>', delay: 600 },
+    { html: '<span class="keyword">minted</span> &nbsp;= <span class="number">320,120</span> ETH <span class="comment">// dest</span>', delay: 800 },
+    { html: '', delay: 900 },
+    { html: 'invariant.<span class="fn">evaluate</span>(minted, locked)', delay: 1100 },
+    { html: '<span class="critical">VIOLATION</span> <span class="comment">// minted > locked</span>', delay: 1400 },
+    { html: '<span class="critical">gap: 200,120 ETH ($640M)</span>', delay: 1600 },
+    { html: '<span class="keyword">confidence</span>: <span class="number">0.95</span> | <span class="keyword">latency</span>: <span class="number">187ms</span>', delay: 1900 },
+    { html: '', delay: 2000 },
+    { html: 'alert.<span class="fn">fire</span>(<span class="string">"CRITICAL"</span>, pagerduty, telegram)', delay: 2200 },
+    { html: '<span class="string">&#10003; Incident created &mdash; auto-pause triggered</span>', delay: 2600 },
+];
+
+const termBody = document.getElementById('terminalBody');
+terminalLines.forEach((line, i) => {
+    setTimeout(() => {
+        const div = document.createElement('div');
+        div.className = 'line';
+        div.style.animationDelay = '0s';
+        div.innerHTML = line.html || '&nbsp;';
+        termBody.appendChild(div);
+    }, line.delay);
+});
+
+// ── Navbar Scroll ──
+window.addEventListener('scroll', () => {
+    document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50);
+});
+
+// ── Scroll Reveal ──
+const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+        }
+    });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// ── Architecture Layer Reveal ──
+const archObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const layers = entry.target.querySelectorAll('.arch-layer');
+            layers.forEach((layer, i) => {
+                setTimeout(() => layer.classList.add('visible'), i * 120);
+            });
+        }
+    });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.architecture-visual').forEach(el => archObserver.observe(el));
+
+// ── Counter Animation ──
+const counterObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const counters = entry.target.querySelectorAll('.counter');
+            counters.forEach(counter => {
+                if (counter.dataset.animated) return;
+                counter.dataset.animated = 'true';
+                const target = parseFloat(counter.dataset.target);
+                const isDecimal = target % 1 !== 0;
+                const duration = 2000;
+                const start = performance.now();
+
+                function update(now) {
+                    const elapsed = now - start;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const current = target * eased;
+                    counter.textContent = isDecimal ? current.toFixed(1) : Math.floor(current);
+                    if (progress < 1) requestAnimationFrame(update);
+                }
+                requestAnimationFrame(update);
+            });
+        }
+    });
+}, { threshold: 0.3 });
+
+document.querySelectorAll('.stats-bar').forEach(el => counterObserver.observe(el));
+
+// ── Smooth scroll for anchor links ──
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+        const href = a.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Close mobile menu
+            document.getElementById('navLinks').classList.remove('open');
+        }
+    });
+});
+</script>
+</body>
+</html>
