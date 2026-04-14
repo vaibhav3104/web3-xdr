@@ -18,6 +18,11 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+def _utcnow_naive() -> datetime:
+    """Return current UTC time as a naive datetime (for asyncpg tz-naive columns)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 # ============================================================================
 # Response Models
 # ============================================================================
@@ -63,7 +68,7 @@ async def get_historical_analytics(
     - Value at risk
     - Events breakdown by day, chain, type, severity
     """
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     try:
@@ -177,7 +182,7 @@ async def get_incidents_over_time(
     """
     Get incident/event counts over time for charting.
     """
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     try:
@@ -232,7 +237,7 @@ async def get_events_by_chain(
     """
     Get event distribution by blockchain chain.
     """
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     try:
@@ -294,7 +299,7 @@ async def get_attack_types_distribution(
     """
     from ..database.service import DatabaseService
 
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     attack_counts = {}
@@ -397,7 +402,7 @@ async def get_events_by_event_type(
 
     This is different from attack types - these are the underlying blockchain event types.
     """
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     try:
@@ -467,7 +472,7 @@ async def get_attack_patterns(
     """
     from ..database.service import DatabaseService
 
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     try:
@@ -717,7 +722,7 @@ async def get_value_over_time(
     """
     Get value at risk over time.
     """
-    end_time = datetime.now(timezone.utc)
+    end_time = _utcnow_naive()
     start_time = end_time - timedelta(days=days)
 
     try:
@@ -838,9 +843,11 @@ async def get_wallet_risk_score(address: str):
                 try:
                     first_seen = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
                 except:
-                    first_seen = datetime.now(timezone.utc)
-            
-            age_days = (datetime.now(timezone.utc) - first_seen.replace(tzinfo=timezone.utc) if first_seen.tzinfo is None else first_seen).days
+                    first_seen = _utcnow_naive()
+
+            if first_seen.tzinfo is not None:
+                first_seen = first_seen.replace(tzinfo=None)
+            age_days = (_utcnow_naive() - first_seen).days
             age_score = max(0, 100 - age_days * 2)  # Newer = higher score
         else:
             age_score = 50
