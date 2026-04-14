@@ -179,19 +179,90 @@ class XDRMetrics:
         # ============================================================
         # ALERTING METRICS
         # ============================================================
-        
+
         self.alerts_sent_total = Counter(
             f"{namespace}_alerts_sent_total",
             "Total alerts sent",
             ["channel", "severity"]
         )
-        
+
         self.alert_failures = Counter(
             f"{namespace}_alert_failures_total",
             "Failed alert deliveries",
             ["channel", "error_type"]
         )
-        
+
+        # ============================================================
+        # FORENSICS METRICS
+        # ============================================================
+
+        self.forensics_queries_total = Counter(
+            f"{namespace}_forensics_queries_total",
+            "Total forensic investigation queries",
+            ["query_type", "status"]
+        )
+
+        # ============================================================
+        # INVARIANT METRICS
+        # ============================================================
+
+        self.custom_invariants_loaded = Gauge(
+            f"{namespace}_custom_invariants_loaded",
+            "Number of custom DSL invariants currently loaded",
+            ["invariant_type"]
+        )
+
+        # ============================================================
+        # GUARDIAN METRICS
+        # ============================================================
+
+        self.guardian_actions_total = Counter(
+            f"{namespace}_guardian_actions_total",
+            "Total guardian response actions",
+            ["action_type", "status"]
+        )
+
+        # ============================================================
+        # TENANT METRICS
+        # ============================================================
+
+        self.tenant_api_requests_total = Counter(
+            f"{namespace}_tenant_api_requests_total",
+            "Total API requests by tenant",
+            ["tenant_id", "endpoint"]
+        )
+
+        # ============================================================
+        # BACKLOG METRICS
+        # ============================================================
+
+        self.event_backlog_size = Gauge(
+            f"{namespace}_event_backlog_size",
+            "Number of unprocessed events in the backlog",
+            ["chain"]
+        )
+
+        # ============================================================
+        # DB QUERY METRICS
+        # ============================================================
+
+        self.db_query_duration_seconds = Histogram(
+            f"{namespace}_db_query_duration_seconds",
+            "Database query duration in seconds",
+            ["operation", "table"],
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+        )
+
+        # ============================================================
+        # WEBSOCKET METRICS
+        # ============================================================
+
+        self.websocket_connections_active = Gauge(
+            f"{namespace}_websocket_connections_active",
+            "Number of active WebSocket connections",
+            ["channel"]
+        )
+
         # ============================================================
         # INFO METRIC
         # ============================================================
@@ -288,11 +359,58 @@ def track_api_request(method: str, endpoint: str, status: int, duration: float):
         endpoint=endpoint,
         status=str(status)
     ).inc()
-    
+
     metrics.api_request_duration.labels(
         method=method,
         endpoint=endpoint
     ).observe(duration)
+
+
+def track_forensics_query(query_type: str, status: str = "success"):
+    """Track a forensic investigation query."""
+    metrics.forensics_queries_total.labels(
+        query_type=query_type,
+        status=status
+    ).inc()
+
+
+def track_guardian_action(action_type: str, status: str):
+    """Track a guardian response action."""
+    metrics.guardian_actions_total.labels(
+        action_type=action_type,
+        status=status
+    ).inc()
+
+
+def track_tenant_request(tenant_id: str, endpoint: str):
+    """Track an API request by tenant."""
+    metrics.tenant_api_requests_total.labels(
+        tenant_id=tenant_id,
+        endpoint=endpoint
+    ).inc()
+
+
+def track_db_query(operation: str, table: str, duration: float):
+    """Track a database query duration."""
+    metrics.db_query_duration_seconds.labels(
+        operation=operation,
+        table=table
+    ).observe(duration)
+
+
+def set_event_backlog(chain: str, size: int):
+    """Set the event backlog size for a chain."""
+    metrics.event_backlog_size.labels(chain=chain).set(size)
+
+
+def set_websocket_connections(channel: str, count: int):
+    """Set the active WebSocket connection count for a channel."""
+    metrics.websocket_connections_active.labels(channel=channel).set(count)
+
+
+def set_custom_invariants(invariant_type: str, count: int):
+    """Set the number of loaded custom invariants."""
+    metrics.custom_invariants_loaded.labels(invariant_type=invariant_type).set(count)
 
 
 # ============================================================

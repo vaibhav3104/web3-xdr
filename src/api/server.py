@@ -38,6 +38,7 @@ _CORE_ROUTES = [
     (".admin_routes",     "router", "/api",  "admin"),
     (".auth_routes",      "router", "/api",  "auth"),
     (".metrics_routes",   "router", None,    "metrics"),
+    (".health",           "router", None,    "health"),
     (".ai_routes",        "router", "/api",  "ai"),
     (".tenant_routes",    "router", "/api",  "tenants"),
     (".simulator_routes", "router", "/api",  "simulator"),
@@ -61,6 +62,8 @@ _OPTIONAL_ROUTES = [
     (".ml_threat_routes",    "router", None,    "ml-threat"),
     (".scanner_routes",      "router", "/api",  "scanner"),
     (".verification_routes", "router", None,    "verification"),
+    (".forensics_routes",    "router", None,    "forensics"),
+    (".dsl_routes",          "router", None,    "invariants-dsl"),
 ]
 
 
@@ -181,6 +184,14 @@ def create_app(
     except ImportError as e:
         logger.warning("security_middleware_unavailable", error=str(e))
 
+    # ── Tenant isolation middleware ─────────────────────────────────
+    try:
+        from ..auth.tenant_middleware import TenantMiddleware
+        app.add_middleware(TenantMiddleware)
+        logger.info("tenant_middleware_registered")
+    except ImportError as e:
+        logger.warning("tenant_middleware_unavailable", error=str(e))
+
     # ── Register routes ─────────────────────────────────────────────
     registered = []
 
@@ -206,63 +217,6 @@ def create_app(
         logger.debug("otel_init_skipped", error=str(e))
 
     # ── Static routes ───────────────────────────────────────────────
-    @app.get("/health")
-    async def health_check():
-        return {
-            "status": "healthy",
-            "service": "sentinel3",
-            "environment": os.getenv("ENVIRONMENT", "development"),
-        }
-
-    @app.get("/health/detailed")
-    async def health_detailed():
-        """Detailed health check for monitoring dashboards."""
-        checks = {"postgres": "unknown", "redis": "unknown"}
-
-        # Check Postgres
-        try:
-            from ..database.connection import DatabaseManager
-            async with DatabaseManager.get_session() as session:
-                from sqlalchemy import text
-                await session.execute(text("SELECT 1"))
-            checks["postgres"] = "connected"
-        except Exception as e:
-            checks["postgres"] = f"error: {str(e)[:80]}"
-
-        # Check Redis
-        try:
-            import redis.asyncio as aioredis
-            url = os.getenv("REDIS_URL", "redis://localhost:6379")
-            r = aioredis.from_url(url)
-            await r.ping()
-            await r.aclose()
-            checks["redis"] = "connected"
-        except Exception as e:
-            checks["redis"] = f"error: {str(e)[:80]}"
-
-        all_ok = all(v == "connected" for v in checks.values())
-        return {
-            "status": "healthy" if all_ok else "degraded",
-            "service": "sentinel3",
-            "environment": os.getenv("ENVIRONMENT", "development"),
-            "checks": checks,
-        }
-
-    @app.get("/health/ready")
-    async def readiness_check():
-        """K8s readiness probe — returns 503 if DB is unreachable."""
-        from starlette.responses import JSONResponse
-        try:
-            from ..database.connection import DatabaseManager
-            if DatabaseManager._session_factory is None:
-                return JSONResponse({"ready": False}, status_code=503)
-            async with DatabaseManager.get_session() as session:
-                from sqlalchemy import text
-                await session.execute(text("SELECT 1"))
-            return {"ready": True}
-        except Exception:
-            return JSONResponse({"ready": False}, status_code=503)
-
     @app.get("/docs", include_in_schema=False)
     async def docs_redirect():
         from fastapi.responses import RedirectResponse

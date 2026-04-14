@@ -170,6 +170,12 @@
         .stat-value.pro { color: var(--s3-accent-light); }
         .stat-value.free { color: var(--s3-text-3); }
 
+        .stat-sub {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            margin-top: 6px;
+        }
+
         /* ── Section Header ───────────────────────────────────────────── */
         .section-header {
             display: flex;
@@ -218,6 +224,13 @@
             transform: translateY(-1px);
         }
 
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            filter: none;
+        }
+
         .btn-secondary {
             display: inline-flex;
             align-items: center;
@@ -263,6 +276,11 @@
             border-color: rgba(244, 63, 94, 0.35);
         }
 
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
         /* ── Tenant Cards Grid ────────────────────────────────────────── */
         .tenant-grid {
             display: grid;
@@ -286,6 +304,11 @@
             border-color: var(--s3-border-hover);
             transform: translateY(-2px);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .tenant-card.selected {
+            border-color: var(--s3-accent);
+            box-shadow: 0 0 0 1px var(--s3-accent), 0 8px 32px rgba(139, 92, 246, 0.15);
         }
 
         .tenant-card::before {
@@ -398,6 +421,12 @@
             border-bottom: 1px solid var(--s3-border);
         }
 
+        .detail-header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
         .detail-title {
             font-size: 20px;
             font-weight: 700;
@@ -424,6 +453,46 @@
             color: var(--s3-text);
             background: var(--s3-bg-4);
             border-color: var(--s3-border-hover);
+        }
+
+        /* ── Tabs ────────────────────────────────────────────────────── */
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--s3-border);
+            padding-bottom: 0;
+        }
+
+        .tab-btn {
+            padding: 10px 18px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--s3-text-3);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn:hover {
+            color: var(--s3-text-2);
+        }
+
+        .tab-btn.active {
+            color: var(--s3-accent-light);
+            border-bottom-color: var(--s3-accent);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .detail-columns {
@@ -516,6 +585,238 @@
             color: var(--s3-accent-light);
             flex-shrink: 0;
         }
+
+        /* ── API Keys Table ───────────────────────────────────────────── */
+        .keys-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .keys-table th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--s3-text-3);
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--s3-border);
+        }
+
+        .keys-table td {
+            padding: 12px;
+            font-size: 13px;
+            color: var(--s3-text-2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .keys-table td.mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .key-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+
+        .key-status.active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--s3-low);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .key-status.revoked {
+            background: rgba(244, 63, 94, 0.1);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+        }
+
+        .scope-tag {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 4px;
+            background: var(--s3-accent-dim);
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .key-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        /* ── Tier Select ──────────────────────────────────────────────── */
+        .tier-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .tier-option {
+            background: var(--s3-bg-3);
+            border: 2px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .tier-option:hover {
+            border-color: var(--s3-border-hover);
+        }
+
+        .tier-option.selected {
+            border-color: var(--s3-accent);
+            background: var(--s3-accent-dim);
+        }
+
+        .tier-option .tier-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--s3-text);
+            margin-bottom: 4px;
+        }
+
+        .tier-option .tier-price {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--s3-text);
+            letter-spacing: -0.02em;
+        }
+
+        .tier-option .tier-price .period {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--s3-text-3);
+        }
+
+        /* ── Usage Bars ───────────────────────────────────────────────── */
+        .usage-row {
+            margin-bottom: 18px;
+        }
+
+        .usage-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+
+        .usage-label .name {
+            color: var(--s3-text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .usage-label .count {
+            color: var(--s3-text-2);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .usage-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--s3-bg-3);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .usage-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+            background: linear-gradient(90deg, var(--s3-accent), var(--s3-accent-light));
+        }
+
+        .usage-bar-fill.warning {
+            background: linear-gradient(90deg, var(--s3-medium), var(--s3-high));
+        }
+
+        .usage-bar-fill.critical {
+            background: linear-gradient(90deg, var(--s3-high), var(--s3-critical));
+        }
+
+        /* ── Alert Banner ─────────────────────────────────────────────── */
+        .api-key-banner {
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .api-key-banner .key-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--s3-low);
+            word-break: break-all;
+        }
+
+        .api-key-banner .warning-text {
+            font-size: 11px;
+            color: var(--s3-text-3);
+        }
+
+        .copy-btn {
+            padding: 6px 12px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            color: var(--s3-low);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: rgba(16, 185, 129, 0.25);
+        }
+
+        /* ── Toast ────────────────────────────────────────────────────── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--s3-bg-2);
+            border: 1px solid var(--s3-border);
+            border-radius: var(--s3-radius-sm);
+            padding: 14px 20px;
+            color: var(--s3-text);
+            font-size: 13px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            transition: all 0.3s;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success { border-left: 3px solid var(--s3-low); }
+        .toast.error { border-left: 3px solid var(--s3-critical); }
 
         /* ── Pricing Plans ────────────────────────────────────────────── */
         .plans-grid {
@@ -648,7 +949,7 @@
             border-radius: var(--s3-radius);
             padding: 32px;
             width: 100%;
-            max-width: 460px;
+            max-width: 520px;
             box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
         }
 
@@ -726,6 +1027,31 @@
             color: var(--s3-text);
         }
 
+        .form-hint {
+            font-size: 11px;
+            color: var(--s3-text-3);
+            margin-top: 4px;
+        }
+
+        .scope-checkboxes {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .scope-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--s3-text-2);
+        }
+
+        .scope-checkbox input {
+            accent-color: var(--s3-accent);
+        }
+
         .modal-actions {
             display: flex;
             align-items: center;
@@ -734,12 +1060,31 @@
             margin-top: 28px;
         }
 
+        /* ── Empty State ──────────────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--s3-text-3);
+        }
+
+        .empty-state svg {
+            width: 40px;
+            height: 40px;
+            margin-bottom: 12px;
+            opacity: 0.4;
+        }
+
+        .empty-state p {
+            font-size: 13px;
+        }
+
         /* ── Responsive ───────────────────────────────────────────────── */
         @media (max-width: 1200px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
             .tenant-grid { grid-template-columns: repeat(2, 1fr); }
             .detail-columns { grid-template-columns: 1fr 1fr; }
             .plans-grid { grid-template-columns: 1fr; }
+            .tier-cards { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 768px) {
@@ -762,7 +1107,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                 </svg>
             </div>
-            <h1>Multi-Tenancy <span>Organization Management</span></h1>
+            <h1>Multi-Tenancy <span>Organization & API Key Management</span></h1>
         </div>
         <div>
             <select
@@ -820,7 +1165,7 @@
                 <template x-for="tenant in tenants" :key="tenant.slug">
                     <div
                         class="tenant-card"
-                        :class="'plan-' + tenant.plan"
+                        :class="['plan-' + tenant.plan, selectedTenant?.slug === tenant.slug ? 'selected' : '']"
                         @click="selectTenant(tenant)"
                     >
                         <div class="tenant-card-header">
@@ -850,7 +1195,7 @@
                             </div>
                             <div class="meta-row">
                                 <span class="label">Retention</span>
-                                <span class="value" x-text="tenant.settings?.retention_days + ' days'"></span>
+                                <span class="value" x-text="(tenant.settings?.retention_days || 7) + ' days'"></span>
                             </div>
                         </div>
                     </div>
@@ -859,90 +1204,330 @@
         </div>
 
         <!-- Selected Tenant Details -->
-        <div x-show="selectedTenant" class="detail-panel">
+        <div x-show="selectedTenant" class="detail-panel" x-cloak>
             <div class="detail-header">
-                <h3 class="detail-title" x-text="selectedTenant?.name"></h3>
-                <button @click="selectedTenant = null" class="close-btn">
+                <div class="detail-header-left">
+                    <h3 class="detail-title" x-text="selectedTenant?.name"></h3>
+                    <span
+                        class="plan-badge"
+                        :class="{
+                            'enterprise': selectedTenant?.plan === 'enterprise',
+                            'pro': selectedTenant?.plan === 'pro',
+                            'free': selectedTenant?.plan === 'free'
+                        }"
+                        x-text="selectedTenant?.plan"
+                    ></span>
+                </div>
+                <button @click="selectedTenant = null; activeTab = 'overview'" class="close-btn">
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
 
-            <div class="detail-columns">
-                <!-- Settings -->
-                <div>
-                    <div class="detail-section-title">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        Settings
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Alerts Enabled</span>
-                        <span class="value" :class="selectedTenant?.settings?.alerts_enabled ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.alerts_enabled ? 'Active' : 'Off'"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">API Access</span>
-                        <span class="value" :class="selectedTenant?.settings?.api_access ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.api_access ? 'Active' : 'Off'"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">SSO</span>
-                        <span class="value" :class="selectedTenant?.settings?.sso_enabled ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.sso_enabled ? 'Active' : 'Off'"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Custom Rules</span>
-                        <span class="value" :class="selectedTenant?.settings?.custom_rules ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.custom_rules ? 'Active' : 'Off'"></span>
-                    </div>
-                </div>
+            <!-- Tabs -->
+            <div class="tab-bar">
+                <button class="tab-btn" :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">Overview</button>
+                <button class="tab-btn" :class="{ active: activeTab === 'api-keys' }" @click="activeTab = 'api-keys'; loadApiKeys()">API Keys</button>
+                <button class="tab-btn" :class="{ active: activeTab === 'usage' }" @click="activeTab = 'usage'; loadTenantStats()">Usage & Stats</button>
+                <button class="tab-btn" :class="{ active: activeTab === 'tier' }" @click="activeTab = 'tier'">Tier Management</button>
+            </div>
 
-                <!-- Limits -->
-                <div>
-                    <div class="detail-section-title">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                        Limits
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Max Users</span>
-                        <span class="value" x-text="selectedTenant?.limits?.max_users === -1 ? 'Unlimited' : selectedTenant?.limits?.max_users"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Max Chains</span>
-                        <span class="value" x-text="selectedTenant?.limits?.max_chains === -1 ? 'Unlimited' : selectedTenant?.limits?.max_chains"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Max Rules</span>
-                        <span class="value" x-text="selectedTenant?.limits?.max_rules === -1 ? 'Unlimited' : selectedTenant?.limits?.max_rules"></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">API Calls/Day</span>
-                        <span class="value" x-text="selectedTenant?.limits?.max_api_calls_per_day === -1 ? 'Unlimited' : selectedTenant?.limits?.max_api_calls_per_day?.toLocaleString()"></span>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div>
-                    <div class="detail-section-title">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                        Actions
-                    </div>
-                    <div class="detail-actions">
-                        <button class="action-btn">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                            Manage Members
-                        </button>
-                        <button class="action-btn">
+            <!-- Tab: Overview -->
+            <div class="tab-content" :class="{ active: activeTab === 'overview' }">
+                <div class="detail-columns">
+                    <!-- Settings -->
+                    <div>
+                        <div class="detail-section-title">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                            Edit Settings
-                        </button>
-                        <button class="action-btn">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                            View Usage Stats
-                        </button>
-                        <button
-                            x-show="selectedTenant?.slug !== 'default'"
-                            class="btn-danger"
-                        >
-                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                            Delete Organization
-                        </button>
+                            Settings
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Alerts Enabled</span>
+                            <span class="value" :class="selectedTenant?.settings?.alerts_enabled ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.alerts_enabled ? 'Active' : 'Off'"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">API Access</span>
+                            <span class="value" :class="selectedTenant?.settings?.api_access ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.api_access ? 'Active' : 'Off'"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">SSO</span>
+                            <span class="value" :class="selectedTenant?.settings?.sso_enabled ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.sso_enabled ? 'Active' : 'Off'"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Custom Rules</span>
+                            <span class="value" :class="selectedTenant?.settings?.custom_rules ? 'enabled' : 'disabled'" x-text="selectedTenant?.settings?.custom_rules ? 'Active' : 'Off'"></span>
+                        </div>
                     </div>
+
+                    <!-- Limits -->
+                    <div>
+                        <div class="detail-section-title">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            Limits
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Max Users</span>
+                            <span class="value" x-text="selectedTenant?.limits?.max_users === -1 ? 'Unlimited' : selectedTenant?.limits?.max_users"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Max Chains</span>
+                            <span class="value" x-text="selectedTenant?.limits?.max_chains === -1 ? 'Unlimited' : selectedTenant?.limits?.max_chains"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Max Rules</span>
+                            <span class="value" x-text="selectedTenant?.limits?.max_rules === -1 ? 'Unlimited' : selectedTenant?.limits?.max_rules"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">API Calls/Day</span>
+                            <span class="value" x-text="selectedTenant?.limits?.max_api_calls_per_day === -1 ? 'Unlimited' : selectedTenant?.limits?.max_api_calls_per_day?.toLocaleString()"></span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div>
+                        <div class="detail-section-title">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                            Actions
+                        </div>
+                        <div class="detail-actions">
+                            <button class="action-btn" @click="activeTab = 'api-keys'; loadApiKeys()">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+                                Manage API Keys
+                            </button>
+                            <button class="action-btn" @click="activeTab = 'usage'; loadTenantStats()">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                View Usage Stats
+                            </button>
+                            <button class="action-btn" @click="activeTab = 'tier'">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                                Change Tier
+                            </button>
+                            <button
+                                x-show="selectedTenant?.slug !== 'default'"
+                                class="btn-danger"
+                                @click="deleteTenant(selectedTenant?.slug)"
+                            >
+                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                Delete Organization
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: API Keys -->
+            <div class="tab-content" :class="{ active: activeTab === 'api-keys' }">
+                <!-- New key banner -->
+                <div x-show="newlyCreatedKey" class="api-key-banner">
+                    <div>
+                        <div class="key-text" x-text="newlyCreatedKey"></div>
+                        <div class="warning-text">Store this key securely -- it will not be shown again.</div>
+                    </div>
+                    <button class="copy-btn" @click="copyToClipboard(newlyCreatedKey)">Copy</button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                    <div class="detail-section-title" style="margin-bottom: 0;">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+                        API Keys
+                    </div>
+                    <button class="btn-primary btn-sm" @click="showKeyModal = true">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Generate Key
+                    </button>
+                </div>
+
+                <template x-if="apiKeys.length > 0">
+                    <div style="overflow-x: auto;">
+                        <table class="keys-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Prefix</th>
+                                    <th>Scopes</th>
+                                    <th>Status</th>
+                                    <th>Requests</th>
+                                    <th>Last Used</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="key in apiKeys" :key="key.key_id">
+                                    <tr>
+                                        <td x-text="key.name"></td>
+                                        <td class="mono" x-text="key.key_prefix + '...'"></td>
+                                        <td>
+                                            <template x-for="scope in key.scopes" :key="scope">
+                                                <span class="scope-tag" x-text="scope"></span>
+                                            </template>
+                                        </td>
+                                        <td>
+                                            <span class="key-status" :class="key.status" x-text="key.status"></span>
+                                        </td>
+                                        <td class="mono" x-text="key.total_requests?.toLocaleString() || '0'"></td>
+                                        <td class="mono" x-text="key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'"></td>
+                                        <td>
+                                            <div class="key-actions">
+                                                <button
+                                                    class="btn-secondary btn-sm"
+                                                    @click="rotateKey(key.key_id)"
+                                                    x-show="key.status === 'active'"
+                                                    title="Rotate key"
+                                                >Rotate</button>
+                                                <button
+                                                    class="btn-danger btn-sm"
+                                                    style="width: auto;"
+                                                    @click="revokeKey(key.key_id)"
+                                                    x-show="key.status === 'active'"
+                                                    title="Revoke key"
+                                                >Revoke</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+
+                <template x-if="apiKeys.length === 0">
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+                        <p>No API keys yet. Generate one to enable programmatic access.</p>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Tab: Usage & Stats -->
+            <div class="tab-content" :class="{ active: activeTab === 'usage' }">
+                <div class="detail-section-title">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
+                    Tenant Usage
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px;">
+                    <div>
+                        <!-- API Calls Usage -->
+                        <div class="usage-row">
+                            <div class="usage-label">
+                                <span class="name">API Calls</span>
+                                <span class="count" x-text="(tenantStats.total_api_calls || 0).toLocaleString() + ' / ' + (selectedTenant?.limits?.max_api_calls_per_day === -1 ? 'Unlimited' : (selectedTenant?.limits?.max_api_calls_per_day || 100).toLocaleString())"></span>
+                            </div>
+                            <div class="usage-bar">
+                                <div
+                                    class="usage-bar-fill"
+                                    :class="{
+                                        'warning': getUsagePct('api') > 70 && getUsagePct('api') <= 90,
+                                        'critical': getUsagePct('api') > 90
+                                    }"
+                                    :style="'width:' + Math.min(getUsagePct('api'), 100) + '%'"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <!-- Members Usage -->
+                        <div class="usage-row">
+                            <div class="usage-label">
+                                <span class="name">Members</span>
+                                <span class="count" x-text="(tenantStats.users_count || 0) + ' / ' + (selectedTenant?.limits?.max_users === -1 ? 'Unlimited' : selectedTenant?.limits?.max_users)"></span>
+                            </div>
+                            <div class="usage-bar">
+                                <div
+                                    class="usage-bar-fill"
+                                    :class="{
+                                        'warning': getUsagePct('members') > 70 && getUsagePct('members') <= 90,
+                                        'critical': getUsagePct('members') > 90
+                                    }"
+                                    :style="'width:' + Math.min(getUsagePct('members'), 100) + '%'"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <!-- Active API Keys -->
+                        <div class="usage-row">
+                            <div class="usage-label">
+                                <span class="name">Active API Keys</span>
+                                <span class="count" x-text="tenantStats.api_keys_active || 0"></span>
+                            </div>
+                            <div class="usage-bar">
+                                <div class="usage-bar-fill" style="width: 30%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <!-- Per-tenant counters -->
+                        <div class="detail-row">
+                            <span class="label">Events Captured</span>
+                            <span class="value" x-text="(tenantStats.events_count || 0).toLocaleString()"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Incidents Detected</span>
+                            <span class="value" x-text="(tenantStats.incidents_count || 0).toLocaleString()"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Chains Monitored</span>
+                            <span class="value" x-text="tenantStats.chains_monitored || 0"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Total API Calls</span>
+                            <span class="value" x-text="(tenantStats.total_api_calls || 0).toLocaleString()"></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Storage Used</span>
+                            <span class="value" x-text="(tenantStats.storage_used_mb || 0).toFixed(1) + ' MB'"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Tier Management -->
+            <div class="tab-content" :class="{ active: activeTab === 'tier' }">
+                <div class="detail-section-title" style="margin-bottom: 20px;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                    Upgrade / Downgrade Tier
+                </div>
+
+                <div class="tier-cards">
+                    <div
+                        class="tier-option"
+                        :class="{ selected: selectedTierChange === 'free' }"
+                        @click="selectedTierChange = 'free'"
+                    >
+                        <div class="tier-name">Free / Starter</div>
+                        <div class="tier-price">$0<span class="period">/mo</span></div>
+                        <div style="font-size:12px; color: var(--s3-text-3); margin-top: 8px;">2 chains, 5 users, 7d retention</div>
+                    </div>
+                    <div
+                        class="tier-option"
+                        :class="{ selected: selectedTierChange === 'pro' }"
+                        @click="selectedTierChange = 'pro'"
+                    >
+                        <div class="tier-name">Pro</div>
+                        <div class="tier-price">$299<span class="period">/mo</span></div>
+                        <div style="font-size:12px; color: var(--s3-text-3); margin-top: 8px;">5 chains, 25 users, 90d retention</div>
+                    </div>
+                    <div
+                        class="tier-option"
+                        :class="{ selected: selectedTierChange === 'enterprise' }"
+                        @click="selectedTierChange = 'enterprise'"
+                    >
+                        <div class="tier-name">Enterprise</div>
+                        <div class="tier-price">Custom</div>
+                        <div style="font-size:12px; color: var(--s3-text-3); margin-top: 8px;">Unlimited everything, SSO, dedicated support</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; align-items: center; gap: 12px;">
+                    <button
+                        class="btn-primary"
+                        :disabled="!selectedTierChange || selectedTierChange === selectedTenant?.plan"
+                        @click="changeTier()"
+                    >
+                        Apply Tier Change
+                    </button>
+                    <span x-show="selectedTierChange && selectedTierChange !== selectedTenant?.plan" style="font-size: 12px; color: var(--s3-text-3);">
+                        Changing from <strong x-text="selectedTenant?.plan"></strong> to <strong x-text="selectedTierChange"></strong>
+                    </span>
                 </div>
             </div>
         </div>
@@ -1009,6 +1594,7 @@
         x-show="showCreateModal"
         class="modal-backdrop"
         @click.self="showCreateModal = false"
+        x-cloak
     >
         <div class="modal-card">
             <h3>Create Organization</h3>
@@ -1032,6 +1618,15 @@
                 >
             </div>
             <div class="form-group">
+                <label class="form-label">Admin Email</label>
+                <input
+                    type="email"
+                    x-model="newTenant.admin_email"
+                    class="form-input"
+                    placeholder="admin@company.com"
+                >
+            </div>
+            <div class="form-group">
                 <label class="form-label">Plan</label>
                 <select x-model="newTenant.plan" class="form-select">
                     <option value="free">Free</option>
@@ -1050,12 +1645,91 @@
                 <button
                     @click="createTenant()"
                     class="btn-primary"
+                    :disabled="!newTenant.name || !newTenant.slug"
                 >
                     Create Organization
                 </button>
             </div>
         </div>
     </div>
+
+    <!-- Generate API Key Modal -->
+    <div
+        x-show="showKeyModal"
+        class="modal-backdrop"
+        @click.self="showKeyModal = false"
+        x-cloak
+    >
+        <div class="modal-card">
+            <h3>Generate API Key</h3>
+
+            <div class="form-group">
+                <label class="form-label">Key Name</label>
+                <input
+                    type="text"
+                    x-model="newKey.name"
+                    class="form-input"
+                    placeholder="Production API Key"
+                >
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input
+                    type="text"
+                    x-model="newKey.description"
+                    class="form-input"
+                    placeholder="Used for backend integration"
+                >
+            </div>
+            <div class="form-group">
+                <label class="form-label">Scopes</label>
+                <div class="scope-checkboxes">
+                    <label class="scope-checkbox">
+                        <input type="checkbox" value="read" x-model="newKey.scopes"> Read
+                    </label>
+                    <label class="scope-checkbox">
+                        <input type="checkbox" value="write" x-model="newKey.scopes"> Write
+                    </label>
+                    <label class="scope-checkbox">
+                        <input type="checkbox" value="admin" x-model="newKey.scopes"> Admin
+                    </label>
+                    <label class="scope-checkbox">
+                        <input type="checkbox" value="guardian" x-model="newKey.scopes"> Guardian
+                    </label>
+                </div>
+                <div class="form-hint">Select the permissions this key should have.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Expires In (days)</label>
+                <select x-model="newKey.expires_in_days" class="form-select">
+                    <option value="">Never</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="180">180 days</option>
+                    <option value="365">365 days</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button
+                    @click="showKeyModal = false"
+                    class="btn-secondary"
+                >
+                    Cancel
+                </button>
+                <button
+                    @click="generateApiKey()"
+                    class="btn-primary"
+                    :disabled="!newKey.name || newKey.scopes.length === 0"
+                >
+                    Generate Key
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" :class="{ show: toast.show, success: toast.type === 'success', error: toast.type === 'error' }" x-text="toast.message"></div>
 
 </div><!-- /app -->
 
@@ -1064,94 +1738,121 @@
             return {
                 currentTenant: 'default',
                 selectedTenant: null,
+                activeTab: 'overview',
                 showCreateModal: false,
+                showKeyModal: false,
+                newlyCreatedKey: null,
+                selectedTierChange: null,
+                toast: { show: false, message: '', type: 'success' },
+
                 newTenant: {
                     name: '',
                     slug: '',
-                    plan: 'free'
+                    plan: 'free',
+                    admin_email: ''
                 },
+
+                newKey: {
+                    name: '',
+                    description: '',
+                    scopes: ['read'],
+                    expires_in_days: ''
+                },
+
                 tenants: [],
+                apiKeys: [],
+                tenantStats: {},
 
                 async init() {
                     await this.loadTenants();
                 },
 
+                // ── Helpers ──────────────────────────────────────────────
+                getToken() {
+                    return localStorage.getItem('xdr_token') || localStorage.getItem('token');
+                },
+
+                authHeaders() {
+                    const token = this.getToken();
+                    return token ? { 'Authorization': `Bearer ${token}` } : {};
+                },
+
+                async apiFetch(endpoint, options = {}) {
+                    const base = window.SENTINEL3_API_BASE || '';
+                    return fetch(base + endpoint, {
+                        ...options,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...this.authHeaders(),
+                            ...options.headers,
+                        }
+                    });
+                },
+
+                showToast(message, type = 'success') {
+                    this.toast = { show: true, message, type };
+                    setTimeout(() => { this.toast.show = false; }, 4000);
+                },
+
+                copyToClipboard(text) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        this.showToast('Copied to clipboard');
+                    });
+                },
+
+                getUsagePct(type) {
+                    if (!this.selectedTenant) return 0;
+                    const limits = this.selectedTenant.limits || {};
+                    if (type === 'api') {
+                        const max = limits.max_api_calls_per_day;
+                        if (!max || max === -1) return 5;
+                        return ((this.tenantStats.total_api_calls || 0) / max) * 100;
+                    }
+                    if (type === 'members') {
+                        const max = limits.max_users;
+                        if (!max || max === -1) return 5;
+                        return ((this.tenantStats.users_count || 0) / max) * 100;
+                    }
+                    return 0;
+                },
+
+                // ── Tenant CRUD ──────────────────────────────────────────
                 async loadTenants() {
                     try {
-                        const token = localStorage.getItem('xdr_token') || localStorage.getItem('token');
-                        if (!token) return;
-                        const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/tenants', {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        });
+                        const response = await this.apiFetch('/api/tenants');
                         if (response.ok) {
                             this.tenants = await response.json();
+                            return;
                         }
-                    } catch (e) {
-                        // Demo data
-                        this.tenants = [
-                            {
-                                id: 'default',
-                                name: 'Default Organization',
-                                slug: 'default',
-                                plan: 'enterprise',
-                                settings: {
-                                    alerts_enabled: true,
-                                    api_access: true,
-                                    sso_enabled: true,
-                                    custom_rules: true,
-                                    retention_days: 365
-                                },
-                                limits: {
-                                    max_users: -1,
-                                    max_chains: -1,
-                                    max_rules: -1,
-                                    max_api_calls_per_day: -1
-                                }
-                            },
-                            {
-                                id: 'acme',
-                                name: 'ACME DeFi',
-                                slug: 'acme',
-                                plan: 'pro',
-                                settings: {
-                                    alerts_enabled: true,
-                                    api_access: true,
-                                    sso_enabled: false,
-                                    custom_rules: true,
-                                    retention_days: 90
-                                },
-                                limits: {
-                                    max_users: 25,
-                                    max_chains: 5,
-                                    max_rules: 50,
-                                    max_api_calls_per_day: 10000
-                                }
-                            },
-                            {
-                                id: 'demo',
-                                name: 'Demo Company',
-                                slug: 'demo',
-                                plan: 'free',
-                                settings: {
-                                    alerts_enabled: false,
-                                    api_access: false,
-                                    sso_enabled: false,
-                                    custom_rules: false,
-                                    retention_days: 7
-                                },
-                                limits: {
-                                    max_users: 5,
-                                    max_chains: 2,
-                                    max_rules: 5,
-                                    max_api_calls_per_day: 100
-                                }
-                            }
-                        ];
-                    }
+                    } catch (e) { /* fallback */ }
+
+                    // Demo data fallback
+                    this.tenants = [
+                        {
+                            id: 'default', name: 'Default Organization', slug: 'default', plan: 'enterprise',
+                            settings: { alerts_enabled: true, api_access: true, sso_enabled: true, custom_rules: true, retention_days: 365 },
+                            limits: { max_users: -1, max_chains: -1, max_rules: -1, max_api_calls_per_day: -1 }
+                        },
+                        {
+                            id: 'acme', name: 'ACME DeFi', slug: 'acme', plan: 'pro',
+                            settings: { alerts_enabled: true, api_access: true, sso_enabled: false, custom_rules: true, retention_days: 90 },
+                            limits: { max_users: 25, max_chains: 5, max_rules: 50, max_api_calls_per_day: 10000 }
+                        },
+                        {
+                            id: 'demo', name: 'Demo Company', slug: 'demo', plan: 'free',
+                            settings: { alerts_enabled: false, api_access: false, sso_enabled: false, custom_rules: false, retention_days: 7 },
+                            limits: { max_users: 5, max_chains: 2, max_rules: 5, max_api_calls_per_day: 100 }
+                        }
+                    ];
                 },
 
                 selectTenant(tenant) {
                     this.selectedTenant = tenant;
+                    this.activeTab = 'overview';
+                    this.selectedTierChange = tenant.plan;
+                    this.newlyCreatedKey = null;
+                    this.apiKeys = [];
+                    this.tenantStats = {};
                 },
 
                 switchTenant() {
@@ -1161,26 +1862,197 @@
 
                 async createTenant() {
                     try {
-                        const token = localStorage.getItem('xdr_token') || localStorage.getItem('token');
-                        const response = await fetch((window.SENTINEL3_API_BASE || '') + '/api/tenants', {
+                        const response = await this.apiFetch('/api/tenants', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
                             body: JSON.stringify(this.newTenant)
                         });
 
                         if (response.ok) {
                             await this.loadTenants();
                             this.showCreateModal = false;
-                            this.newTenant = { name: '', slug: '', plan: 'free' };
+                            this.newTenant = { name: '', slug: '', plan: 'free', admin_email: '' };
+                            this.showToast('Organization created');
+                        } else {
+                            const err = await response.json().catch(() => ({}));
+                            this.showToast(err.detail || 'Failed to create', 'error');
                         }
                     } catch (e) {
-                        console.error('Failed to create tenant');
+                        this.showToast('Network error', 'error');
                     }
+                },
+
+                async deleteTenant(slug) {
+                    if (!confirm('Delete this organization? This cannot be undone.')) return;
+                    try {
+                        const response = await this.apiFetch(`/api/tenants/${slug}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            this.selectedTenant = null;
+                            await this.loadTenants();
+                            this.showToast('Organization deleted');
+                        } else {
+                            const err = await response.json().catch(() => ({}));
+                            this.showToast(err.detail || 'Failed to delete', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                    }
+                },
+
+                // ── Tier Management ──────────────────────────────────────
+                async changeTier() {
+                    if (!this.selectedTenant || !this.selectedTierChange) return;
+                    try {
+                        const response = await this.apiFetch(`/api/tenants/${this.selectedTenant.slug}/tier`, {
+                            method: 'POST',
+                            body: JSON.stringify({ new_tier: this.selectedTierChange })
+                        });
+
+                        if (response.ok) {
+                            const updated = await response.json();
+                            // Update local state
+                            this.selectedTenant.plan = updated.plan;
+                            this.selectedTenant.limits = updated.limits;
+                            this.selectedTenant.settings = updated.settings;
+                            await this.loadTenants();
+                            this.showToast(`Tier changed to ${updated.plan}`);
+                        } else {
+                            const err = await response.json().catch(() => ({}));
+                            this.showToast(err.detail || 'Failed to change tier', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                    }
+                },
+
+                // ── API Keys ─────────────────────────────────────────────
+                async loadApiKeys() {
+                    if (!this.selectedTenant) return;
+                    try {
+                        const response = await this.apiFetch(`/api/tenants/${this.selectedTenant.slug}/api-keys`);
+                        if (response.ok) {
+                            this.apiKeys = await response.json();
+                            return;
+                        }
+                    } catch (e) { /* fallback */ }
+
+                    // Demo data
+                    this.apiKeys = [
+                        {
+                            key_id: 'key-001', name: 'Production Key', key_prefix: 's3_xk7f2b',
+                            scopes: ['read', 'write'], status: 'active',
+                            created_at: '2025-01-15T00:00:00Z', expires_at: null,
+                            last_used_at: '2026-04-13T12:30:00Z', total_requests: 42851
+                        },
+                        {
+                            key_id: 'key-002', name: 'CI/CD Pipeline', key_prefix: 's3_p9m3kq',
+                            scopes: ['read'], status: 'active',
+                            created_at: '2025-03-01T00:00:00Z', expires_at: '2025-09-01T00:00:00Z',
+                            last_used_at: '2026-04-14T08:00:00Z', total_requests: 15230
+                        },
+                        {
+                            key_id: 'key-003', name: 'Old Key', key_prefix: 's3_r2v8np',
+                            scopes: ['read', 'write', 'admin'], status: 'revoked',
+                            created_at: '2024-06-01T00:00:00Z', expires_at: null,
+                            last_used_at: '2024-12-15T00:00:00Z', total_requests: 98432
+                        }
+                    ];
+                },
+
+                async generateApiKey() {
+                    if (!this.selectedTenant) return;
+                    try {
+                        const body = {
+                            name: this.newKey.name,
+                            scopes: this.newKey.scopes,
+                            description: this.newKey.description,
+                        };
+                        if (this.newKey.expires_in_days) {
+                            body.expires_in_days = parseInt(this.newKey.expires_in_days);
+                        }
+
+                        const response = await this.apiFetch(`/api/tenants/${this.selectedTenant.slug}/api-keys`, {
+                            method: 'POST',
+                            body: JSON.stringify(body)
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            this.newlyCreatedKey = result.api_key;
+                            this.showKeyModal = false;
+                            this.newKey = { name: '', description: '', scopes: ['read'], expires_in_days: '' };
+                            await this.loadApiKeys();
+                            this.showToast('API key generated -- store it securely');
+                        } else {
+                            const err = await response.json().catch(() => ({}));
+                            this.showToast(err.detail || 'Failed to generate key', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                    }
+                },
+
+                async revokeKey(keyId) {
+                    if (!this.selectedTenant) return;
+                    if (!confirm('Revoke this API key? This cannot be undone.')) return;
+                    try {
+                        const response = await this.apiFetch(`/api/tenants/${this.selectedTenant.slug}/api-keys/${keyId}`, {
+                            method: 'DELETE'
+                        });
+                        if (response.ok) {
+                            await this.loadApiKeys();
+                            this.showToast('Key revoked');
+                        } else {
+                            this.showToast('Failed to revoke key', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                    }
+                },
+
+                async rotateKey(keyId) {
+                    if (!this.selectedTenant) return;
+                    if (!confirm('Rotate this key? The old key will stop working immediately.')) return;
+                    try {
+                        const response = await this.apiFetch(`/api/tenants/${this.selectedTenant.slug}/api-keys/${keyId}/rotate`, {
+                            method: 'POST'
+                        });
+                        if (response.ok) {
+                            const result = await response.json();
+                            this.newlyCreatedKey = result.api_key;
+                            await this.loadApiKeys();
+                            this.showToast('Key rotated -- store the new key securely');
+                        } else {
+                            this.showToast('Failed to rotate key', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                    }
+                },
+
+                // ── Stats ────────────────────────────────────────────────
+                async loadTenantStats() {
+                    if (!this.selectedTenant) return;
+                    try {
+                        const response = await this.apiFetch(`/api/tenants/${this.selectedTenant.slug}/stats`);
+                        if (response.ok) {
+                            this.tenantStats = await response.json();
+                            return;
+                        }
+                    } catch (e) { /* fallback */ }
+
+                    // Demo data
+                    this.tenantStats = {
+                        tenant_id: this.selectedTenant.slug,
+                        incidents_count: 47,
+                        events_count: 12500,
+                        api_keys_active: 3,
+                        total_api_calls: 84230,
+                        chains_monitored: 8,
+                        users_count: 3,
+                        storage_used_mb: 256.5
+                    };
                 }
-            }
+            };
         }
     </script>
     <script src="/frontend/config.js"></script>

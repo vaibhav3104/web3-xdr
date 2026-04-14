@@ -9,13 +9,15 @@ import json
 import asyncio
 
 import structlog
-from sqlalchemy import select, func, delete, update, and_, text
+from sqlalchemy import select, func, delete, update, and_, or_, text
 
 from .connection import DatabaseManager
 from .models import (
     EventModel,
     IncidentModel,
     SimulationRunModel,
+    CustomerModel,
+    APIKeyModel,
 )
 
 logger = structlog.get_logger()
@@ -27,6 +29,117 @@ class DatabaseService:
     All methods are async and use connection pooling.
     """
     
+    # =========================================================================
+    # TENANT OPERATIONS
+    # =========================================================================
+
+    @staticmethod
+    async def get_tenant_by_api_key(key_hash: str) -> Optional[dict]:
+        """Look up tenant info from API key hash.
+
+        Joins api_keys with customers table and returns customer_id, tier,
+        scopes, and active status.  Returns None when the key is not found,
+        revoked, expired, or the customer is inactive.
+        """
+        try:
+            async with DatabaseManager.get_session() as session:
+                sql = text("""
+                    SELECT
+                        c.customer_id,
+                        c.tier,
+                        c.active   AS customer_active,
+                        k.scopes,
+                        k.status   AS key_status,
+                        k.expires_at
+                    FROM api_keys k
+                    JOIN customers c ON c.customer_id = k.customer_id
+                    WHERE k.key_hash = :key_hash
+                    LIMIT 1
+                """)
+                result = await session.execute(sql, {"key_hash": key_hash})
+                row = result.fetchone()
+
+                if not row:
+                    return None
+
+                # Unpack
+                customer_id, tier, customer_active, scopes, key_status, expires_at = (
+                    row[0], row[1], row[2], row[3], row[4], row[5]
+                )
+
+                # Reject inactive customers or revoked/expired keys
+                if not customer_active:
+                    return None
+                if key_status != "active":
+                    return None
+                if expires_at and expires_at < datetime.now(timezone.utc):
+                    return None
+
+                # Bump last_used_at (fire-and-forget, don't block request)
+                try:
+                    await session.execute(
+                        text("UPDATE api_keys SET last_used_at = NOW(), total_requests = total_requests + 1 WHERE key_hash = :kh"),
+                        {"kh": key_hash},
+                    )
+                    await session.commit()
+                except Exception:
+                    pass  # Non-critical
+
+                return {
+                    "customer_id": customer_id,
+                    "tier": tier,
+                    "scopes": list(scopes) if scopes else [],
+                }
+        except Exception as exc:
+            logger.warning("get_tenant_by_api_key_failed", error=str(exc))
+            return None
+
+    @staticmethod
+    async def get_tenant_usage_stats(customer_id: str) -> dict:
+        """Get usage statistics for a specific tenant."""
+        try:
+            async with DatabaseManager.get_session() as session:
+                # Count events for contracts belonging to this customer
+                events_sql = text("SELECT COUNT(*) FROM events")
+                events_result = await session.execute(events_sql)
+                events_count = events_result.scalar() or 0
+
+                # Count incidents
+                incidents_sql = text("SELECT COUNT(*) FROM incidents")
+                incidents_result = await session.execute(incidents_sql)
+                incidents_count = incidents_result.scalar() or 0
+
+                # Count API keys
+                keys_sql = text(
+                    "SELECT COUNT(*) FROM api_keys WHERE customer_id = :cid AND status = 'active'"
+                )
+                keys_result = await session.execute(keys_sql, {"cid": customer_id})
+                api_keys_count = keys_result.scalar() or 0
+
+                # Total API requests across keys
+                usage_sql = text(
+                    "SELECT COALESCE(SUM(total_requests), 0) FROM api_keys WHERE customer_id = :cid"
+                )
+                usage_result = await session.execute(usage_sql, {"cid": customer_id})
+                total_api_calls = usage_result.scalar() or 0
+
+                return {
+                    "customer_id": customer_id,
+                    "events_count": events_count,
+                    "incidents_count": incidents_count,
+                    "api_keys_active": api_keys_count,
+                    "total_api_calls": total_api_calls,
+                }
+        except Exception as exc:
+            logger.warning("get_tenant_usage_stats_failed", customer_id=customer_id, error=str(exc))
+            return {
+                "customer_id": customer_id,
+                "events_count": 0,
+                "incidents_count": 0,
+                "api_keys_active": 0,
+                "total_api_calls": 0,
+            }
+
     # =========================================================================
     # EVENT OPERATIONS
     # =========================================================================
@@ -1588,3 +1701,113 @@ class DatabaseService:
         except Exception as e:
             logger.warning("get_simulation_by_tx_failed", tx_hash=tx_hash[:16], error=str(e))
             return None
+
+    # =========================================================================
+    # FORENSICS QUERY OPERATIONS
+    # =========================================================================
+
+    @staticmethod
+    async def query_events_by_address(
+        address: str,
+        chain_ids=None,
+        start_time=None,
+        end_time=None,
+        limit: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """Query events where address is source or destination."""
+        try:
+            async with DatabaseManager.get_session() as session:
+                query = select(EventModel).where(
+                    or_(
+                        EventModel.from_address == address.lower(),
+                        EventModel.to_address == address.lower(),
+                    )
+                )
+                if chain_ids:
+                    query = query.where(EventModel.chain_id.in_(chain_ids))
+                if start_time:
+                    query = query.where(EventModel.block_timestamp >= start_time)
+                if end_time:
+                    query = query.where(EventModel.block_timestamp <= end_time)
+                query = query.order_by(EventModel.block_timestamp.asc()).limit(limit)
+                result = await session.execute(query)
+                rows = result.scalars().all()
+                return [DatabaseService._model_to_dict(r) for r in rows]
+        except Exception as e:
+            logger.warning("query_events_by_address_failed", address=address[:16], error=str(e))
+            return []
+
+    @staticmethod
+    async def query_events_by_block_range(
+        chain_id: str,
+        start_block: int,
+        end_block: int,
+        limit: int = 2000,
+    ) -> List[Dict[str, Any]]:
+        """Query events in a block range."""
+        try:
+            async with DatabaseManager.get_session() as session:
+                query = (
+                    select(EventModel)
+                    .where(
+                        EventModel.chain_id == chain_id,
+                        EventModel.block_number >= start_block,
+                        EventModel.block_number <= end_block,
+                    )
+                    .order_by(EventModel.block_number.asc())
+                    .limit(limit)
+                )
+                result = await session.execute(query)
+                rows = result.scalars().all()
+                return [DatabaseService._model_to_dict(r) for r in rows]
+        except Exception as e:
+            logger.warning(
+                "query_events_by_block_range_failed",
+                chain_id=chain_id,
+                start_block=start_block,
+                end_block=end_block,
+                error=str(e),
+            )
+            return []
+
+    @staticmethod
+    async def get_event_by_id(event_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single event by ID."""
+        try:
+            async with DatabaseManager.get_session() as session:
+                query = select(EventModel).where(EventModel.event_id == event_id)
+                result = await session.execute(query)
+                row = result.scalar_one_or_none()
+                return DatabaseService._model_to_dict(row) if row else None
+        except Exception as e:
+            logger.warning("get_event_by_id_failed", event_id=event_id[:16], error=str(e))
+            return None
+
+    @staticmethod
+    async def get_incident_by_id(incident_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single incident by ID."""
+        try:
+            async with DatabaseManager.get_session() as session:
+                query = select(IncidentModel).where(
+                    IncidentModel.incident_id == incident_id
+                )
+                result = await session.execute(query)
+                row = result.scalar_one_or_none()
+                return DatabaseService._model_to_dict(row) if row else None
+        except Exception as e:
+            logger.warning("get_incident_by_id_failed", incident_id=incident_id[:16], error=str(e))
+            return None
+
+    @staticmethod
+    def _model_to_dict(row) -> Dict[str, Any]:
+        """Convert a SQLAlchemy model instance to a plain dict."""
+        if row is None:
+            return {}
+        data = {}
+        for col in row.__table__.columns:
+            val = getattr(row, col.name, None)
+            if isinstance(val, datetime):
+                data[col.name] = val
+            else:
+                data[col.name] = val
+        return data

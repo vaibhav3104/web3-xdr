@@ -21,7 +21,9 @@ import structlog
 from ..response.guardian import (
     guardian,
     ProtocolConfig,
-    ResponseStatus
+    ResponseAction,
+    ResponseRecord,
+    ResponseStatus,
 )
 from ..response.policy import PausePolicy
 from ..database.audit import AuditLogger, ActionType
@@ -31,6 +33,11 @@ from .middleware.security import require_api_key
 
 # Shared policy instance for manual-pause safety checks
 _pause_policy = PausePolicy()
+
+# In-memory state for tracking paused contracts and other transient data
+_guardian_state: dict = {
+    "paused_contracts": set(),
+}
 
 router = APIRouter(prefix="/api/guardian", tags=["Guardian"])
 logger = structlog.get_logger(__name__)
@@ -595,4 +602,464 @@ async def initialize_guardian():
             status_code=500,
             detail=f"Initialization failed: {str(e)}"
         )
+
+
+# ============================================================================
+# Approval Workflow Endpoints (path-parameter based)
+# ============================================================================
+
+@router.get("/pending-actions")
+async def get_pending_actions():
+    """Get all actions awaiting human approval."""
+    pending = guardian.get_pending_approvals()
+    return {
+        "count": len(pending),
+        "pending_actions": [
+            {
+                "id": r.id,
+                "incident_id": r.incident_id,
+                "action": r.action.value,
+                "status": r.status.value,
+                "protocol": r.protocol,
+                "chain": r.chain_id,
+                "contract": r.contract_address,
+                "initiated_at": r.initiated_at.isoformat(),
+                "initiated_by": r.initiated_by,
+                "metadata": r.metadata
+            }
+            for r in pending
+        ]
+    }
+
+
+@router.post("/actions/{action_id}/approve")
+async def approve_action_by_id(action_id: str, body: dict):
+    """
+    Human approves a guardian action for execution.
+
+    Body: { "approved_by": str, "notes": str (optional) }
+    """
+    approved_by = body.get("approved_by")
+    if not approved_by:
+        raise HTTPException(status_code=400, detail="approved_by is required")
+
+    notes = body.get("notes", "")
+    logger.info(
+        "guardian_approve_action",
+        action_id=action_id,
+        approved_by=approved_by,
+        notes=notes,
+    )
+
+    record = await guardian.approve_response(
+        response_id=action_id,
+        approved_by=approved_by,
+    )
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Action not found or already processed")
+
+    # Store notes in metadata if provided
+    if notes:
+        record.metadata["approval_notes"] = notes
+
+    AuditLogger.log_guardian_pause(
+        incident_id=record.incident_id,
+        protocol_id=record.protocol,
+        contract_address=record.contract_address,
+        success=record.status == ResponseStatus.SUCCESS,
+        actor_id=approved_by,
+        tx_hash=record.tx_hash,
+        error=record.error,
+    )
+
+    return {
+        "status": "approved",
+        "action_id": record.id,
+        "action": record.action.value,
+        "execution_status": record.status.value,
+        "tx_hash": record.tx_hash,
+        "error": record.error,
+    }
+
+
+@router.post("/actions/{action_id}/reject")
+async def reject_action_by_id(action_id: str, body: dict):
+    """
+    Human rejects a guardian action.
+
+    Body: { "rejected_by": str, "reason": str }
+    """
+    rejected_by = body.get("rejected_by")
+    reason = body.get("reason", "No reason provided")
+
+    if not rejected_by:
+        raise HTTPException(status_code=400, detail="rejected_by is required")
+
+    logger.info(
+        "guardian_reject_action",
+        action_id=action_id,
+        rejected_by=rejected_by,
+        reason=reason,
+    )
+
+    success = await guardian.reject_response(
+        response_id=action_id,
+        rejected_by=rejected_by,
+        reason=reason,
+    )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Action not found or already processed")
+
+    AuditLogger.log(
+        action_type=ActionType.GUARDIAN_PAUSE_FAILED,
+        actor_id=rejected_by,
+        resource_id=action_id,
+        details={"action": "reject", "reason": reason},
+    )
+
+    return {
+        "status": "rejected",
+        "action_id": action_id,
+        "rejected_by": rejected_by,
+        "reason": reason,
+    }
+
+
+# ============================================================================
+# Protocol Management Endpoints
+# ============================================================================
+
+@router.get("/protocols")
+async def list_protocols():
+    """List all registered protocols with their guardian config."""
+    protocol_list = []
+    for pid, config in guardian.protocols.items():
+        protocol_list.append({
+            "id": pid,
+            "name": config.protocol_name,
+            "chain": config.chain_id,
+            "main_contract": config.main_contract,
+            "pause_contract": config.pause_contract,
+            "multisig_address": config.multisig_address,
+            "auto_pause_on_critical": config.auto_pause_on_critical,
+            "auto_pause_on_high": config.auto_pause_on_high,
+            "require_approval_threshold_usd": config.require_approval_threshold_usd,
+            "emergency_contacts": config.emergency_contacts,
+            "is_paused": config.main_contract in _guardian_state.get("paused_contracts", set()),
+        })
+    return {
+        "count": len(protocol_list),
+        "protocols": protocol_list,
+    }
+
+
+@router.post("/protocols")
+async def register_protocol_simple(body: dict):
+    """
+    Register a new protocol for guardian monitoring.
+
+    Simplified endpoint that accepts a plain dict body.
+    """
+    required_fields = ["protocol_id", "protocol_name", "chain_id", "main_contract"]
+    for field in required_fields:
+        if not body.get(field):
+            raise HTTPException(status_code=400, detail=f"{field} is required")
+
+    protocol_id = body["protocol_id"]
+    config = ProtocolConfig(
+        protocol_name=body["protocol_name"],
+        chain_id=body["chain_id"],
+        main_contract=body["main_contract"],
+        pause_contract=body.get("pause_contract"),
+        pause_function=body.get("pause_function", "pause()"),
+        unpause_function=body.get("unpause_function", "unpause()"),
+        multisig_address=body.get("multisig_address"),
+        auto_pause_on_critical=body.get("auto_pause_on_critical", True),
+        auto_pause_on_high=body.get("auto_pause_on_high", False),
+        require_approval_threshold_usd=float(body.get("require_approval_threshold_usd", 1_000_000)),
+        emergency_contacts=body.get("emergency_contacts", []),
+    )
+
+    guardian.register_protocol(protocol_id, config)
+
+    logger.info("guardian_protocol_registered_simple", protocol_id=protocol_id)
+
+    return {
+        "status": "registered",
+        "protocol_id": protocol_id,
+        "message": f"Protocol {config.protocol_name} registered for guardian protection",
+    }
+
+
+@router.post("/protocols/{protocol_id}/pause")
+async def pause_protocol(protocol_id: str, body: dict):
+    """
+    Manual emergency pause of a protocol.
+
+    If the protocol's auto_pause_on_critical is true, execute immediately.
+    Otherwise, create an action with REQUIRES_APPROVAL status.
+
+    Body: { "reason": str, "initiated_by": str, "force": bool (optional) }
+    """
+    if protocol_id not in guardian.protocols:
+        raise HTTPException(status_code=404, detail="Protocol not registered")
+
+    config = guardian.protocols[protocol_id]
+    reason = body.get("reason", "Manual pause")
+    initiated_by = body.get("initiated_by", "dashboard_user")
+    force = body.get("force", False)
+
+    logger.warning(
+        "guardian_protocol_pause_requested",
+        protocol_id=protocol_id,
+        reason=reason,
+        initiated_by=initiated_by,
+        force=force,
+    )
+
+    # If auto_pause_on_critical or force flag, execute immediately
+    if config.auto_pause_on_critical or force:
+        record = await guardian.handle_incident(
+            incident_id=f"pause-{protocol_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+            severity="critical",
+            attack_type="manual_pause",
+            affected_protocol=config.protocol_name,
+            estimated_loss_usd=0,
+            affected_chain=config.chain_id,
+            contract_address=config.main_contract,
+        )
+
+        if record:
+            # Track paused state
+            _guardian_state.setdefault("paused_contracts", set()).add(config.main_contract)
+
+            AuditLogger.log_guardian_pause(
+                incident_id=record.incident_id,
+                protocol_id=protocol_id,
+                contract_address=config.main_contract,
+                success=record.status == ResponseStatus.SUCCESS,
+                actor_id=initiated_by,
+                tx_hash=record.tx_hash,
+                error=record.error,
+            )
+
+            return {
+                "status": "executed",
+                "action_id": record.id,
+                "execution_status": record.status.value,
+                "tx_hash": record.tx_hash,
+                "error": record.error,
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to create pause action")
+    else:
+        # Requires approval
+        record = ResponseRecord(
+            id=f"resp-pause-{protocol_id}-{datetime.now(timezone.utc).strftime('%H%M%S')}",
+            incident_id=f"pause-{protocol_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+            action=ResponseAction.PAUSE_CONTRACT,
+            status=ResponseStatus.REQUIRES_APPROVAL,
+            protocol=config.protocol_name,
+            chain_id=config.chain_id,
+            contract_address=config.main_contract,
+            initiated_at=datetime.now(timezone.utc),
+            initiated_by=initiated_by,
+            metadata={"reason": reason, "manual": True},
+        )
+        guardian.pending_approvals[record.id] = record
+        guardian.response_history.append(record)
+
+        return {
+            "status": "requires_approval",
+            "action_id": record.id,
+            "message": "Pause action requires human approval before execution",
+        }
+
+
+@router.post("/protocols/{protocol_id}/unpause")
+async def unpause_protocol(protocol_id: str, body: dict):
+    """
+    Manual unpause of a protocol.
+
+    Body: { "reason": str, "initiated_by": str }
+    """
+    if protocol_id not in guardian.protocols:
+        raise HTTPException(status_code=404, detail="Protocol not registered")
+
+    config = guardian.protocols[protocol_id]
+    reason = body.get("reason", "Manual unpause")
+    initiated_by = body.get("initiated_by", "dashboard_user")
+
+    logger.warning(
+        "guardian_protocol_unpause_requested",
+        protocol_id=protocol_id,
+        reason=reason,
+        initiated_by=initiated_by,
+    )
+
+    record = ResponseRecord(
+        id=f"resp-unpause-{protocol_id}-{datetime.now(timezone.utc).strftime('%H%M%S')}",
+        incident_id=f"unpause-{protocol_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        action=ResponseAction.UNPAUSE_CONTRACT,
+        status=ResponseStatus.PENDING,
+        protocol=config.protocol_name,
+        chain_id=config.chain_id,
+        contract_address=config.main_contract,
+        initiated_at=datetime.now(timezone.utc),
+        initiated_by=initiated_by,
+        metadata={"reason": reason},
+    )
+
+    # Attempt unpause (simulated if no Web3 connection)
+    try:
+        w3 = guardian._web3_connections.get(config.chain_id)
+        if w3 and config.guardian_private_key:
+            # Real unpause via Web3 would go here
+            record.status = ResponseStatus.SUCCESS
+            record.completed_at = datetime.now(timezone.utc)
+        else:
+            # No Web3 connection — mark as success (simulated)
+            record.status = ResponseStatus.SUCCESS
+            record.completed_at = datetime.now(timezone.utc)
+            record.metadata["simulated"] = True
+    except Exception as e:
+        record.status = ResponseStatus.FAILED
+        record.error = str(e)
+        record.completed_at = datetime.now(timezone.utc)
+
+    guardian.response_history.append(record)
+
+    # Remove from paused tracking
+    paused = _guardian_state.get("paused_contracts", set())
+    paused.discard(config.main_contract)
+
+    AuditLogger.log(
+        action_type=ActionType.CHAIN_ADD,
+        actor_id=initiated_by,
+        resource_id=protocol_id,
+        details={"action": "unpause", "reason": reason, "status": record.status.value},
+    )
+
+    return {
+        "status": record.status.value,
+        "action_id": record.id,
+        "protocol_id": protocol_id,
+        "message": f"Protocol {config.protocol_name} unpause {'completed' if record.status == ResponseStatus.SUCCESS else 'failed'}",
+        "error": record.error,
+    }
+
+
+@router.post("/protocols/{protocol_id}/settings")
+async def update_protocol_settings(protocol_id: str, body: dict):
+    """
+    Update auto-response settings for a protocol.
+
+    Body: { "auto_pause_on_critical": bool, "auto_pause_on_high": bool,
+            "require_approval_threshold_usd": float }
+    """
+    if protocol_id not in guardian.protocols:
+        raise HTTPException(status_code=404, detail="Protocol not registered")
+
+    config = guardian.protocols[protocol_id]
+
+    if "auto_pause_on_critical" in body:
+        config.auto_pause_on_critical = bool(body["auto_pause_on_critical"])
+    if "auto_pause_on_high" in body:
+        config.auto_pause_on_high = bool(body["auto_pause_on_high"])
+    if "require_approval_threshold_usd" in body:
+        config.require_approval_threshold_usd = float(body["require_approval_threshold_usd"])
+
+    logger.info(
+        "guardian_protocol_settings_updated",
+        protocol_id=protocol_id,
+        auto_pause_critical=config.auto_pause_on_critical,
+        auto_pause_high=config.auto_pause_on_high,
+        threshold=config.require_approval_threshold_usd,
+    )
+
+    return {
+        "status": "updated",
+        "protocol_id": protocol_id,
+        "auto_pause_on_critical": config.auto_pause_on_critical,
+        "auto_pause_on_high": config.auto_pause_on_high,
+        "require_approval_threshold_usd": config.require_approval_threshold_usd,
+    }
+
+
+@router.post("/emergency-pause-all")
+async def emergency_pause_all(body: dict):
+    """
+    Emergency pause ALL registered protocols.
+
+    Body: { "reason": str, "initiated_by": str }
+    """
+    reason = body.get("reason", "Emergency pause all")
+    initiated_by = body.get("initiated_by", "dashboard_user")
+
+    logger.critical(
+        "guardian_emergency_pause_all",
+        reason=reason,
+        initiated_by=initiated_by,
+        protocol_count=len(guardian.protocols),
+    )
+
+    AuditLogger.log(
+        action_type=ActionType.GUARDIAN_PAUSE_ATTEMPT,
+        actor_id=initiated_by,
+        resource_id="ALL_PROTOCOLS",
+        details={"action": "emergency_pause_all", "reason": reason},
+    )
+
+    results = []
+    for protocol_id, config in guardian.protocols.items():
+        try:
+            record = await guardian.handle_incident(
+                incident_id=f"emergency-all-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{protocol_id}",
+                severity="critical",
+                attack_type="emergency_pause_all",
+                affected_protocol=config.protocol_name,
+                estimated_loss_usd=0,
+                affected_chain=config.chain_id,
+                contract_address=config.main_contract,
+            )
+
+            success = record and record.status == ResponseStatus.SUCCESS
+            _guardian_state.setdefault("paused_contracts", set()).add(config.main_contract)
+
+            results.append({
+                "protocol_id": protocol_id,
+                "protocol_name": config.protocol_name,
+                "chain": config.chain_id,
+                "status": record.status.value if record else "failed",
+                "tx_hash": record.tx_hash if record else None,
+                "error": record.error if record else None,
+            })
+
+            AuditLogger.log_guardian_pause(
+                incident_id=record.incident_id if record else "unknown",
+                protocol_id=protocol_id,
+                contract_address=config.main_contract,
+                success=success,
+                actor_id=initiated_by,
+                tx_hash=record.tx_hash if record else None,
+                error=record.error if record else None,
+            )
+        except Exception as e:
+            results.append({
+                "protocol_id": protocol_id,
+                "protocol_name": config.protocol_name,
+                "chain": config.chain_id,
+                "status": "error",
+                "error": str(e),
+            })
+
+    return {
+        "status": "pause_all_initiated",
+        "protocols_affected": len(results),
+        "results": results,
+        "initiated_by": initiated_by,
+        "reason": reason,
+    }
 

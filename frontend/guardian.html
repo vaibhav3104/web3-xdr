@@ -640,6 +640,42 @@
         }
 
         /* ── Empty State ───────────────────────────────── */
+        /* ── Toast Notifications ───────────────────────── */
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-radius: var(--s3-radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            transition: all 0.3s ease;
+            max-width: 420px;
+            animation: toast-in 0.3s ease;
+        }
+        .toast-success {
+            background: rgba(16,185,129,0.15);
+            color: var(--s3-low);
+            border: 1px solid rgba(16,185,129,0.3);
+        }
+        .toast-error {
+            background: rgba(244,63,94,0.15);
+            color: var(--s3-critical);
+            border: 1px solid rgba(244,63,94,0.3);
+        }
+        .toast-info {
+            background: rgba(139,92,246,0.15);
+            color: var(--s3-accent-light);
+            border: 1px solid rgba(139,92,246,0.3);
+        }
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* ── Empty State ───────────────────────────────── */
         .empty-state {
             text-align: center;
             padding: 40px 20px;
@@ -691,15 +727,23 @@
                 </div>
                 <div>
                     <h3>Emergency Controls</h3>
-                    <p>Manually pause a registered protocol in case of emergency</p>
+                    <p>Manually pause registered protocols in case of emergency</p>
                 </div>
             </div>
-            <button class="btn btn-danger" onclick="showEmergencyPause()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                </svg>
-                Emergency Pause
-            </button>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-danger" onclick="showEmergencyPause()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Pause Protocol
+                </button>
+                <button class="btn btn-danger" style="background: rgba(244,63,94,0.25); border-color: rgba(244,63,94,0.5);" onclick="emergencyPauseAll()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                    Emergency Pause All
+                </button>
+            </div>
         </div>
 
         <!-- Stats Grid -->
@@ -924,11 +968,110 @@
         </div>
     </div>
 
+    <!-- Emergency Pause ALL Modal -->
+    <div class="modal-overlay" id="emergencyAllModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    Emergency Pause ALL Protocols
+                </h3>
+                <button class="modal-close" onclick="closeModal('emergencyAllModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Reason</label>
+                    <input type="text" id="emergencyAllReason" placeholder="Describe the emergency...">
+                </div>
+                <div class="form-group">
+                    <label>Your Name / ID</label>
+                    <input type="text" id="emergencyAllInitiator" placeholder="e.g., security_admin">
+                </div>
+                <div class="form-group">
+                    <label>Type "PAUSE ALL" to confirm</label>
+                    <input type="text" id="emergencyAllConfirm" placeholder="PAUSE ALL" autocomplete="off">
+                </div>
+                <div class="warning-box">
+                    <p>
+                        <strong>CRITICAL WARNING:</strong> This will immediately pause ALL registered protocols.
+                        All smart contract interactions will be halted. Only use in genuine cross-protocol emergencies.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('emergencyAllModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="executeEmergencyPauseAll()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    Pause All Protocols
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Protocol Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-accent-light)" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    Auto-Response Settings
+                </h3>
+                <button class="modal-close" onclick="closeModal('settingsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="settingsProtocolId">
+                <p style="font-size: 14px; font-weight: 600; color: var(--s3-text); margin-bottom: 18px;" id="settingsProtocolName"></p>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="settingsAutoPauseCritical">
+                        <label for="settingsAutoPauseCritical">Auto-pause on Critical severity incidents</label>
+                    </div>
+                    <p style="font-size: 11px; color: var(--s3-text-3); margin-top: 4px; padding-left: 24px;">
+                        Automatically pause contracts when a critical threat is detected
+                    </p>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="settingsAutoPauseHigh">
+                        <label for="settingsAutoPauseHigh">Auto-pause on High severity incidents</label>
+                    </div>
+                    <p style="font-size: 11px; color: var(--s3-text-3); margin-top: 4px; padding-left: 24px;">
+                        Automatically pause contracts when a high-severity threat is detected
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label>Approval Threshold (USD)</label>
+                    <input type="number" id="settingsThreshold" value="1000000">
+                    <p style="font-size: 11px; color: var(--s3-text-3); margin-top: 4px;">
+                        Above this estimated loss amount, actions require human approval before execution
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('settingsModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveProtocolSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" style="position:fixed;top:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:10px;"></div>
+
     </div><!-- /app -->
 
     <script>
         const API_BASE = window.SENTINEL3_API_BASE || window.location.origin;
         let protocols = [];
+
+        // API helper — uses sentinel3Fetch when available, falls back to fetch
+        function apiFetch(endpoint, options = {}) {
+            if (window.sentinel3Fetch) return window.sentinel3Fetch(endpoint, options);
+            return fetch(API_BASE + endpoint, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...options.headers }
+            });
+        }
 
         // XSS Protection Helper
         function sanitize(str) {
@@ -943,17 +1086,17 @@
             loadProtocols();
             loadHistory();
 
-            // Refresh every 10 seconds
+            // Poll pending actions every 5 seconds for approval requests
             setInterval(() => {
                 loadGuardianStatus();
                 loadPendingApprovals();
-            }, 10000);
+            }, 5000);
         });
 
         // Load Guardian Status
         async function loadGuardianStatus() {
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/status`);
+                const response = await apiFetch('/api/guardian/status');
                 const data = await response.json();
 
                 const statusEl = document.getElementById('guardianStatus');
@@ -983,7 +1126,7 @@
         // Load Pending Approvals
         async function loadPendingApprovals() {
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/pending`);
+                const response = await apiFetch('/api/guardian/pending-actions');
                 const data = await response.json();
 
                 const container = document.getElementById('pendingList');
@@ -1003,33 +1146,38 @@
                     badge.style.display = 'inline';
                     badge.textContent = `${data.count} pending`;
 
-                    container.innerHTML = data.pending_actions.map(action => `
+                    container.innerHTML = data.pending_actions.map(action => {
+                        const severity = (action.metadata && action.metadata.severity) || 'critical';
+                        const sevClass = severity === 'high' ? 'high' : 'critical';
+                        const estLoss = (action.metadata && action.metadata.estimated_loss_usd) || 0;
+                        return `
                         <div class="pending-item">
                             <div class="pending-head">
                                 <div>
-                                    <div class="pending-action-label">${action.action.replace('_', ' ').toUpperCase()}</div>
-                                    <div class="pending-id">ID: ${action.id}</div>
+                                    <div class="pending-action-label">${sanitize(action.action.replace(/_/g, ' ').toUpperCase())}</div>
+                                    <div class="pending-id">ID: ${sanitize(action.id)}</div>
                                 </div>
-                                <span class="severity-tag critical">CRITICAL</span>
+                                <span class="severity-tag ${sevClass}">${sanitize(severity.toUpperCase())}</span>
                             </div>
                             <div class="pending-details">
-                                <strong>Protocol:</strong> ${action.protocol}<br>
-                                <strong>Chain:</strong> ${action.chain}<br>
-                                <strong>Contract:</strong> <span class="font-mono">${action.contract.substring(0, 20)}...</span><br>
-                                <strong>Est. Loss:</strong> $${(action.metadata.estimated_loss_usd || 0).toLocaleString()}
+                                <strong>Protocol:</strong> ${sanitize(action.protocol)}<br>
+                                <strong>Chain:</strong> ${sanitize(action.chain)}<br>
+                                <strong>Contract:</strong> <span class="font-mono">${sanitize(action.contract.substring(0, 20))}...</span><br>
+                                <strong>Est. Loss:</strong> $${estLoss.toLocaleString()}<br>
+                                <strong>Initiated:</strong> ${new Date(action.initiated_at).toLocaleString()}
                             </div>
                             <div class="pending-actions">
-                                <button class="btn btn-approve" onclick="approveAction('${action.id}')">
+                                <button class="btn btn-approve" onclick="approveAction('${sanitize(action.id)}')">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    Approve Pause
+                                    Approve
                                 </button>
-                                <button class="btn btn-reject" onclick="rejectAction('${action.id}')">
+                                <button class="btn btn-reject" onclick="rejectAction('${sanitize(action.id)}')">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                     Reject
                                 </button>
                             </div>
-                        </div>
-                    `).join('');
+                        </div>`;
+                    }).join('');
                 }
             } catch (error) {
                 console.error('Failed to load pending approvals:', error);
@@ -1056,23 +1204,36 @@
             }
 
             // XSS Protection: Sanitize all user-controlled data
-            container.innerHTML = protocols.map(p => `
-                <div class="protocol-item">
+            container.innerHTML = protocols.map(p => {
+                const isPaused = p.is_paused || false;
+                const pausedTag = isPaused
+                    ? '<span class="severity-tag critical" style="font-size:9px;">PAUSED</span>'
+                    : '<span class="auto-pause-tag" style="font-size:9px;">ACTIVE</span>';
+                return `
+                <div class="protocol-item" style="flex-wrap: wrap;">
                     <div class="protocol-info">
-                        <div class="protocol-icon-wrap">
+                        <div class="protocol-icon-wrap" style="${isPaused ? 'background: linear-gradient(135deg, rgba(244,63,94,0.15), rgba(244,63,94,0.1)); border-color: rgba(244,63,94,0.15);' : ''}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
                         </div>
                         <div>
-                            <div class="protocol-name">${sanitize(p.name)}</div>
-                            <div class="protocol-chain">${sanitize(p.chain)} &middot; ${sanitize(p.contract?.substring(0, 15))}...</div>
+                            <div class="protocol-name">${sanitize(p.name)} ${pausedTag}</div>
+                            <div class="protocol-chain">${sanitize(p.chain)} &middot; ${sanitize((p.contract || p.main_contract || '').substring(0, 15))}...</div>
                         </div>
                     </div>
-                    <div class="protocol-status">
-                        ${p.auto_pause_critical ? '<span class="auto-pause-tag">Auto-Pause</span>' : ''}
-                        <button class="btn btn-secondary" onclick="removeProtocol('${sanitize(p.id)}')">Remove</button>
+                    <div class="protocol-status" style="gap: 6px; flex-wrap: wrap;">
+                        ${p.auto_pause_critical ? '<span class="auto-pause-tag">Auto-Pause Critical</span>' : ''}
+                        ${p.auto_pause_high ? '<span class="auto-pause-tag" style="background:rgba(234,179,8,0.1);color:var(--s3-medium);border-color:rgba(234,179,8,0.2);">Auto-Pause High</span>' : ''}
+                        ${isPaused
+                            ? `<button class="btn btn-approve" style="font-size:11px;padding:5px 10px;" onclick="unpauseProtocol('${sanitize(p.id)}')">Unpause</button>`
+                            : `<button class="btn btn-danger" style="font-size:11px;padding:5px 10px;" onclick="pauseProtocol('${sanitize(p.id)}')">Pause</button>`
+                        }
+                        <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px;" onclick="showSettingsModal('${sanitize(p.id)}')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        </button>
+                        <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px;" onclick="removeProtocol('${sanitize(p.id)}')">Remove</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
 
             // Update emergency modal select (XSS Protected)
             const emergencySelect = document.getElementById('emergencyProtocol');
@@ -1080,15 +1241,28 @@
                 protocols.map(p => `<option value="${sanitize(p.id)}">${sanitize(p.name)} (${sanitize(p.chain)})</option>`).join('');
         }
 
-        // Load Protocols (called separately for initial load)
+        // Load Protocols from the detailed endpoint
         async function loadProtocols() {
-            await loadGuardianStatus();
+            try {
+                const response = await apiFetch('/api/guardian/protocols');
+                const data = await response.json();
+                if (data.protocols && data.protocols.length > 0) {
+                    protocols = data.protocols;
+                    renderProtocols();
+                } else {
+                    // Fall back to status endpoint data
+                    await loadGuardianStatus();
+                }
+            } catch (error) {
+                // Fall back to status endpoint
+                await loadGuardianStatus();
+            }
         }
 
         // Load History
         async function loadHistory() {
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/history?limit=20`);
+                const response = await apiFetch('/api/guardian/history?limit=20');
                 const data = await response.json();
 
                 const container = document.getElementById('historyList');
@@ -1105,66 +1279,71 @@
                     return;
                 }
 
-                container.innerHTML = data.responses.map(r => `
-                    <div class="history-item ${r.status}">
-                        <div class="history-status-icon">
-                            ${r.status === 'success'
-                                ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-low)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
-                                : r.status === 'failed'
-                                    ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
-                                    : '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-medium)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
-                            }
-                        </div>
+                container.innerHTML = data.responses.map(r => {
+                    const statusClass = r.status === 'success' ? 'success'
+                        : (r.status === 'failed' ? 'failed'
+                        : (r.status === 'requires_approval' ? 'pending' : 'pending'));
+                    const statusIcon = r.status === 'success'
+                        ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-low)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+                        : r.status === 'failed'
+                            ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-critical)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+                            : '<svg viewBox="0 0 24 24" fill="none" stroke="var(--s3-medium)" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+                    return `
+                    <div class="history-item ${statusClass}">
+                        <div class="history-status-icon">${statusIcon}</div>
                         <div class="history-details">
-                            <div class="history-title">${r.action.replace('_', ' ').toUpperCase()} - ${r.protocol}</div>
+                            <div class="history-title">${sanitize(r.action.replace(/_/g, ' ').toUpperCase())} - ${sanitize(r.protocol)}</div>
                             <div class="history-meta">
-                                Chain: ${r.chain} &middot; Contract: ${r.contract.substring(0, 15)}...
-                                ${r.tx_hash ? `&middot; TX: ${r.tx_hash.substring(0, 15)}...` : ''}
+                                Chain: ${sanitize(r.chain)} &middot; Contract: ${sanitize(r.contract.substring(0, 15))}...
+                                ${r.tx_hash ? `&middot; TX: ${sanitize(r.tx_hash.substring(0, 15))}...` : ''}
+                                ${r.approved_by ? `&middot; Approved by: ${sanitize(r.approved_by)}` : ''}
                             </div>
                             <div class="history-time">
                                 ${new Date(r.initiated_at).toLocaleString()}
-                                ${r.error ? `&middot; Error: ${r.error}` : ''}
+                                ${r.completed_at ? ` &mdash; ${new Date(r.completed_at).toLocaleString()}` : ''}
+                                ${r.error ? `&middot; <span style="color:var(--s3-critical)">Error: ${sanitize(r.error)}</span>` : ''}
                             </div>
                         </div>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
             } catch (error) {
                 console.error('Failed to load history:', error);
             }
         }
 
         // Approve Action
-        async function approveAction(responseId) {
+        async function approveAction(actionId) {
             const approver = prompt('Enter your name/ID to approve:');
             if (!approver) return;
 
+            const notes = prompt('Approval notes (optional):') || '';
+
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/approve`, {
+                const response = await apiFetch(`/api/guardian/actions/${actionId}/approve`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        response_id: responseId,
-                        approved_by: approver
+                        approved_by: approver,
+                        notes: notes
                     })
                 });
 
                 const data = await response.json();
 
                 if (response.ok) {
-                    alert(`Approved! Status: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}`);
+                    showToast(`Action approved. Status: ${data.execution_status}${data.tx_hash ? ' | TX: ' + data.tx_hash.substring(0, 20) + '...' : ''}`, 'success');
                     loadPendingApprovals();
                     loadHistory();
                     loadGuardianStatus();
                 } else {
-                    alert('Failed: ' + (data.detail || 'Unknown error'));
+                    showToast('Approval failed: ' + (data.detail || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
             }
         }
 
         // Reject Action
-        async function rejectAction(responseId) {
+        async function rejectAction(actionId) {
             const rejector = prompt('Enter your name/ID:');
             if (!rejector) return;
 
@@ -1172,26 +1351,25 @@
             if (!reason) return;
 
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/reject`, {
+                const response = await apiFetch(`/api/guardian/actions/${actionId}/reject`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        response_id: responseId,
                         rejected_by: rejector,
                         reason: reason
                     })
                 });
 
                 if (response.ok) {
-                    alert('Action rejected');
+                    showToast('Action rejected', 'success');
                     loadPendingApprovals();
                     loadHistory();
+                    loadGuardianStatus();
                 } else {
                     const data = await response.json();
-                    alert('Failed: ' + (data.detail || 'Unknown error'));
+                    showToast('Failed: ' + (data.detail || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
             }
         }
 
@@ -1229,27 +1407,27 @@
             };
 
             if (!data.protocol_id || !data.protocol_name || !data.main_contract) {
-                alert('Please fill in required fields');
+                showToast('Please fill in required fields', 'error');
                 return;
             }
 
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/protocols/register`, {
+                const response = await apiFetch('/api/guardian/protocols', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
 
                 if (response.ok) {
-                    alert('Protocol registered successfully!');
+                    showToast('Protocol registered successfully!', 'success');
                     closeModal('registerModal');
+                    loadProtocols();
                     loadGuardianStatus();
                 } else {
                     const err = await response.json();
-                    alert('Failed: ' + (err.detail || 'Unknown error'));
+                    showToast('Failed: ' + (err.detail || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
             }
         }
 
@@ -1258,30 +1436,31 @@
             if (!confirm(`Remove protocol ${protocolId}?`)) return;
 
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/protocols/${protocolId}`, {
+                const response = await apiFetch(`/api/guardian/protocols/${protocolId}`, {
                     method: 'DELETE'
                 });
 
                 if (response.ok) {
-                    alert('Protocol removed');
+                    showToast('Protocol removed', 'success');
+                    loadProtocols();
                     loadGuardianStatus();
                 } else {
                     const err = await response.json();
-                    alert('Failed: ' + (err.detail || 'Unknown error'));
+                    showToast('Failed: ' + (err.detail || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
             }
         }
 
-        // Execute Emergency Pause
+        // Execute Emergency Pause (single protocol)
         async function executeEmergencyPause() {
             const protocolId = document.getElementById('emergencyProtocol').value;
             const reason = document.getElementById('emergencyReason').value;
             const initiator = document.getElementById('emergencyInitiator').value;
 
             if (!protocolId || !reason || !initiator) {
-                alert('Please fill in all fields');
+                showToast('Please fill in all fields', 'error');
                 return;
             }
 
@@ -1290,29 +1469,193 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/api/guardian/manual-pause`, {
+                const response = await apiFetch(`/api/guardian/protocols/${protocolId}/pause`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        protocol_id: protocolId,
                         reason: reason,
-                        initiated_by: initiator
+                        initiated_by: initiator,
+                        force: true
                     })
                 });
 
                 const data = await response.json();
 
                 if (response.ok) {
-                    alert(`Emergency pause initiated!\nStatus: ${data.execution_status}\n${data.tx_hash ? 'TX: ' + data.tx_hash : ''}\n${data.error ? 'Note: ' + data.error : ''}`);
+                    showToast(`Emergency pause initiated! Status: ${data.execution_status || data.status}`, 'success');
                     closeModal('emergencyModal');
+                    loadHistory();
+                    loadProtocols();
+                    loadGuardianStatus();
+                } else {
+                    showToast('Failed: ' + (data.detail || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Pause single protocol from protocol list
+        async function pauseProtocol(protocolId) {
+            const reason = prompt('Reason for pausing this protocol:');
+            if (!reason) return;
+
+            if (!confirm(`PAUSE protocol ${protocolId}? This will halt all contract interactions.`)) return;
+
+            try {
+                const response = await apiFetch(`/api/guardian/protocols/${protocolId}/pause`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        reason: reason,
+                        initiated_by: 'dashboard_user',
+                        force: true
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(`Protocol paused. Status: ${data.execution_status || data.status}`, 'success');
+                    loadProtocols();
                     loadHistory();
                     loadGuardianStatus();
                 } else {
-                    alert('Failed: ' + (data.detail || 'Unknown error'));
+                    showToast('Failed: ' + (data.detail || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
             }
+        }
+
+        // Unpause single protocol
+        async function unpauseProtocol(protocolId) {
+            const reason = prompt('Reason for unpausing:');
+            if (!reason) return;
+
+            try {
+                const response = await apiFetch(`/api/guardian/protocols/${protocolId}/unpause`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        reason: reason,
+                        initiated_by: 'dashboard_user'
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(`Protocol unpaused. ${data.message || ''}`, 'success');
+                    loadProtocols();
+                    loadHistory();
+                    loadGuardianStatus();
+                } else {
+                    showToast('Failed: ' + (data.detail || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Emergency Pause ALL protocols
+        async function emergencyPauseAll() {
+            document.getElementById('emergencyAllModal').classList.add('active');
+        }
+
+        async function executeEmergencyPauseAll() {
+            const reason = document.getElementById('emergencyAllReason').value;
+            const initiator = document.getElementById('emergencyAllInitiator').value;
+            const confirmText = document.getElementById('emergencyAllConfirm').value;
+
+            if (!reason || !initiator) {
+                showToast('Please fill in all fields', 'error');
+                return;
+            }
+
+            if (confirmText !== 'PAUSE ALL') {
+                showToast('Please type PAUSE ALL to confirm', 'error');
+                return;
+            }
+
+            try {
+                const response = await apiFetch('/api/guardian/emergency-pause-all', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        reason: reason,
+                        initiated_by: initiator
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(`Emergency pause all initiated. ${data.protocols_affected} protocols affected.`, 'success');
+                    closeModal('emergencyAllModal');
+                    document.getElementById('emergencyAllConfirm').value = '';
+                    loadProtocols();
+                    loadHistory();
+                    loadGuardianStatus();
+                } else {
+                    showToast('Failed: ' + (data.detail || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Show protocol settings modal
+        function showSettingsModal(protocolId) {
+            const p = protocols.find(p => p.id === protocolId);
+            if (!p) return;
+
+            document.getElementById('settingsProtocolId').value = protocolId;
+            document.getElementById('settingsProtocolName').textContent = p.name || protocolId;
+            document.getElementById('settingsAutoPauseCritical').checked = p.auto_pause_on_critical || p.auto_pause_critical || false;
+            document.getElementById('settingsAutoPauseHigh').checked = p.auto_pause_on_high || p.auto_pause_high || false;
+            document.getElementById('settingsThreshold').value = p.require_approval_threshold_usd || 1000000;
+            document.getElementById('settingsModal').classList.add('active');
+        }
+
+        async function saveProtocolSettings() {
+            const protocolId = document.getElementById('settingsProtocolId').value;
+            const autoPauseCritical = document.getElementById('settingsAutoPauseCritical').checked;
+            const autoPauseHigh = document.getElementById('settingsAutoPauseHigh').checked;
+            const threshold = parseFloat(document.getElementById('settingsThreshold').value);
+
+            try {
+                const response = await apiFetch(`/api/guardian/protocols/${protocolId}/settings`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        auto_pause_on_critical: autoPauseCritical,
+                        auto_pause_on_high: autoPauseHigh,
+                        require_approval_threshold_usd: threshold
+                    })
+                });
+
+                if (response.ok) {
+                    showToast('Settings updated', 'success');
+                    closeModal('settingsModal');
+                    loadProtocols();
+                    loadGuardianStatus();
+                } else {
+                    const err = await response.json();
+                    showToast('Failed: ' + (err.detail || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <span>${sanitize(message)}</span>
+                <button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:16px;padding:0 0 0 12px;">&times;</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
         }
     </script>
     <script src="/frontend/config.js"></script>

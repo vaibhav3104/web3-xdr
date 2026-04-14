@@ -1,0 +1,256 @@
+# Sentinel3 Prometheus Alerting Rules
+# ====================================
+# Load via prometheus.yml rule_files: ["alerting_rules.yaml"]
+
+groups:
+  # -------------------------------------------------------------------
+  # API & Error Rate
+  # -------------------------------------------------------------------
+  - name: sentinel3_api
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: >
+          100 * sum(rate(web3_xdr_api_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(web3_xdr_api_requests_total[5m])), 1)
+          > 5
+        for: 3m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High 5xx error rate ({{ $value | printf \"%.1f\" }}%)"
+          description: >
+            More than 5% of API requests are returning 5xx status codes
+            over the last 5 minutes. Current rate: {{ $value | printf "%.1f" }}%.
+          runbook_url: "https://wiki.internal/sentinel3/runbooks/high-error-rate"
+
+      - alert: APILatencyHigh
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(web3_xdr_api_request_duration_seconds_bucket[5m])) by (le)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API p95 latency above 5 seconds ({{ $value | printf \"%.2f\" }}s)"
+          description: >
+            The 95th percentile API request latency has exceeded 5 seconds
+            for the last 5 minutes.
+
+  # -------------------------------------------------------------------
+  # Event Ingestion Pipeline
+  # -------------------------------------------------------------------
+  - name: sentinel3_ingestion
+    interval: 30s
+    rules:
+      - alert: EventIngestionStall
+        expr: >
+          sum(rate(sentinel3_events_ingested_total[5m])) == 0
+          and
+          sum(sentinel3_events_ingested_total) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: ingestion
+        annotations:
+          summary: "Event ingestion has stalled -- no new events in 5 minutes"
+          description: >
+            The platform has previously ingested events but no new events
+            have been recorded in the last 5 minutes. Check chain listeners
+            and RPC connectivity.
+          runbook_url: "https://wiki.internal/sentinel3/runbooks/ingestion-stall"
+
+      - alert: HighDetectionLatency
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(web3_xdr_incident_detection_seconds_bucket[5m])) by (le)
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: detection
+        annotations:
+          summary: "Detection latency p95 above 10 seconds ({{ $value | printf \"%.1f\" }}s)"
+          description: >
+            The 95th percentile time from event ingestion to incident
+            detection has exceeded 10 seconds for 5 minutes.
+
+      - alert: EventBacklogGrowing
+        expr: >
+          sum(web3_xdr_event_backlog_size) > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: ingestion
+        annotations:
+          summary: "Event backlog exceeds 10,000 ({{ $value }})"
+          description: >
+            The total unprocessed event backlog has exceeded 10,000 events
+            for 10 minutes. This may indicate processing bottlenecks.
+
+  # -------------------------------------------------------------------
+  # Chain Connectivity
+  # -------------------------------------------------------------------
+  - name: sentinel3_chains
+    interval: 30s
+    rules:
+      - alert: ChainHeadLagHigh
+        expr: sentinel3_head_lag_blocks > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: chain
+        annotations:
+          summary: "Chain {{ $labels.chain }} is {{ $value }} blocks behind head"
+          description: >
+            The listener for chain {{ $labels.chain }} has fallen more than
+            50 blocks behind the chain head for at least 5 minutes.
+
+      - alert: ChainDisconnected
+        expr: web3_xdr_chain_connected == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: chain
+        annotations:
+          summary: "Chain {{ $labels.chain }} is disconnected"
+          description: >
+            The chain listener for {{ $labels.chain }} has been disconnected
+            for more than 3 minutes. Events from this chain are not being
+            ingested.
+
+      - alert: ChainRPCErrorSpike
+        expr: >
+          sum(rate(sentinel3_rpc_errors_total[5m])) by (chain) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: chain
+        annotations:
+          summary: "High RPC error rate on {{ $labels.chain }} ({{ $value | printf \"%.1f\" }}/s)"
+          description: >
+            Chain {{ $labels.chain }} is experiencing more than 1 RPC error
+            per second sustained over 5 minutes.
+
+  # -------------------------------------------------------------------
+  # Database
+  # -------------------------------------------------------------------
+  - name: sentinel3_database
+    interval: 30s
+    rules:
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: >
+          sentinel3_db_errors_total{error_type="pool_exhausted"}
+          -
+          sentinel3_db_errors_total{error_type="pool_exhausted"} offset 5m
+          > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool exhaustion detected"
+          description: >
+            Pool-exhaustion errors have been recorded in the last 5 minutes.
+            This means the application cannot obtain database connections and
+            requests will fail.
+
+      - alert: DatabaseQueryLatencyHigh
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(web3_xdr_db_query_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "DB query p95 latency above 2 seconds ({{ $value | printf \"%.2f\" }}s)"
+          description: >
+            The 95th percentile database query latency is above 2 seconds,
+            indicating possible contention or slow queries.
+
+      - alert: DatabaseErrors
+        expr: >
+          sum(rate(sentinel3_db_errors_total[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Sustained database errors ({{ $value | printf \"%.1f\" }}/s)"
+          description: >
+            Database errors are occurring at a sustained rate.
+
+  # -------------------------------------------------------------------
+  # Guardian / Response
+  # -------------------------------------------------------------------
+  - name: sentinel3_guardian
+    interval: 60s
+    rules:
+      - alert: GuardianActionPendingTooLong
+        expr: >
+          (
+            web3_xdr_guardian_actions_total{status="pending"}
+            -
+            ignoring(status) web3_xdr_guardian_actions_total{status="approved"}
+            -
+            ignoring(status) web3_xdr_guardian_actions_total{status="rejected"}
+          ) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: guardian
+        annotations:
+          summary: "Guardian action pending for over 10 minutes without approval"
+          description: >
+            A guardian response action has been pending for more than
+            10 minutes. An operator needs to approve or reject the action.
+
+      - alert: CircuitBreakerOpen
+        expr: sentinel3_circuit_breaker_state == 1
+        for: 2m
+        labels:
+          severity: critical
+          component: guardian
+        annotations:
+          summary: "Circuit breaker OPEN for chain {{ $labels.chain }}"
+          description: >
+            The circuit breaker for chain {{ $labels.chain }} has been in the
+            OPEN state for more than 2 minutes, meaning requests to that
+            chain are being rejected.
+
+  # -------------------------------------------------------------------
+  # System Resources
+  # -------------------------------------------------------------------
+  - name: sentinel3_system
+    interval: 60s
+    rules:
+      - alert: HighMemoryUsage
+        expr: >
+          web3_xdr_memory_usage_bytes / 1024 / 1024 > 2048
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "Memory usage above 2 GB ({{ $value | printf \"%.0f\" }} MB)"
+          description: >
+            The Sentinel3 process memory usage has exceeded 2 GB for
+            10 minutes. Consider investigating for memory leaks.
+
+      - alert: UptimeLow
+        expr: web3_xdr_uptime_seconds < 300
+        for: 0m
+        labels:
+          severity: info
+          component: system
+        annotations:
+          summary: "Sentinel3 recently restarted (uptime: {{ $value | printf \"%.0f\" }}s)"
+          description: >
+            The service has been up for less than 5 minutes, indicating a
+            recent restart or deployment.

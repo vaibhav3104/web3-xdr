@@ -1033,6 +1033,9 @@
                                                 class="btn btn-xs btn-purple" title="Correlated Events">Events</button>
                                         <button @click="selectIncident(incident)"
                                                 class="btn btn-xs btn-blue" title="Details">View</button>
+                                        <a :href="'/frontend/timeline.html?incident_id=' + encodeURIComponent(incident.id)"
+                                                class="btn btn-xs btn-purple" title="Timeline Replay"
+                                                style="text-decoration:none;">Replay</a>
                                         <button x-show="incident.status === 'open_pending'"
                                                 @click="acknowledgeIncident(incident)"
                                                 class="btn btn-xs btn-medium" title="Acknowledge">Ack</button>

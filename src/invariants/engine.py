@@ -207,6 +207,32 @@ class InvariantEngine:
         """Get status of all invariants."""
         return [inv.get_metadata() for inv in self.invariants]
 
+    def load_custom_invariants(self, directory: str):
+        """
+        Load custom YAML-defined invariants from a directory.
+
+        Parses all .yaml/.yml files via DSLLoader, creates DSLInvariant
+        instances, and registers them with the engine.
+        """
+        try:
+            from .dsl import DSLLoader
+            defs = DSLLoader.load_directory(directory)
+            invariants = DSLLoader.create_invariants(defs)
+            for inv in invariants:
+                self.add_invariant(inv)
+            if invariants:
+                logger.info(
+                    "custom_invariants_loaded",
+                    directory=directory,
+                    count=len(invariants),
+                )
+        except Exception as e:
+            logger.warning(
+                "custom_invariants_load_failed",
+                directory=directory,
+                error=str(e),
+            )
+
 
 def create_default_engine(config: dict) -> InvariantEngine:
     """
@@ -262,10 +288,23 @@ def create_default_engine(config: dict) -> InvariantEngine:
                 contract_addresses=bridge["contracts"]
             ))
     
+    # MEV detection invariants (chain-wide, not per-bridge)
+    from .mev import MEV_INVARIANTS
+    for inv_cls in MEV_INVARIANTS:
+        engine.add_invariant(inv_cls())
+
+    # Load custom YAML-defined invariants
+    import os
+    custom_dir = config.get(
+        "custom_invariants_dir",
+        os.path.join(os.path.dirname(__file__), "..", "..", "config", "custom_invariants"),
+    )
+    engine.load_custom_invariants(custom_dir)
+
     logger.info(
         "default_engine_created",
         invariant_count=len(engine.invariants)
     )
-    
+
     return engine
 

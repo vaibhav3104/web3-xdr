@@ -631,3 +631,119 @@ async def get_visualization_data(
             "nodes": [{"id": address, "label": "Unknown", "risk_score": 0}],
             "edges": []
         }
+
+
+@router.get("/visualization/full")
+async def get_full_visualization(
+    chain_id: Optional[str] = Query(default=None, description="Filter by chain"),
+    risk_level: Optional[str] = Query(default=None, description="Filter by risk: critical, high, medium, low"),
+    entity_type: Optional[str] = Query(default=None, description="Filter by type: Wallet, Contract, Bridge, Exchange, etc."),
+    limit: int = Query(default=200, ge=1, le=500)
+):
+    """
+    Get full graph data for the Security Graph visualization page.
+
+    Returns all nodes and edges formatted for D3 force-directed layout.
+    Supports filtering by chain, risk level, and entity type.
+    """
+    if not _neo4j_conn:
+        await initialize_graph()
+
+    try:
+        # Build dynamic WHERE clauses
+        where_parts = []
+        params: Dict[str, Any] = {"limit": limit}
+
+        if chain_id:
+            where_parts.append("n.chain_id = $chain_id")
+            params["chain_id"] = chain_id
+
+        if risk_level:
+            risk_thresholds = {
+                "critical": (80, 100),
+                "high": (60, 80),
+                "medium": (30, 60),
+                "low": (0, 30),
+            }
+            lo, hi = risk_thresholds.get(risk_level.lower(), (0, 100))
+            where_parts.append("n.risk_score >= $risk_lo AND n.risk_score <= $risk_hi")
+            params["risk_lo"] = lo
+            params["risk_hi"] = hi
+
+        if entity_type:
+            where_parts.append(f"n:{entity_type}")
+
+        where_clause = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+        # Fetch nodes
+        node_query = f"""
+        MATCH (n)
+        {where_clause}
+        RETURN n.address AS address,
+               labels(n) AS labels,
+               n.entity_name AS entity_name,
+               n.name AS name,
+               n.risk_score AS risk_score,
+               n.chain_id AS chain_id,
+               n.total_volume_usd AS volume,
+               n.tx_count AS tx_count
+        ORDER BY n.risk_score DESC
+        LIMIT $limit
+        """
+
+        node_records = await _neo4j_conn.query(node_query, params)
+
+        # Collect addresses for relationship lookup
+        addresses = [r.get("address") for r in node_records if r.get("address")]
+
+        nodes = []
+        for r in node_records:
+            nodes.append({
+                "id": r.get("address", ""),
+                "labels": r.get("labels", []),
+                "name": r.get("entity_name") or r.get("name"),
+                "risk_score": r.get("risk_score") or 0,
+                "chain_id": r.get("chain_id") or "ethereum",
+                "volume": r.get("volume") or 0,
+                "tx_count": r.get("tx_count") or 0,
+            })
+
+        # Fetch relationships between the returned nodes
+        edges = []
+        if len(addresses) >= 2:
+            rel_query = """
+            MATCH (a)-[r]->(b)
+            WHERE a.address IN $addresses AND b.address IN $addresses
+            RETURN a.address AS source,
+                   b.address AS target,
+                   type(r) AS rel_type,
+                   r.total_value_usd AS value
+            LIMIT 500
+            """
+            rel_records = await _neo4j_conn.query(rel_query, {"addresses": addresses})
+            for rr in rel_records:
+                edges.append({
+                    "source": rr.get("source"),
+                    "target": rr.get("target"),
+                    "type": rr.get("rel_type", "TRANSFER"),
+                    "value": rr.get("value") or 0,
+                })
+
+        return {
+            "success": True,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+    except Exception as e:
+        logger.error("full_visualization_failed", error=str(e))
+        return {
+            "success": False,
+            "node_count": 0,
+            "edge_count": 0,
+            "nodes": [],
+            "edges": [],
+            "error": str(e),
+        }

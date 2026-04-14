@@ -1,0 +1,48 @@
+invariants:
+  - name: large_bridge_transfer
+    description: "Bridge transfer exceeds $500K USD threshold"
+    type: threshold
+    severity: high
+    confidence: 0.9
+    event_types: [BRIDGE_DEPOSIT, LOCK, MINT]
+    conditions:
+      - field: event.amount_usd
+        operator: gt
+        value: 500000
+    cooldown_seconds: 300
+
+  - name: rapid_mint_velocity
+    description: "More than 10 mint events in the last hour on same bridge"
+    type: velocity
+    severity: high
+    confidence: 0.85
+    event_types: [MINT]
+    conditions:
+      - field: context.event_count_last_hour
+        operator: gt
+        value: 10
+    cooldown_seconds: 600
+
+  - name: mint_exceeds_lock
+    description: "Total minted exceeds total locked - potential unbacked mint"
+    type: economic
+    severity: critical
+    confidence: 0.95
+    event_types: [MINT]
+    conditions:
+      - field: context.total_minted
+        operator: gt
+        value: $context.total_locked
+    cooldown_seconds: 120
+
+  - name: suspicious_new_contract_interaction
+    description: "Large transfer to contract deployed less than 24 hours ago"
+    type: threshold
+    severity: medium
+    confidence: 0.7
+    event_types: [TRANSFER, BRIDGE_DEPOSIT]
+    conditions:
+      - field: event.amount_usd
+        operator: gt
+        value: 100000
+    cooldown_seconds: 180

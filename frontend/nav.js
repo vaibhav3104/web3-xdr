@@ -10,6 +10,7 @@
         { section: 'Monitor' },
         { href: '/',                        label: 'Dashboard',      icon: 'grid' },
         { href: '/frontend/incidents.html', label: 'Incidents',      icon: 'alert' },
+        { href: '/frontend/timeline.html',  label: 'Timeline',       icon: 'play' },
         { href: '/frontend/logs.html',      label: 'Log Explorer',   icon: 'file' },
         { href: '/frontend/analytics.html', label: 'Analytics',      icon: 'chart' },
         { section: 'Defend' },
