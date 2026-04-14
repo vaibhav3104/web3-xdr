@@ -41,7 +41,6 @@ body {
   min-height: 100vh;
   /* Hidden until nav.js reveals — prevents sidebar layout shift */
   opacity: 0;
-  transition: opacity 0.18s ease;
 }
 body.s3-ready {
   opacity: 1 !important;
@@ -76,13 +75,10 @@ body > *:not(#s3-ambient) { position: relative; z-index: 1; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
 
-/* Page fade-in */
-#app, body > main, body > div[x-data] {
-  animation: s3-fadein 0.4s ease both;
-}
+/* Page fade-in — kept subtle, no translateY to avoid jitter */
 @keyframes s3-fadein {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* Global button hover enhancements */
